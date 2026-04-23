@@ -353,7 +353,6 @@ class OCRConfig:
     image_folder: str = field(default_factory=get_default_folder)
     output_filename: str = "final_subs_gemini3.srt"
     max_workers: int = field(default_factory=lambda: DEFAULT_WORKERS)
-    merge_gap_tolerance: float = 3.0
     temperature: float = 0.0
     enable_caching: bool = True
     cache_size: int = field(default_factory=lambda: DEFAULT_CACHE_SIZE)
@@ -967,133 +966,6 @@ def process_images_parallel(files: List[str], model, config: OCRConfig, metrics:
     return results
 
 # ════════════════════════════════════════════════════════════════════════════
-# MERGING LOGIC - ORIGINAL PRESERVED EXACTLY - DO NOT MODIFY!
-# ════════════════════════════════════════════════════════════════════════════
-
-def merge_ocr_entries(ocr_results, gap_tolerance: float = 3.0):
-    """
-    ══════════════════════════════════════════════════════════════════════════
-    ORIGINAL MERGE LOGIC - PRESERVED EXACTLY - DO NOT MODIFY!
-    ══════════════════════════════════════════════════════════════════════════
-    
-    Professional merge logic with intelligent OCR error handling
-    
-    Optimized for Gemini 3 Flash Preview (Jan 2026)
-    Handles split frames and minor OCR inconsistencies
-    
-    Priority order:
-    1. IDENTICAL TEXT + gap < 3s → ALWAYS merge
-    2. Consecutive frames (gap ≤ 0.01s):
-       - High text similarity (>90%) + similar duration → merge (OCR error)
-       - Different duration ratio (>1.5) → keep separate (different subs)
-    3. Otherwise → new entry
-    """
-    if not ocr_results:
-        return []
-    
-    ocr_results.sort(key=lambda x: x[0])
-    
-    logger.info(f"Applying Intelligent Merge (Exact match: <{gap_tolerance}s, Fuzzy: >90%, Gap: ≤0.01s)...")
-    merged_results = []
-    
-    for current_start, current_end, current_text in ocr_results:
-        if not merged_results:
-            merged_results.append([current_start, current_end, current_text])
-        else:
-            last_entry = merged_results[-1]
-            last_start = last_entry[0]
-            last_end = last_entry[1]
-            last_text = last_entry[2]
-            time_gap = current_start - last_end
-            
-            # Merge ONLY consecutive frames (≤0.01s = split frames)
-            # Larger gaps = separate entries (even if text is identical = intentional repeat)
-            if time_gap <= 0.01:
-                last_duration = last_end - last_start
-                current_duration = current_end - current_start
-                
-                if last_duration > 0:
-                    ratio = current_duration / last_duration
-                    
-                    # Calculate text similarity
-                    similarity = _calculate_text_similarity(last_text, current_text)
-                    
-                    # RULE 2A: Very high similarity (>95%) → ALWAYS merge
-                    # Handles minor OCR errors like "لن" vs "لأن", "كثيرًا" vs "كثيراً"
-                    # Keep FIRST text (earlier frame is usually cleaner, no transition artifacts)
-                    if similarity >= 0.95:
-                        last_entry[1] = current_end
-                    
-                    # RULE 2B: High similarity (>90%) + reasonable duration → merge
-                    # Split frames typically have similar durations
-                    # Keep FIRST text (earlier frame is usually cleaner)
-                    elif similarity >= 0.90 and ratio <= 2.0:
-                        last_entry[1] = current_end
-                    
-                    # RULE 2C: Low similarity (< 70%) → NEVER merge (different subtitles)
-                    # Even if timing is close, these are different dialogues
-                    elif similarity < 0.70:
-                        merged_results.append([current_start, current_end, current_text])
-                    
-                    # RULE 2D: Moderate similarity (70-90%) + large duration ratio → separate
-                    elif ratio > 2.0:
-                        merged_results.append([current_start, current_end, current_text])
-                    
-                    # RULE 2E: Moderate similarity (70-90%) + reasonable ratio → merge
-                    # Probably OCR variation of same text
-                    else:
-                        last_entry[1] = current_end
-                else:
-                    # Very short previous frame - merge by default
-                    last_entry[1] = current_end
-            
-            # PRIORITY 3: New entry
-            else:
-                merged_results.append([current_start, current_end, current_text])
-    
-    logger.info(f"Merged {len(ocr_results)} entries → {len(merged_results)} final entries")
-    return [tuple(entry) for entry in merged_results]
-
-def _calculate_text_similarity(text1: str, text2: str) -> float:
-    """
-    ══════════════════════════════════════════════════════════════════════════
-    ORIGINAL SIMILARITY LOGIC - PRESERVED EXACTLY - DO NOT MODIFY!
-    ══════════════════════════════════════════════════════════════════════════
-    
-    Calculate robust text similarity between two Arabic texts
-    Optimized for detecting minor OCR errors in split frames
-    
-    Returns: 0.0 (completely different) to 1.0 (identical)
-    
-    Method: SequenceMatcher for accurate similarity detection
-    - Handles character insertions/deletions properly (e.g., "لن" vs "لأن")
-    - Removes whitespace/newlines for fair comparison
-    """
-    from difflib import SequenceMatcher
-    
-    # Fast path for identical texts
-    if text1 == text2:
-        return 1.0
-    
-    if not text1 or not text2:
-        return 0.0
-    
-    # Normalize: remove whitespace and newlines
-    clean1 = ''.join(text1.split())
-    clean2 = ''.join(text2.split())
-    
-    # Check again after normalization
-    if clean1 == clean2:
-        return 1.0
-    
-    if len(clean1) == 0 or len(clean2) == 0:
-        return 0.0
-    
-    # Use SequenceMatcher for proper similarity detection
-    # This handles insertions/deletions correctly (e.g., "لن" vs "لأن" = 97% similar)
-    return SequenceMatcher(None, clean1, clean2).ratio()
-
-# ════════════════════════════════════════════════════════════════════════════
 # SRT GENERATION - With UTF-8 BOM support for Windows Arabic compatibility
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -1183,19 +1055,19 @@ def run_pipeline(config: OCRConfig):
     metrics = PerformanceMetrics(total_images=len(image_files))
     results = process_images_parallel(image_files, model, config, metrics)
     
-    print(f"\n{Colors.CYAN}▶ Sorting and merging entries...{Colors.RESET}")
-    
-    # Sort and merge - ORIGINAL LOGIC
+    print(f"\n{Colors.CYAN}▶ Sorting entries...{Colors.RESET}")
+
+    # Keep OCR entries as-is (no merge step)
     results.sort(key=lambda x: x[0])
-    merged_results = merge_ocr_entries(results, config.merge_gap_tolerance)
+    final_results = results
     
     # Generate SRT with BOM option
     print(f"{Colors.CYAN}▶ Generating SRT file...{Colors.RESET}")
     output_file = os.path.join(config.image_folder, config.output_filename)
-    generate_srt(merged_results, output_file, use_bom=config.use_bom)
+    generate_srt(final_results, output_file, use_bom=config.use_bom)
     
     # Print final report
-    print_final_report(metrics, len(merged_results), config)
+    print_final_report(metrics, len(final_results), config)
     
     # Final success message
     print(f"{Colors.BRIGHT_GREEN}═══════════════════════════════════════════════════════════════════════════════{Colors.RESET}")
@@ -1257,10 +1129,6 @@ def main():
     parser.add_argument('--no-cache', action='store_true',
                         help='Disable image caching')
     
-    # Merge settings
-    parser.add_argument('--gap-tolerance', type=float, default=3.0,
-                        help='Merge gap tolerance in seconds (default: 3.0)')
-    
     # Encoding
     parser.add_argument('--no-bom', action='store_true',
                         help='Disable UTF-8 BOM (not recommended for Windows Arabic)')
@@ -1286,7 +1154,6 @@ def main():
         image_folder=args.folder,
         output_filename=args.output,
         max_workers=args.workers,
-        merge_gap_tolerance=args.gap_tolerance,
         enable_caching=not args.no_cache,
         cache_size=args.cache_size,
         use_bom=not args.no_bom
