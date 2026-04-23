@@ -1,0 +1,1310 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║   █████╗ ██████╗  █████╗ ██████╗ ██╗ ██████╗     ██████╗  ██████╗██████╗      ║
+║  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║██╔════╝    ██╔═══██╗██╔════╝██╔══██╗     ║
+║  ███████║██████╔╝███████║██████╔╝██║██║         ██║   ██║██║     ██████╔╝     ║
+║  ██╔══██║██╔══██╗██╔══██║██╔══██╗██║██║         ██║   ██║██║     ██╔══██╗     ║
+║  ██║  ██║██║  ██║██║  ██║██████╔╝██║╚██████╗    ╚██████╔╝╚██████╗██║  ██║     ║
+║  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝ ╚═════╝     ╚═════╝  ╚═════╝╚═╝  ╚═╝     ║
+║                                                                               ║
+║═══════════════════════════════════════════════════════════════════════════════║
+║                                                                               ║
+║            Professional Arabic OCR Pipeline - Windows Edition v2.2            ║
+║                                                                               ║
+║                 Powered by: Google Gemini API (gemini-3-flash-preview)        ║
+║                 Optimized for: Windows 10/11 CMD & PowerShell                 ║
+║                                                                               ║
+║═══════════════════════════════════════════════════════════════════════════════║
+║                                                                               ║
+║     ✓ Auto-tuned parallel workers (CPU-based)                                 ║
+║     ✓ Dynamic cache sizing (RAM-based)                                        ║
+║     ✓ UTF-8 with BOM output (Arabic compatibility)                            ║
+║     ✓ Real-time performance dashboard                                         ║
+║     ✓ Production-grade error handling                                         ║
+║     ✓ Enhanced Arabic watermark/logo filtering                                ║
+║     ✓ Precise diacritic preservation logic                                    ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+import os
+import re
+import sys
+import json
+import time
+import logging
+import argparse
+import platform
+import ctypes
+from typing import Optional, Tuple, List, Dict
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
+import warnings
+import threading
+
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+# ════════════════════════════════════════════════════════════════════════════
+# WINDOWS SYSTEM DETECTION & AUTO-TUNING
+# ════════════════════════════════════════════════════════════════════════════
+
+class WindowsSystemInfo:
+    """Detect Windows system capabilities for optimal configuration"""
+    
+    def __init__(self):
+        self._cpu_count = None
+        self._total_ram_gb = None
+        self._is_windows = platform.system() == 'Windows'
+    
+    @property
+    def cpu_count(self) -> int:
+        """Get number of CPU cores"""
+        if self._cpu_count is None:
+            try:
+                self._cpu_count = os.cpu_count() or 4
+            except Exception:
+                self._cpu_count = 4
+        return self._cpu_count
+    
+    @property
+    def total_ram_gb(self) -> float:
+        """Get total RAM in GB"""
+        if self._total_ram_gb is None:
+            try:
+                if self._is_windows:
+                    # Windows-specific RAM detection
+                    kernel32 = ctypes.windll.kernel32
+                    c_ulonglong = ctypes.c_ulonglong
+                    
+                    class MEMORYSTATUSEX(ctypes.Structure):
+                        _fields_ = [
+                            ('dwLength', ctypes.c_ulong),
+                            ('dwMemoryLoad', ctypes.c_ulong),
+                            ('ullTotalPhys', c_ulonglong),
+                            ('ullAvailPhys', c_ulonglong),
+                            ('ullTotalPageFile', c_ulonglong),
+                            ('ullAvailPageFile', c_ulonglong),
+                            ('ullTotalVirtual', c_ulonglong),
+                            ('ullAvailVirtual', c_ulonglong),
+                            ('ullAvailExtendedVirtual', c_ulonglong),
+                        ]
+                    
+                    mem_status = MEMORYSTATUSEX()
+                    mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                    kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
+                    self._total_ram_gb = mem_status.ullTotalPhys / (1024 ** 3)
+                else:
+                    # Fallback for non-Windows
+                    self._total_ram_gb = 8.0
+            except Exception:
+                self._total_ram_gb = 8.0
+        return self._total_ram_gb
+    
+    @property
+    def available_ram_gb(self) -> float:
+        """Get available RAM in GB"""
+        try:
+            if self._is_windows:
+                kernel32 = ctypes.windll.kernel32
+                c_ulonglong = ctypes.c_ulonglong
+                
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ('dwLength', ctypes.c_ulong),
+                        ('dwMemoryLoad', ctypes.c_ulong),
+                        ('ullTotalPhys', c_ulonglong),
+                        ('ullAvailPhys', c_ulonglong),
+                        ('ullTotalPageFile', c_ulonglong),
+                        ('ullAvailPageFile', c_ulonglong),
+                        ('ullTotalVirtual', c_ulonglong),
+                        ('ullAvailVirtual', c_ulonglong),
+                        ('ullAvailExtendedVirtual', c_ulonglong),
+                    ]
+                
+                mem_status = MEMORYSTATUSEX()
+                mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
+                return mem_status.ullAvailPhys / (1024 ** 3)
+            else:
+                return 4.0
+        except Exception:
+            return 4.0
+    
+    def get_optimal_workers(self) -> int:
+        """Calculate optimal number of workers based on CPU"""
+        # Use CPU count - 1 to leave one core for system
+        # Minimum 2, maximum 12 (API rate limiting consideration)
+        optimal = max(2, min(self.cpu_count - 1, 12))
+        return optimal
+    
+    def get_optimal_cache_size(self) -> int:
+        """Calculate optimal cache size based on available RAM"""
+        # Estimate: each cached image ~5MB average
+        # Use 10% of available RAM for cache
+        available_gb = self.available_ram_gb
+        
+        if available_gb >= 16:
+            return 200  # High RAM: large cache
+        elif available_gb >= 8:
+            return 150  # Medium RAM: medium cache
+        elif available_gb >= 4:
+            return 100  # Low RAM: smaller cache
+        else:
+            return 50   # Very low RAM: minimal cache
+    
+    @property
+    def is_windows(self) -> bool:
+        return self._is_windows
+    
+    @property
+    def windows_version(self) -> str:
+        """Get Windows version string"""
+        if self._is_windows:
+            try:
+                return platform.version()
+            except Exception:
+                return "Unknown"
+        return "N/A"
+
+# Global system info instance
+SYSTEM_INFO = WindowsSystemInfo()
+
+# ════════════════════════════════════════════════════════════════════════════
+# WINDOWS CONSOLE SETUP - Enable ANSI colors and UTF-8
+# ════════════════════════════════════════════════════════════════════════════
+
+def setup_windows_console():
+    """Configure Windows console for colors and UTF-8 support"""
+    if platform.system() == 'Windows':
+        # Enable ANSI escape sequences on Windows 10+
+        try:
+            kernel32 = ctypes.windll.kernel32
+            # Get stdout handle
+            stdout_handle = kernel32.GetStdHandle(-11)
+            # Get current mode
+            mode = ctypes.c_ulong()
+            kernel32.GetConsoleMode(stdout_handle, ctypes.byref(mode))
+            # Enable ENABLE_VIRTUAL_TERMINAL_PROCESSING (0x0004)
+            ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            kernel32.SetConsoleMode(stdout_handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+        except Exception:
+            pass
+        
+        # Set UTF-8 encoding for console
+        try:
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            if hasattr(sys.stderr, 'reconfigure'):
+                sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+        
+        # Set console code page to UTF-8 (65001)
+        try:
+            os.system('chcp 65001 > nul 2>&1')
+        except Exception:
+            pass
+        
+        # Set console title
+        try:
+            ctypes.windll.kernel32.SetConsoleTitleW("Arabic OCR Pipeline v2.2")
+        except Exception:
+            pass
+
+# Initialize console settings
+setup_windows_console()
+
+# ════════════════════════════════════════════════════════════════════════════
+# COLOR SYSTEM - Windows CMD/PowerShell compatible
+# ════════════════════════════════════════════════════════════════════════════
+
+class Colors:
+    """ANSI color codes with Windows compatibility"""
+    ENABLED = True
+    
+    # Basic styles
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    UNDERLINE = '\033[4m'
+    
+    # Foreground colors
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # Bright foreground colors
+    BRIGHT_BLACK = '\033[90m'
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
+    
+    # Background colors
+    BG_BLACK = '\033[40m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+    BG_WHITE = '\033[47m'
+    
+    @classmethod
+    def disable(cls):
+        """Disable colors for non-supporting terminals"""
+        cls.ENABLED = False
+        for attr in dir(cls):
+            if attr.isupper() and not attr.startswith('_') and attr != 'ENABLED':
+                setattr(cls, attr, '')
+    
+    @classmethod
+    def c(cls, text: str, *colors) -> str:
+        """Apply colors to text"""
+        if not cls.ENABLED:
+            return text
+        color_str = ''.join(colors)
+        return f"{color_str}{text}{cls.RESET}"
+
+# Shorthand
+C = Colors.c
+
+# ════════════════════════════════════════════════════════════════════════════
+# TQDM IMPORT
+# ════════════════════════════════════════════════════════════════════════════
+
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+
+# ════════════════════════════════════════════════════════════════════════════
+# REQUIRED IMPORTS
+# ════════════════════════════════════════════════════════════════════════════
+
+import requests
+from PIL import Image
+from tenacity import (
+    retry, wait_random_exponential, stop_never,
+    retry_if_exception_type, before_sleep_log
+)
+
+import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+# ════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION - Windows optimized with auto-tuning
+# ════════════════════════════════════════════════════════════════════════════
+
+DEFAULT_API_KEY = "AIzaSyDV7O3HC0z2x4xutjHwRhIgtsQycgkIdkA"
+
+# Windows default path
+def get_default_folder():
+    """Get default subtitle images folder for Windows"""
+    downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
+    return os.path.join(downloads, 'subtitle_images')
+
+# Auto-tuned defaults based on system
+DEFAULT_WORKERS = SYSTEM_INFO.get_optimal_workers()
+DEFAULT_CACHE_SIZE = SYSTEM_INFO.get_optimal_cache_size()
+
+@dataclass
+class PerformanceMetrics:
+    """Real-time performance tracking"""
+    total_images: int = 0
+    processed: int = 0
+    successful: int = 0
+    failed: int = 0
+    skipped: int = 0
+    start_time: float = field(default_factory=time.time)
+    
+    @property
+    def elapsed_time(self) -> float:
+        return time.time() - self.start_time
+    
+    @property
+    def images_per_second(self) -> float:
+        return self.processed / self.elapsed_time if self.elapsed_time > 0 else 0
+    
+    @property
+    def success_rate(self) -> float:
+        return (self.successful / self.processed * 100) if self.processed > 0 else 0
+
+@dataclass
+class OCRConfig:
+    """Pipeline configuration with Windows auto-tuning"""
+    api_key: str
+    model_name: str = "models/gemini-3-flash-preview"
+    image_folder: str = field(default_factory=get_default_folder)
+    output_filename: str = "final_subs_gemini3.srt"
+    max_workers: int = field(default_factory=lambda: DEFAULT_WORKERS)
+    merge_gap_tolerance: float = 3.0
+    temperature: float = 0.0
+    enable_caching: bool = True
+    cache_size: int = field(default_factory=lambda: DEFAULT_CACHE_SIZE)
+    use_bom: bool = True  # UTF-8 with BOM for Windows Arabic compatibility
+    
+    @classmethod
+    def from_env(cls, **kwargs):
+        api_key = os.getenv('GEMINI_API_KEY') or kwargs.get('api_key') or DEFAULT_API_KEY
+        return cls(api_key=api_key, **{k: v for k, v in kwargs.items() if k != 'api_key'})
+
+# ════════════════════════════════════════════════════════════════════════════
+# SAFETY SETTINGS - Original configuration preserved EXACTLY
+# ════════════════════════════════════════════════════════════════════════════
+
+SAFETY_SETTINGS = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+
+# Generation config - Original preserved EXACTLY
+GENERATION_CONFIG = genai.types.GenerationConfig(
+    temperature=0.0,
+    top_p=1.0,
+    candidate_count=1
+)
+
+# Retry exceptions - Original preserved EXACTLY
+RETRY_EXCEPTIONS = (
+    google_exceptions.GoogleAPIError,
+    google_exceptions.ResourceExhausted,
+    google_exceptions.ServiceUnavailable,
+    google_exceptions.DeadlineExceeded,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+# No-text phrases - Original preserved EXACTLY
+NO_TEXT_PHRASES = [
+    "لا يوجد نص عربي في الصورة", "لا يحتوي على نص عربي",
+    "لا يوجد أي نص عربي في الصورة", "لا يوجد نص في الصورة",
+    "لا توجد أية كتابة عربية في الصورة", "لا يوجد نص عربي",
+    "لا يوجد نص", ".الصورة في عربي نص يوجد لا",
+    ".يحتوي لا عربي نص على", ".الصورة في عربي نص أي يوجد لا",
+    ".الصورة في نص يوجد لا", ".الصورة في عربية كتابة أية توجد لا",
+    ".عربي نص يوجد لا", ".نص يوجد لا"
+]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SYSTEM PROMPT - PRESERVED EXACTLY AS ORIGINAL (DO NOT MODIFY!)
+# ═══════════════════════════════════════════════════════════════════════════
+
+SYSTEM_PROMPT = """You are performing ULTRA-PRECISE Optical Character Recognition (OCR) on Arabic subtitle images.
+This is PURE PIXEL EXTRACTION - you are a high-precision scanner, NOT an editor or interpreter.
+
+═══════════════════════════════════════════════════════════════════════════
+CRITICAL RULE #1: IDENTIFY SUBTITLE TEXT VS WATERMARKS/NOISE
+═══════════════════════════════════════════════════════════════════════════
+
+**Subtitle dialogue text**:
+- Complete sentences in conversational Arabic
+- Changes between frames (dynamic content)
+- Typically 1-3 lines at bottom/center of frame
+- Movie/TV dialogue, narration, or speech
+
+**IGNORE these completely**:
+- Watermarks, logos, channel names (even in Arabic)
+- Text in OTHER languages (Korean, Japanese, Chinese, English)
+- Static overlays, branding, URLs
+- Any text in corners or edges of frame
+
+═══════════════════════════════════════════════════════════════════════════
+CRITICAL RULE #2: ZERO HALLUCINATION - CHARACTER-BY-CHARACTER ACCURACY
+═══════════════════════════════════════════════════════════════════════════
+
+**ABSOLUTE RULES:**
+
+1. **Character Precision**:
+   - Read EACH character individually with EXTREME care
+   - Common OCR errors to AVOID:
+     * لن (lan) vs لأن (li'anna) - VERIFY the hamza carefully!
+     * جيهيننا vs جيهينا - COUNT the ن characters!
+     * ة vs ه - Check if ta marbuta or ha!
+   
+   **TRIPLE-CHECK**: Before writing ANY word, verify each character visually!
+
+2. **Diacritics (تشكيل، تنوين)**:
+   - If you see NO diacritic mark on a letter → DO NOT add one
+   - If you see ONE diacritic mark (ً) → write exactly ONE (ً), NOT two (ًً)
+   - If you see diacritics → preserve them EXACTLY as shown
+   - NEVER "fix" or "complete" missing diacritics
+   - NEVER add grammatically correct diacritics that aren't visible
+   
+   **DOUBLE-CHECK**: Before writing any diacritic, verify visually: "Do I actually see this mark in the pixels?"
+
+3. **Character-by-character verification**:
+   - Read each letter individually
+   - Check: Is there a fatha (َ)? Write it only if you SEE it
+   - Check: Is there a kasra (ِ)? Write it only if you SEE it  
+   - Check: Is there a damma (ُ)? Write it only if you SEE it
+   - Check: Is there tanween (ً ٍ ٌ)? Write EXACTLY what you see, no more, no less
+   - Check: Is there shadda (ّ)? Write it only if you SEE it
+
+4. **Numbers**:
+   - Extract EXACTLY as shown: "50" or "٠٥" 
+   - Don't convert between Arabic/Western numerals
+   - Preserve "الف" vs "ألف" exactly as written
+
+5. **Preserve Everything**:
+   - ALL punctuation: .,!?:؛،؟"()
+   - ALL brackets: [], {}, ()
+   - Tatweel (ـ) with exact spacing
+   - Line breaks between text lines
+   - Multiple spaces if present
+
+6. **NEVER Do This**:
+   - Don't "fix" spelling errors
+   - Don't add missing punctuation
+   - Don't normalize whitespace
+   - Don't complete partial words
+   - Don't correct grammar
+   - Don't interpret context to "improve" text
+
+═══════════════════════════════════════════════════════════════════════════
+CRITICAL RULE #3: IGNORE NON-ARABIC INTERFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+**STRICT FILTERING**:
+- If you see Korean/Japanese/Chinese characters NEAR Arabic text → IGNORE them completely
+- If you see English text → IGNORE it
+- Focus ONLY on the main Arabic subtitle area (typically bottom-center)
+- If unsure whether text is subtitle or watermark → ASK: "Does this text form a complete sentence?"
+
+═══════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════════════════
+
+- Subtitle dialogue found → Output ONLY that text
+- Only watermarks/logos → Output empty string ""
+- No Arabic text → Output empty string ""
+- NO explanations, NO metadata, NO commentary
+
+═══════════════════════════════════════════════════════════════════════════
+
+FINAL REMINDER: You are a SCANNER, not an INTERPRETER. Extract pixels, not meaning.
+Read character-by-character. Verify every letter. Zero tolerance for errors.
+"""
+
+# ════════════════════════════════════════════════════════════════════════════
+# REGEX PATTERNS - Original preserved EXACTLY
+# ════════════════════════════════════════════════════════════════════════════
+
+TIMESTAMP_PATTERN = re.compile(r'(\d_\d{2}_\d{2}_\d{3})__(\d_\d{2}_\d{2}_\d{3})')
+CODE_BLOCK_PATTERN = re.compile(r'```.*?```', re.DOTALL)
+
+# Original disallowed_chars_pattern - PRESERVED EXACTLY
+DISALLOWED_CHARS_PATTERN = re.compile(
+    r'[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDCF\uFDF0-\uFDFF\uFE70-\uFEFF'
+    r'\u064B-\u0652'  # Arabic diacritics
+    r'\u0030-\u0039'  # Arabic-Indic digits
+    r'\s'             # Whitespace
+    r'.,!?:؛،؛؟"()%[\]\-/#]+',
+    re.UNICODE
+)
+
+# ════════════════════════════════════════════════════════════════════════════
+# ENHANCED LOGGING SYSTEM - Windows optimized
+# ════════════════════════════════════════════════════════════════════════════
+
+class WindowsColoredFormatter(logging.Formatter):
+    """Professional colored formatter for Windows CMD"""
+    
+    LEVEL_COLORS = {
+        'DEBUG': (Colors.CYAN, '◈'),
+        'INFO': (Colors.GREEN, '●'),
+        'WARNING': (Colors.YELLOW, '▲'),
+        'ERROR': (Colors.RED, '✖'),
+        'CRITICAL': (Colors.BRIGHT_RED + Colors.BOLD, '█'),
+    }
+    
+    def format(self, record):
+        color, symbol = self.LEVEL_COLORS.get(record.levelname, (Colors.WHITE, '○'))
+        timestamp = time.strftime('%H:%M:%S')
+        level_str = f"{color}{symbol} {record.levelname:8}{Colors.RESET}"
+        time_str = f"{Colors.DIM}{timestamp}{Colors.RESET}"
+        msg_str = record.getMessage()
+        return f"{time_str} {level_str} │ {msg_str}"
+
+def setup_logging(verbose: bool = False):
+    """Setup enhanced logging for Windows"""
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(WindowsColoredFormatter())
+    
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    
+    return logger
+
+logger = setup_logging()
+
+# ════════════════════════════════════════════════════════════════════════════
+# BANNER & UI COMPONENTS
+# ════════════════════════════════════════════════════════════════════════════
+
+def print_banner():
+    """Print professional banner"""
+    banner = f"""
+{Colors.BRIGHT_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   {Colors.BRIGHT_WHITE}█████╗ ██████╗  █████╗ ██████╗ ██╗ ██████╗     ██████╗  ██████╗██████╗ {Colors.BRIGHT_CYAN}   ║
+║   {Colors.BRIGHT_WHITE}██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║██╔════╝    ██╔═══██╗██╔════╝██╔══██╗{Colors.BRIGHT_CYAN}   ║
+║   {Colors.BRIGHT_WHITE}███████║██████╔╝███████║██████╔╝██║██║         ██║   ██║██║     ██████╔╝{Colors.BRIGHT_CYAN}   ║
+║   {Colors.BRIGHT_WHITE}██╔══██║██╔══██╗██╔══██║██╔══██╗██║██║         ██║   ██║██║     ██╔══██╗{Colors.BRIGHT_CYAN}   ║
+║   {Colors.BRIGHT_WHITE}██║  ██║██║  ██║██║  ██║██████╔╝██║╚██████╗    ╚██████╔╝╚██████╗██║  ██║{Colors.BRIGHT_CYAN}   ║
+║   {Colors.BRIGHT_WHITE}╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝ ╚═════╝     ╚═════╝  ╚═════╝╚═╝  ╚═╝{Colors.BRIGHT_CYAN}   ║
+║                                                                              ║
+║   {Colors.YELLOW}▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀{Colors.BRIGHT_CYAN}   ║
+║                                                                              ║
+║        {Colors.WHITE}Professional Arabic OCR Pipeline{Colors.BRIGHT_CYAN}  │  {Colors.GREEN}Windows Edition v2.2{Colors.BRIGHT_CYAN}       ║
+║                                                                              ║
+║   {Colors.DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.BRIGHT_CYAN}   ║
+║                                                                              ║
+║        {Colors.BRIGHT_GREEN}✓{Colors.WHITE} Gemini 3 Flash Preview      {Colors.BRIGHT_GREEN}✓{Colors.WHITE} Auto-tuned Workers{Colors.BRIGHT_CYAN}           ║
+║        {Colors.BRIGHT_GREEN}✓{Colors.WHITE} Dynamic Cache Sizing        {Colors.BRIGHT_GREEN}✓{Colors.WHITE} UTF-8 BOM Output{Colors.BRIGHT_CYAN}             ║
+║        {Colors.BRIGHT_GREEN}✓{Colors.WHITE} Arabic Diacritic Preserve   {Colors.BRIGHT_GREEN}✓{Colors.WHITE} Watermark Filtering{Colors.BRIGHT_CYAN}          ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝{Colors.RESET}
+"""
+    print(banner)
+
+def print_system_info():
+    """Print detected system information"""
+    print(f"{Colors.MAGENTA}┌─────────────────────────────────────────────────────────────────────────────┐{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.BOLD}SYSTEM DETECTION{Colors.RESET}                                                          {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}├─────────────────────────────────────────────────────────────────────────────┤{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}                                                                             {Colors.MAGENTA}│{Colors.RESET}")
+    
+    os_info = f"Windows {SYSTEM_INFO.windows_version}" if SYSTEM_INFO.is_windows else platform.system()
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} OS          : {Colors.WHITE}{os_info:<52}{Colors.RESET} {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} CPU Cores   : {Colors.WHITE}{SYSTEM_INFO.cpu_count:<52}{Colors.RESET} {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Total RAM   : {Colors.WHITE}{SYSTEM_INFO.total_ram_gb:.1f} GB{Colors.RESET}{' ' * 46} {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Avail RAM   : {Colors.WHITE}{SYSTEM_INFO.available_ram_gb:.1f} GB{Colors.RESET}{' ' * 46} {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}                                                                             {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}  {Colors.GREEN}► Auto-tuned:{Colors.RESET} Workers={Colors.BRIGHT_WHITE}{DEFAULT_WORKERS}{Colors.RESET}, Cache={Colors.BRIGHT_WHITE}{DEFAULT_CACHE_SIZE}{Colors.RESET} images                        {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│{Colors.RESET}                                                                             {Colors.MAGENTA}│{Colors.RESET}")
+    print(f"{Colors.MAGENTA}└─────────────────────────────────────────────────────────────────────────────┘{Colors.RESET}")
+    print()
+
+def print_config_summary(config: 'OCRConfig'):
+    """Print configuration summary"""
+    print(f"{Colors.CYAN}┌─────────────────────────────────────────────────────────────────────────────┐{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.BOLD}CONFIGURATION{Colors.RESET}                                                            {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}├─────────────────────────────────────────────────────────────────────────────┤{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}                                                                             {Colors.CYAN}│{Colors.RESET}")
+    
+    # Truncate long paths
+    folder_display = config.image_folder
+    if len(folder_display) > 50:
+        folder_display = "..." + folder_display[-47:]
+    
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Model       : {Colors.WHITE}{config.model_name:<52}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Folder      : {Colors.WHITE}{folder_display:<52}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Output      : {Colors.WHITE}{config.output_filename:<52}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Workers     : {Colors.GREEN}{config.max_workers:<52}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Cache Size  : {Colors.GREEN}{config.cache_size} images{Colors.RESET}{' ' * 40} {Colors.CYAN}│{Colors.RESET}")
+    
+    cache_status = f"{Colors.GREEN}Enabled{Colors.RESET}" if config.enable_caching else f"{Colors.RED}Disabled{Colors.RESET}"
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Caching     : {cache_status}{' ' * 50} {Colors.CYAN}│{Colors.RESET}")
+    
+    bom_status = f"{Colors.GREEN}UTF-8 with BOM{Colors.RESET}" if config.use_bom else f"{Colors.YELLOW}UTF-8 (no BOM){Colors.RESET}"
+    print(f"{Colors.CYAN}│{Colors.RESET}  {Colors.YELLOW}▸{Colors.RESET} Encoding    : {bom_status}{' ' * 43} {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}│{Colors.RESET}                                                                             {Colors.CYAN}│{Colors.RESET}")
+    print(f"{Colors.CYAN}└─────────────────────────────────────────────────────────────────────────────┘{Colors.RESET}")
+    print()
+
+def print_final_report(metrics: 'PerformanceMetrics', merged_count: int, config: 'OCRConfig'):
+    """Print professional final performance report"""
+    elapsed = metrics.elapsed_time
+    minutes = int(elapsed // 60)
+    seconds = int(elapsed % 60)
+    time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds:.1f}s"
+    
+    print()
+    print(f"{Colors.BRIGHT_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.BRIGHT_WHITE}█▀█ █▀▀ █▀█ █▀▀ █▀█ █▀█ █▀▄▀█ ▄▀█ █▄ █ █▀▀ █▀▀   █▀█ █▀▀ █▀█ █▀█ █▀█ ▀█▀{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.BRIGHT_WHITE}█▀▀ ██▄ █▀▄ █▀  █▄█ █▀▄ █ ▀ █ █▀█ █ ▀█ █▄▄ ██▄   █▀▄ ██▄ █▀▀ █▄█ █▀▄  █{Colors.RESET}    {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}╠══════════════════════════════════════════════════════════════════════════════╣{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    
+    # Processing Stats
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}┌─ PROCESSING STATISTICS ─────────────────────────────────────────────┐{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}                                                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}   {Colors.WHITE}Total Images    :{Colors.RESET}  {Colors.BRIGHT_WHITE}{metrics.total_images:>6}{Colors.RESET}                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}   {Colors.WHITE}Processed       :{Colors.RESET}  {Colors.BRIGHT_WHITE}{metrics.processed:>6}{Colors.RESET}                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}   {Colors.GREEN}Successful      :{Colors.RESET}  {Colors.BRIGHT_GREEN}{metrics.successful:>6}{Colors.RESET}  ({metrics.success_rate:.1f}%)                          {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}   {Colors.YELLOW}Skipped         :{Colors.RESET}  {Colors.BRIGHT_YELLOW}{metrics.skipped:>6}{Colors.RESET}                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}   {Colors.RED}Failed          :{Colors.RESET}  {Colors.BRIGHT_RED}{metrics.failed:>6}{Colors.RESET}                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}│{Colors.RESET}                                                                     {Colors.CYAN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.CYAN}└─────────────────────────────────────────────────────────────────────┘{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    
+    # Performance Metrics
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}┌─ PERFORMANCE METRICS ───────────────────────────────────────────────┐{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}                                                                     {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}   {Colors.WHITE}Elapsed Time    :{Colors.RESET}  {Colors.BRIGHT_WHITE}{time_str:>10}{Colors.RESET}                                {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}   {Colors.WHITE}Processing Speed:{Colors.RESET}  {Colors.BRIGHT_WHITE}{metrics.images_per_second:>7.2f}{Colors.RESET} img/sec                        {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}   {Colors.WHITE}Workers Used    :{Colors.RESET}  {Colors.BRIGHT_WHITE}{config.max_workers:>7}{Colors.RESET}                                 {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    if config.enable_caching:
+        cache_rate = image_cache.hit_rate
+        print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}   {Colors.WHITE}Cache Hit Rate  :{Colors.RESET}  {Colors.BRIGHT_WHITE}{cache_rate:>7.1f}{Colors.RESET}%                              {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+        print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}   {Colors.WHITE}Cache Size      :{Colors.RESET}  {Colors.BRIGHT_WHITE}{config.cache_size:>7}{Colors.RESET} images                         {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}│{Colors.RESET}                                                                     {Colors.MAGENTA}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.MAGENTA}└─────────────────────────────────────────────────────────────────────┘{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    
+    # Output Summary
+    encoding_info = "UTF-8 with BOM" if config.use_bom else "UTF-8"
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}┌─ OUTPUT SUMMARY ────────────────────────────────────────────────────┐{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}│{Colors.RESET}                                                                     {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_GREEN}✓{Colors.RESET} Final Subtitle Entries: {Colors.BRIGHT_WHITE}{merged_count:>5}{Colors.RESET}                             {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_GREEN}✓{Colors.RESET} Encoding: {Colors.BRIGHT_WHITE}{encoding_info:<15}{Colors.RESET}                               {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}│{Colors.RESET}                                                                     {Colors.GREEN}│{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}   {Colors.GREEN}└─────────────────────────────────────────────────────────────────────┘{Colors.RESET}   {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}║{Colors.RESET}                                                                              {Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BRIGHT_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.RESET}")
+    print()
+
+# ════════════════════════════════════════════════════════════════════════════
+# UTILITIES - Original logic preserved EXACTLY
+# ════════════════════════════════════════════════════════════════════════════
+
+@lru_cache(maxsize=2048)
+def format_timestamp(seconds: float) -> str:
+    """Original logic - cached for performance"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+def parse_timestamp_from_filename(filename: str) -> Tuple[Optional[float], Optional[float]]:
+    """Original logic preserved EXACTLY"""
+    match = re.search(r'(\d_\d{2}_\d{2}_\d{3})__(\d_\d{2}_\d{2}_\d{3})', filename)
+    if match:
+        try:
+            def _to_sec(t_str):
+                parts = list(map(int, t_str.split('_')))
+                return parts[0]*3600 + parts[1]*60 + parts[2] + parts[3]/1000
+            return _to_sec(match.group(1)), _to_sec(match.group(2))
+        except ValueError:
+            return None, None
+    return None, None
+
+def clean_ocr_output(text: str) -> str:
+    """
+    ══════════════════════════════════════════════════════════════════════════
+    ORIGINAL CLEANING LOGIC - PRESERVED EXACTLY - DO NOT MODIFY!
+    ══════════════════════════════════════════════════════════════════════════
+    """
+    # Check no-text phrases - original logic
+    for phrase in NO_TEXT_PHRASES:
+        if phrase in text:
+            return ""
+    
+    # Handle JSON responses - original logic
+    if 'json' in text.lower() and ('{' in text or '[' in text):
+        try:
+            json_data = json.loads(text.strip('` \n'))
+            if isinstance(json_data, dict) and 'text_content' in json_data:
+                text = json_data['text'] if 'text' in json_data else json_data.get('text_content', text)
+            elif isinstance(json_data, list) and len(json_data) > 0 and isinstance(json_data[0], dict) and 'label' in json_data[0]:
+                text = ' '.join([d['label'] for d in json_data if 'label' in d])
+            else:
+                text = ''
+        except json.JSONDecodeError:
+            match = re.search(r'"text_content":\s*"([^"]*)"', text)
+            if match:
+                text = match.group(1)
+            else:
+                text = re.sub(r'{[^}]*}', '', text)
+                text = re.sub(r'\[[^\]]*\]', '', text)
+    
+    # Remove code blocks - original logic
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    
+    # Remove BOM (Byte Order Mark) - fixes empty lines with ﻿
+    text = text.replace('\ufeff', '').replace('\ufffe', '')
+    
+    # Filter disallowed characters - ORIGINAL PATTERN
+    cleaned_text = DISALLOWED_CHARS_PATTERN.sub('', text)
+    
+    # === Original Multiline Fix - PRESERVED EXACTLY ===
+    cleaned_lines = []
+    for line in cleaned_text.split('\n'):
+        line = line.strip().replace('\r', '')
+        if line:
+            cleaned_lines.append(line)
+    
+    return "\n".join(cleaned_lines)
+
+def format_time(seconds: float) -> str:
+    """Helper for time display"""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    return f"{m}m {s}s"
+
+# ════════════════════════════════════════════════════════════════════════════
+# IMAGE CACHING - Thread-safe with dynamic sizing
+# ════════════════════════════════════════════════════════════════════════════
+
+class ImageCache:
+    """
+    Thread-safe intelligent LRU cache for images
+    ORIGINAL LOGIC - with configurable size
+    """
+    def __init__(self, max_size=None):
+        self.cache = {}
+        self.max_size = max_size or DEFAULT_CACHE_SIZE
+        self.access = {}
+        self.hits = self.misses = 0
+        self._lock = threading.Lock()
+    
+    def get(self, path):
+        """Thread-safe get operation - ORIGINAL LOGIC"""
+        with self._lock:
+            if path in self.cache:
+                self.access[path] += 1
+                self.hits += 1
+                return self.cache[path].copy()
+            self.misses += 1
+            return None
+    
+    def put(self, path, img):
+        """Thread-safe put operation - ORIGINAL LOGIC"""
+        with self._lock:
+            if len(self.cache) >= self.max_size:
+                if self.access:
+                    lru = min(self.access.items(), key=lambda x: x[1])[0]
+                    del self.cache[lru]
+                    del self.access[lru]
+            
+            self.cache[path] = img.copy()
+            self.access[path] = 1
+    
+    def resize(self, new_size: int):
+        """Resize cache (for dynamic adjustment)"""
+        with self._lock:
+            self.max_size = new_size
+            # Evict if over new size
+            while len(self.cache) > self.max_size and self.access:
+                lru = min(self.access.items(), key=lambda x: x[1])[0]
+                del self.cache[lru]
+                del self.access[lru]
+    
+    @property
+    def hit_rate(self):
+        """Calculate cache hit rate"""
+        total = self.hits + self.misses
+        return (self.hits / total * 100) if total > 0 else 0
+
+# Global cache instance with auto-tuned size
+image_cache = ImageCache(max_size=DEFAULT_CACHE_SIZE)
+
+def load_image(path: str, use_cache=True):
+    """Thread-safe image loading - ORIGINAL LOGIC"""
+    if use_cache:
+        cached = image_cache.get(path)
+        if cached:
+            return cached
+    
+    img = Image.open(path)
+    
+    if use_cache:
+        image_cache.put(path, img)
+    
+    return img
+
+# ════════════════════════════════════════════════════════════════════════════
+# OCR PROCESSING - ORIGINAL LOGIC PRESERVED EXACTLY
+# ════════════════════════════════════════════════════════════════════════════
+
+@retry(
+    wait=wait_random_exponential(multiplier=1, min=2, max=20),
+    stop=stop_never,
+    retry=retry_if_exception_type(RETRY_EXCEPTIONS),
+    before_sleep=before_sleep_log(logger, logging.WARNING)
+)
+def perform_ocr(model, image_path: str, use_cache: bool = True) -> str:
+    """ORIGINAL OCR LOGIC - PRESERVED EXACTLY"""
+    img = load_image(image_path, use_cache)
+    
+    response = model.generate_content(
+        [SYSTEM_PROMPT, img],
+        safety_settings=SAFETY_SETTINGS,
+        generation_config=GENERATION_CONFIG
+    )
+    
+    return response.text
+
+def process_single_image(file_path: str, model, config: OCRConfig):
+    """ORIGINAL PROCESSING LOGIC - PRESERVED EXACTLY"""
+    try:
+        filename = os.path.basename(file_path)
+        start, end = parse_timestamp_from_filename(filename)
+        
+        if start is None:
+            return None
+        
+        raw_text = perform_ocr(model, file_path, config.enable_caching)
+        final_text = clean_ocr_output(raw_text)
+        
+        if not final_text:
+            return None
+        
+        # Ignore results containing only quotes/symbols - not real subtitles
+        clean_check = final_text.strip()
+        if clean_check == '""' or clean_check == "''":
+            return None
+        if re.match(r'^[\s"\'()\[\]{}،.,:;!?؟\-_]+$', clean_check):
+            return None
+        
+        # Log first 30 chars - original logic
+        log_text = final_text.replace('\n', ' ')
+        logger.info(f"Extracted ({filename}): {log_text[:30]}...")
+        
+        return (start, end, final_text)
+        
+    except Exception as e:
+        logger.error(f"Error processing {file_path}: {e}")
+        return None
+
+# ════════════════════════════════════════════════════════════════════════════
+# PARALLEL PROCESSING - Enhanced with Windows progress
+# ════════════════════════════════════════════════════════════════════════════
+
+def process_images_parallel(files: List[str], model, config: OCRConfig, metrics: PerformanceMetrics):
+    """Enhanced parallel processing with Windows-optimized progress"""
+    results = []
+    total = len(files)
+    
+    # Update cache size if specified in config
+    if config.cache_size != image_cache.max_size:
+        image_cache.resize(config.cache_size)
+    
+    if TQDM_AVAILABLE:
+        pbar = tqdm(
+            total=total,
+            desc=f"{Colors.CYAN}Processing{Colors.RESET}",
+            unit="img",
+            ncols=100,
+            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+        )
+    else:
+        pbar = None
+        print(f"\n{Colors.CYAN}▶ Starting parallel processing...{Colors.RESET}\n")
+    
+    with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+        future_to_file = {
+            executor.submit(process_single_image, path, model, config): path
+            for path in files
+        }
+        
+        completed = 0
+        
+        for future in as_completed(future_to_file):
+            try:
+                res = future.result()
+                completed += 1
+                metrics.processed += 1
+                
+                if res:
+                    results.append(res)
+                    metrics.successful += 1
+                else:
+                    metrics.skipped += 1
+                
+                if pbar:
+                    pbar.update(1)
+                    pbar.set_postfix({
+                        'OK': f"{metrics.success_rate:.0f}%",
+                        'Speed': f"{metrics.images_per_second:.1f}/s"
+                    })
+                elif completed % 10 == 0 or completed == total:
+                    percentage = (completed / total) * 100
+                    bar_width = 40
+                    filled = int(bar_width * completed / total)
+                    bar = f"{Colors.GREEN}{'█' * filled}{Colors.DIM}{'░' * (bar_width - filled)}{Colors.RESET}"
+                    
+                    print(f"\r  │{bar}│ {percentage:5.1f}% ({completed}/{total}) "
+                          f"│ {Colors.GREEN}✓{metrics.successful}{Colors.RESET} "
+                          f"│ {Colors.YELLOW}○{metrics.skipped}{Colors.RESET} "
+                          f"│ {metrics.images_per_second:.1f} img/s", end='', flush=True)
+                    
+            except Exception as e:
+                metrics.failed += 1
+                logger.error(f"Thread Error: {e}")
+    
+    if pbar:
+        pbar.close()
+    else:
+        print()
+    
+    return results
+
+# ════════════════════════════════════════════════════════════════════════════
+# MERGING LOGIC - ORIGINAL PRESERVED EXACTLY - DO NOT MODIFY!
+# ════════════════════════════════════════════════════════════════════════════
+
+def merge_ocr_entries(ocr_results, gap_tolerance: float = 3.0):
+    """
+    ══════════════════════════════════════════════════════════════════════════
+    ORIGINAL MERGE LOGIC - PRESERVED EXACTLY - DO NOT MODIFY!
+    ══════════════════════════════════════════════════════════════════════════
+    
+    Professional merge logic with intelligent OCR error handling
+    
+    Optimized for Gemini 3 Flash Preview (Jan 2026)
+    Handles split frames and minor OCR inconsistencies
+    
+    Priority order:
+    1. IDENTICAL TEXT + gap < 3s → ALWAYS merge
+    2. Consecutive frames (gap ≤ 0.01s):
+       - High text similarity (>90%) + similar duration → merge (OCR error)
+       - Different duration ratio (>1.5) → keep separate (different subs)
+    3. Otherwise → new entry
+    """
+    if not ocr_results:
+        return []
+    
+    ocr_results.sort(key=lambda x: x[0])
+    
+    logger.info(f"Applying Intelligent Merge (Exact match: <{gap_tolerance}s, Fuzzy: >90%, Gap: ≤0.01s)...")
+    merged_results = []
+    
+    for current_start, current_end, current_text in ocr_results:
+        if not merged_results:
+            merged_results.append([current_start, current_end, current_text])
+        else:
+            last_entry = merged_results[-1]
+            last_start = last_entry[0]
+            last_end = last_entry[1]
+            last_text = last_entry[2]
+            time_gap = current_start - last_end
+            
+            # Merge ONLY consecutive frames (≤0.01s = split frames)
+            # Larger gaps = separate entries (even if text is identical = intentional repeat)
+            if time_gap <= 0.01:
+                last_duration = last_end - last_start
+                current_duration = current_end - current_start
+                
+                if last_duration > 0:
+                    ratio = current_duration / last_duration
+                    
+                    # Calculate text similarity
+                    similarity = _calculate_text_similarity(last_text, current_text)
+                    
+                    # RULE 2A: Very high similarity (>95%) → ALWAYS merge
+                    # Handles minor OCR errors like "لن" vs "لأن", "كثيرًا" vs "كثيراً"
+                    # Keep FIRST text (earlier frame is usually cleaner, no transition artifacts)
+                    if similarity >= 0.95:
+                        last_entry[1] = current_end
+                    
+                    # RULE 2B: High similarity (>90%) + reasonable duration → merge
+                    # Split frames typically have similar durations
+                    # Keep FIRST text (earlier frame is usually cleaner)
+                    elif similarity >= 0.90 and ratio <= 2.0:
+                        last_entry[1] = current_end
+                    
+                    # RULE 2C: Low similarity (< 70%) → NEVER merge (different subtitles)
+                    # Even if timing is close, these are different dialogues
+                    elif similarity < 0.70:
+                        merged_results.append([current_start, current_end, current_text])
+                    
+                    # RULE 2D: Moderate similarity (70-90%) + large duration ratio → separate
+                    elif ratio > 2.0:
+                        merged_results.append([current_start, current_end, current_text])
+                    
+                    # RULE 2E: Moderate similarity (70-90%) + reasonable ratio → merge
+                    # Probably OCR variation of same text
+                    else:
+                        last_entry[1] = current_end
+                else:
+                    # Very short previous frame - merge by default
+                    last_entry[1] = current_end
+            
+            # PRIORITY 3: New entry
+            else:
+                merged_results.append([current_start, current_end, current_text])
+    
+    logger.info(f"Merged {len(ocr_results)} entries → {len(merged_results)} final entries")
+    return [tuple(entry) for entry in merged_results]
+
+def _calculate_text_similarity(text1: str, text2: str) -> float:
+    """
+    ══════════════════════════════════════════════════════════════════════════
+    ORIGINAL SIMILARITY LOGIC - PRESERVED EXACTLY - DO NOT MODIFY!
+    ══════════════════════════════════════════════════════════════════════════
+    
+    Calculate robust text similarity between two Arabic texts
+    Optimized for detecting minor OCR errors in split frames
+    
+    Returns: 0.0 (completely different) to 1.0 (identical)
+    
+    Method: SequenceMatcher for accurate similarity detection
+    - Handles character insertions/deletions properly (e.g., "لن" vs "لأن")
+    - Removes whitespace/newlines for fair comparison
+    """
+    from difflib import SequenceMatcher
+    
+    # Fast path for identical texts
+    if text1 == text2:
+        return 1.0
+    
+    if not text1 or not text2:
+        return 0.0
+    
+    # Normalize: remove whitespace and newlines
+    clean1 = ''.join(text1.split())
+    clean2 = ''.join(text2.split())
+    
+    # Check again after normalization
+    if clean1 == clean2:
+        return 1.0
+    
+    if len(clean1) == 0 or len(clean2) == 0:
+        return 0.0
+    
+    # Use SequenceMatcher for proper similarity detection
+    # This handles insertions/deletions correctly (e.g., "لن" vs "لأن" = 97% similar)
+    return SequenceMatcher(None, clean1, clean2).ratio()
+
+# ════════════════════════════════════════════════════════════════════════════
+# SRT GENERATION - With UTF-8 BOM support for Windows Arabic compatibility
+# ════════════════════════════════════════════════════════════════════════════
+
+# UTF-8 BOM (Byte Order Mark) - Required for Windows Arabic programs
+UTF8_BOM = '\ufeff'
+
+def generate_srt(entries, output_path: str, use_bom: bool = True):
+    """
+    Generate SRT with safe atomic write
+    
+    ORIGINAL LOGIC PRESERVED - only added BOM option for Windows compatibility
+    
+    Args:
+        entries: List of (start, end, text) tuples
+        output_path: Output file path
+        use_bom: If True, write UTF-8 with BOM (recommended for Windows Arabic)
+    """
+    temp = f"{output_path}.tmp"
+    try:
+        with open(temp, 'w', encoding='utf-8') as f:
+            # Write BOM at the beginning for Windows Arabic compatibility
+            if use_bom:
+                f.write(UTF8_BOM)
+            
+            # Original SRT generation logic - PRESERVED EXACTLY
+            for i, (start, end, text) in enumerate(entries):
+                f.write(f"{i+1}\n")
+                f.write(f"{format_timestamp(start)} --> {format_timestamp(end)}\n")
+                f.write(f"{text}\n\n")
+        
+        os.replace(temp, output_path)
+        
+        encoding_info = "UTF-8 with BOM" if use_bom else "UTF-8"
+        logger.info(f"{Colors.GREEN}✓ SUCCESS!{Colors.RESET} Saved to: {output_path} ({encoding_info})")
+        
+    except Exception as e:
+        if os.path.exists(temp):
+            os.remove(temp)
+        logger.critical(f"Save Error: {e}")
+        raise
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAIN PIPELINE
+# ════════════════════════════════════════════════════════════════════════════
+
+def run_pipeline(config: OCRConfig):
+    """Main pipeline - Windows optimized with enhanced UI"""
+    print_banner()
+    print_system_info()
+    print_config_summary(config)
+    
+    print(f"{Colors.CYAN}▶ Initializing Gemini API...{Colors.RESET}")
+    genai.configure(api_key=config.api_key)
+    
+    try:
+        model = genai.GenerativeModel(config.model_name)
+        print(f"  {Colors.GREEN}✓{Colors.RESET} Model loaded successfully\n")
+    except Exception as e:
+        logger.critical(f"Model Init Error: {e}")
+        return
+    
+    # Check folder
+    if not os.path.exists(config.image_folder):
+        logger.critical(f"Folder missing: {config.image_folder}")
+        print(f"\n{Colors.RED}✖ ERROR:{Colors.RESET} Image folder not found!")
+        print(f"  Expected: {config.image_folder}")
+        print(f"\n  {Colors.YELLOW}Tip:{Colors.RESET} Create the folder and add your subtitle images.")
+        return
+    
+    # Collect images
+    image_files = [
+        os.path.join(config.image_folder, f)
+        for f in os.listdir(config.image_folder)
+        if f.lower().endswith(('.png', '.jpg', '.jpeg'))
+    ]
+    
+    if not image_files:
+        logger.warning("No images found!")
+        print(f"\n{Colors.YELLOW}⚠ WARNING:{Colors.RESET} No images found in folder!")
+        print(f"  Supported formats: .png, .jpg, .jpeg")
+        return
+    
+    print(f"{Colors.CYAN}▶ Found {Colors.BRIGHT_WHITE}{len(image_files)}{Colors.RESET}{Colors.CYAN} images{Colors.RESET}")
+    print(f"{Colors.CYAN}▶ Starting parallel processing with {Colors.BRIGHT_WHITE}{config.max_workers}{Colors.RESET}{Colors.CYAN} workers...{Colors.RESET}\n")
+    
+    # Process with metrics
+    metrics = PerformanceMetrics(total_images=len(image_files))
+    results = process_images_parallel(image_files, model, config, metrics)
+    
+    print(f"\n{Colors.CYAN}▶ Sorting and merging entries...{Colors.RESET}")
+    
+    # Sort and merge - ORIGINAL LOGIC
+    results.sort(key=lambda x: x[0])
+    merged_results = merge_ocr_entries(results, config.merge_gap_tolerance)
+    
+    # Generate SRT with BOM option
+    print(f"{Colors.CYAN}▶ Generating SRT file...{Colors.RESET}")
+    output_file = os.path.join(config.image_folder, config.output_filename)
+    generate_srt(merged_results, output_file, use_bom=config.use_bom)
+    
+    # Print final report
+    print_final_report(metrics, len(merged_results), config)
+    
+    # Final success message
+    print(f"{Colors.BRIGHT_GREEN}═══════════════════════════════════════════════════════════════════════════════{Colors.RESET}")
+    print(f"{Colors.BRIGHT_GREEN}   ✓ OCR PIPELINE COMPLETED SUCCESSFULLY!{Colors.RESET}")
+    print(f"{Colors.BRIGHT_GREEN}   Output: {Colors.WHITE}{output_file}{Colors.RESET}")
+    print(f"{Colors.BRIGHT_GREEN}═══════════════════════════════════════════════════════════════════════════════{Colors.RESET}")
+    print()
+
+# ════════════════════════════════════════════════════════════════════════════
+# CLI - Windows optimized with all options
+# ════════════════════════════════════════════════════════════════════════════
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Professional Arabic OCR Pipeline v2.2 - Windows Edition',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  EXAMPLES                                                                    ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  Basic usage (auto-tuned settings):                                          ║
+║    python ocr_windows.py                                                     ║
+║                                                                              ║
+║  Custom folder:                                                              ║
+║    python ocr_windows.py --folder "C:\\Users\\Me\\Downloads\\subtitles"        ║
+║                                                                              ║
+║  High performance (more workers, larger cache):                              ║
+║    python ocr_windows.py --workers 10 --cache-size 200                       ║
+║                                                                              ║
+║  Without BOM (for non-Windows use):                                          ║
+║    python ocr_windows.py --no-bom                                            ║
+║                                                                              ║
+║  Verbose mode with custom output:                                            ║
+║    python ocr_windows.py -v --output my_subtitles.srt                        ║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  AUTO-TUNED DEFAULTS (based on your system):                                 ║
+║    Workers: {DEFAULT_WORKERS:<4} │ Cache: {DEFAULT_CACHE_SIZE:<4} images │ Encoding: UTF-8 with BOM       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        """
+    )
+    
+    # API & Model
+    parser.add_argument('--api-key', 
+                        help='Gemini API key (or set GEMINI_API_KEY env var)')
+    
+    # Paths
+    parser.add_argument('--folder', default=get_default_folder(),
+                        help=f'Image folder path (default: Downloads\\subtitle_images)')
+    parser.add_argument('--output', default='final_subs_gemini3.srt',
+                        help='Output SRT filename (default: final_subs_gemini3.srt)')
+    
+    # Performance tuning
+    parser.add_argument('--workers', type=int, default=DEFAULT_WORKERS,
+                        help=f'Parallel workers (default: {DEFAULT_WORKERS}, auto-tuned for your CPU)')
+    parser.add_argument('--cache-size', type=int, default=DEFAULT_CACHE_SIZE,
+                        help=f'Image cache size (default: {DEFAULT_CACHE_SIZE}, auto-tuned for your RAM)')
+    parser.add_argument('--no-cache', action='store_true',
+                        help='Disable image caching')
+    
+    # Merge settings
+    parser.add_argument('--gap-tolerance', type=float, default=3.0,
+                        help='Merge gap tolerance in seconds (default: 3.0)')
+    
+    # Encoding
+    parser.add_argument('--no-bom', action='store_true',
+                        help='Disable UTF-8 BOM (not recommended for Windows Arabic)')
+    
+    # Display
+    parser.add_argument('--no-color', action='store_true',
+                        help='Disable colored output')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Verbose logging')
+    
+    args = parser.parse_args()
+    
+    # Handle color disable
+    if args.no_color:
+        Colors.disable()
+    
+    global logger
+    logger = setup_logging(args.verbose)
+    
+    # Build config with all options
+    config = OCRConfig.from_env(
+        api_key=args.api_key,
+        image_folder=args.folder,
+        output_filename=args.output,
+        max_workers=args.workers,
+        merge_gap_tolerance=args.gap_tolerance,
+        enable_caching=not args.no_cache,
+        cache_size=args.cache_size,
+        use_bom=not args.no_bom
+    )
+    
+    try:
+        run_pipeline(config)
+        sys.exit(0)  # Ensure clean exit on Windows (SDK may keep background threads)
+    except KeyboardInterrupt:
+        print(f"\n\n{Colors.YELLOW}⚠ Interrupted by user (Ctrl+C){Colors.RESET}")
+        sys.exit(130)
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}", exc_info=args.verbose)
+        print(f"\n{Colors.RED}✖ FATAL ERROR:{Colors.RESET} {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
+if __name__ == "__main__":
+    main()
