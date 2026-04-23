@@ -1061,7 +1061,7 @@ def run_pipeline(config: OCRConfig):
     results = process_images_parallel(image_files, model, config, metrics)
     
     print(f"\n{Colors.CYAN}▶ Sorting entries...{Colors.RESET}")
-    print(f"{Colors.CYAN}▶ Merge step is disabled in v{APP_VERSION} (raw OCR entries are preserved).{Colors.RESET}")
+
 
     # Keep OCR entries as-is (no merge step)
     results.sort(key=lambda x: x[0])
@@ -1134,8 +1134,7 @@ def main():
                         help=f'Image cache size (default: {DEFAULT_CACHE_SIZE}, auto-tuned for your RAM)')
     parser.add_argument('--no-cache', action='store_true',
                         help='Disable image caching')
-    parser.add_argument('--gap-tolerance', type=float, default=None,
-                        help='[Deprecated in v2.3] Merge tolerance is ignored because merge is disabled')
+
     
     # Encoding
     parser.add_argument('--no-bom', action='store_true',
@@ -1162,7 +1161,7 @@ def main():
         image_folder=args.folder,
         output_filename=args.output,
         max_workers=args.workers,
-        preserve_raw_entries=True,
+
         enable_caching=not args.no_cache,
         cache_size=args.cache_size,
         use_bom=not args.no_bom
