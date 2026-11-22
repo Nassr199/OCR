@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # needed to publish the APK as a GitHub Release
 
 jobs:
   build:
@@ -59,3 +59,15 @@ jobs:
         with:
           name: HardSubOCR-release-apk
           path: app/build/outputs/apk/release/*.apk
+
+      # Direct phone-friendly download: https://github.com/<you>/<repo>/releases/latest
+      - name: Publish APK as a GitHub Release
+        if: steps.release.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/*.apk HardSubOCR.apk
+          gh release create "build-${{ github.run_number }}" HardSubOCR.apk \
+            --title "HardSub OCR — build ${{ github.run_number }}" \
+            --notes "نسخة أندرويد تلقائية من الفرع ${{ github.ref_name }} (commit ${{ github.sha }}). حمّل HardSubOCR.apk وثبّته." \
+            --target "${{ github.sha }}" --latest
