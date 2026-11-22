@@ -62,6 +62,16 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
 
       # Direct phone-friendly download: https://github.com/<you>/<repo>/releases/latest
+      - name: Inspect APKs (proves the new code is inside)
+        if: always()
+        run: |
+          for f in app/build/outputs/apk/*/*.apk; do
+            echo "== $f  ($(stat -c%s "$f") bytes)"
+            unzip -lv "$f" | grep -E "classes[0-9]*\.dex"
+            echo "SubScan marker (_RGBImages) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c '_RGBImages')"
+            echo "English prompt marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'precise OCR engine for subtitles')"
+          done
+
       - name: Publish APK as a GitHub Release
         if: steps.release.outcome == 'success'
         env:
