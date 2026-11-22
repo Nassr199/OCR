@@ -67,7 +67,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/*.apk HardSubOCR.apk
-          gh release create "build-${{ github.run_number }}" HardSubOCR.apk \
+          cp app/build/outputs/apk/debug/*.apk HardSubOCR-debug.apk
+          gh release create "build-${{ github.run_number }}" HardSubOCR.apk HardSubOCR-debug.apk \
             --title "HardSub OCR — build ${{ github.run_number }}" \
-            --notes "نسخة أندرويد تلقائية من الفرع ${{ github.ref_name }} (commit ${{ github.sha }}). حمّل HardSubOCR.apk وثبّته." \
+            --notes "نسخة أندرويد تلقائية من الفرع ${{ github.ref_name }} (commit ${{ github.sha }}). حمّل HardSubOCR.apk وثبّته (HardSubOCR-debug.apk نسخة احتياطية)." \
             --target "${{ github.sha }}" --latest
