@@ -21,12 +21,15 @@ android {
     // One fixed key for debug AND release, so every new APK installs over the old one
     // (GitHub Actions would otherwise create a new random debug key on every build).
     // You can override it with repository secrets HSOCR_STORE_PASSWORD / HSOCR_KEY_ALIAS / HSOCR_KEY_PASSWORD.
+    // GitHub passes a missing secret as an EMPTY string, so blank values fall back to the defaults.
+    fun env(name: String, default: String): String = System.getenv(name)?.takeIf { it.isNotBlank() } ?: default
+
     signingConfigs {
         create("shared") {
             storeFile = rootProject.file("keystore/hardsubocr.jks")
-            storePassword = System.getenv("HSOCR_STORE_PASSWORD") ?: "hardsubocr"
-            keyAlias = System.getenv("HSOCR_KEY_ALIAS") ?: "hardsubocr"
-            keyPassword = System.getenv("HSOCR_KEY_PASSWORD") ?: "hardsubocr"
+            storePassword = env("HSOCR_STORE_PASSWORD", "hardsubocr")
+            keyAlias = env("HSOCR_KEY_ALIAS", "hardsubocr")
+            keyPassword = env("HSOCR_KEY_PASSWORD", "hardsubocr")
         }
     }
 
