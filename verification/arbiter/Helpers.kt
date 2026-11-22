@@ -27,6 +27,18 @@ fun frames(prefix: String, n: Int, gw: Int, gh: Int): Sequence<ByteArray> = sequ
 }
 
 var FRAME_US = 40_000L
+var BOX = System.getenv("BOX") != null
+const val BOX_MIN_H = 16
+/** Box mode: the frame's mask restricted to the subtitle box(es), with the hold gate. */
+class BoxFilter {
+    val gate = SubBox.Gate()
+    var frames = 0
+    fun boxes(g: LumaGrid): List<SubBox.Box> {
+        val m = ScanMask.compute(g, ScanParams.preset(SubLang.ARABIC))
+        frames++
+        return gate.boxes(g, m, SubBox.find(g, m, BOX_MIN_H))
+    }
+}
 
 fun runNew(prefix: String, p: ScanParams): Pair<List<Seg>, Long> {
     val (_, _, d) = loadTruth(prefix)
@@ -34,8 +46,10 @@ fun runNew(prefix: String, p: ScanParams): Pair<List<Seg>, Long> {
     val out = ArrayList<Seg>()
     val t0 = System.nanoTime()
     var f = 0
+    val bf = if (BOX) BoxFilter() else null
     for (b in frames(prefix, d[0], d[1], d[2])) {
-        val r = tr.push(f * FRAME_US, LumaGrid(d[1], d[2], b))
+        val g = LumaGrid(d[1], d[2], b)
+        val r = if (bf == null) tr.push(f * FRAME_US, g) else tr.pushRaw(f * FRAME_US, SubBox.keepInside(ScanMask.compute(g, p), bf.boxes(g)))
         r.closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt(), intArrayOf(it.x0, it.y0, it.x1, it.y1))) }
         f++
     }
@@ -48,8 +62,10 @@ fun runOld(prefix: String): List<Seg> {
     val sg = SubtitleSegmenter(SegmenterParams())
     val out = ArrayList<Seg>()
     var f = 0
+    val bf = if (BOX) BoxFilter() else null
     for (b in frames(prefix, d[0], d[1], d[2])) {
-        val r = sg.push(f * FRAME_US, LumaGrid(d[1], d[2], b))
+        val g = LumaGrid(d[1], d[2], b)
+        val r = if (bf == null) sg.push(f * FRAME_US, g) else sg.pushRaw(f * FRAME_US, SubBox.keepInside(TextMaskOps.compute(g, SegmenterParams().mask), bf.boxes(g)))
         r.closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt())) }
         f++
     }

@@ -222,6 +222,10 @@ class Settings(context: Context) {
         get() = sp.getBoolean("v_gpu", true)
         set(v) = putBool("v_gpu", v)
 
+    var boxMode: com.abdulrahman.hardsubocr.video.BoxMode
+        get() = enumOf("v_box", com.abdulrahman.hardsubocr.video.BoxMode.AUTO)
+        set(v) = put("v_box", v.name)
+
     /** Re-join one line that was cut into two pieces (flash, scene cut, false change). */
     var repairSplits: Boolean
         get() = sp.getBoolean("v_repair", true)

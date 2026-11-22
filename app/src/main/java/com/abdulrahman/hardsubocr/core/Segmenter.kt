@@ -177,11 +177,13 @@ class SubtitleSegmenter(private val p: SegmenterParams = SegmenterParams()) {
         return TextMaskOps.distance(a, aDil, b, bDil) <= p.changeThreshold
     }
 
-    fun push(ptsUs: Long, grid: LumaGrid): FrameDecision {
+    fun push(ptsUs: Long, grid: LumaGrid): FrameDecision = pushRaw(ptsUs, TextMaskOps.compute(grid, p.mask))
+
+    /** Same as [push] with the frame's text mask already computed (e.g. restricted to a subtitle box). */
+    fun pushRaw(ptsUs: Long, raw: TextMask): FrameDecision {
         framesSeen++
         val before = prevPtsUs
         prevPtsUs = ptsUs
-        val raw = TextMaskOps.compute(grid, p.mask)
         val rawDil = TextMaskOps.dilate(raw, p.dilateRadius)
         // Temporal persistence: keep only pixels that were also text in the previous frame.
         // Burned-in text is static, moving bright background (lights, sky, explosions) is not.

@@ -13,6 +13,8 @@ import com.abdulrahman.hardsubocr.core.SegmenterParams
 import com.abdulrahman.hardsubocr.core.MaskParams
 import com.abdulrahman.hardsubocr.core.SubStyle
 import com.abdulrahman.hardsubocr.core.Arbiter
+import com.abdulrahman.hardsubocr.core.SubBox
+import com.abdulrahman.hardsubocr.core.TextMaskOps
 import com.abdulrahman.hardsubocr.core.Timestamps
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -42,6 +44,9 @@ class SubImage(
 /** Which detector(s) run over the video. */
 enum class VideoEngine { ENSEMBLE, CLASSIC, V21, V22 }
 
+/** Subtitles inside an opaque dark box: AUTO = a quick look at 24 frames decides. */
+enum class BoxMode { AUTO, ON, OFF }
+
 /**
  * Decodes the whole video once (every frame, hardware MediaCodec), computes the text masks of the
  * subtitle region on all CPU cores (or the GPU, verified) in parallel and feeds them in order to the
@@ -65,6 +70,7 @@ class VideoScanner(
     private val engine: VideoEngine,
     private val useGpu: Boolean,
     private val readText: Boolean,
+    private val boxMode: BoxMode,
     private val onLog: (String) -> Unit,
     private val onProgress: (fraction: Float, analysedFrames: Int, subtitles: Int) -> Unit,
     private val onSegment: (startUs: Long, endUs: Long, image: SubImage, tag: String?) -> Unit
@@ -82,6 +88,9 @@ class VideoScanner(
         val frameUs: Long = 0,
         val minFrames: Int = 1
     )
+
+    /** What the workers compute for one frame. */
+    private class Analysed(val mask: TextMask, val box: SubBox.Found?, val classicMask: TextMask?)
 
     private class Store {
         var best: IntArray? = null
@@ -104,6 +113,13 @@ class VideoScanner(
         val classic = if (useClassic) SubtitleSegmenter(
             SegmenterParams(mask = MaskParams(175, 60, 1, params.style == SubStyle.DARK))
         ) else null
+        val boxOn = when (boxMode) {
+            BoxMode.ON -> true.also { onLog("📦 الترجمة داخل صندوق: تُتجاهل كل كتابة خارج الصندوق") }
+            BoxMode.OFF -> false
+            BoxMode.AUTO -> probeBox(isActive)
+        }
+        val gate = SubBox.Gate()
+        val classicMaskParams = MaskParams(175, 60, 1, params.style == SubStyle.DARK)
         val engines = listOfNotNull(t22?.let { "2.2" }, t21?.let { "2.1" }, classic?.let { "2.0" })
         val stores = Array(3) { HashMap<Int, Store>() }
         val baseList = ArrayList<LongArray>()
@@ -154,7 +170,7 @@ class VideoScanner(
             return ScanMask.compute(grid, params)
         }
         val pool = Executors.newFixedThreadPool(workers) { r -> Thread(r, "subscan").apply { isDaemon = true } }
-        val inflight = ArrayDeque<Pair<RoiFrame, Future<TextMask>>>()
+        val inflight = ArrayDeque<Pair<RoiFrame, Future<Analysed>>>()
         val free = ArrayDeque<RoiFrame>()
 
         fun image(st: Store, mask: TextMask?): SubImage? {
@@ -202,19 +218,37 @@ class VideoScanner(
             }
         }
 
+        var curBoxes: List<SubBox.Box> = emptyList()
+        /** The frame's image; in box mode everything outside the subtitle box is painted black. */
+        fun argbOf(fr: RoiFrame): IntArray {
+            val a = fr.toArgb(capStep)
+            if (boxOn) SubBox.paintOutside(a, capW, capH, curBoxes, gridStep.toDouble() / capStep, 2)
+            return a
+        }
+
         fun capture(e: Int, id: Int, kind: CaptureKind, fr: RoiFrame) {
             val st = stores[e].getOrPut(id) { Store() }
             when (kind) {
-                CaptureKind.BEST -> st.best = fr.toArgb(capStep)
-                CaptureKind.POOL -> st.pool.add(fr.toArgb(capStep))
+                CaptureKind.BEST -> st.best = argbOf(fr)
+                CaptureKind.POOL -> st.pool.add(argbOf(fr))
                 CaptureKind.RESTART -> {
-                    st.pool.clear(); st.best = fr.toArgb(capStep)
+                    st.pool.clear(); st.best = argbOf(fr)
                 }
             }
         }
 
-        fun process(fr: RoiFrame, raw: TextMask, grid: com.abdulrahman.hardsubocr.core.LumaGrid) {
+        fun process(fr: RoiFrame, an: Analysed, grid: com.abdulrahman.hardsubocr.core.LumaGrid) {
             analysed++
+            val raw: TextMask
+            val classicRaw: TextMask?
+            if (boxOn && an.box != null) {
+                curBoxes = gate.boxes(grid, an.mask, an.box)
+                raw = SubBox.keepInside(an.mask, curBoxes)
+                classicRaw = an.classicMask?.let { SubBox.keepInside(it, curBoxes) }
+            } else {
+                raw = an.mask
+                classicRaw = null
+            }
             t22?.let { t ->
                 val d = t.pushRaw(fr.ptsUs, raw)
                 for (c in d.captures) capture(0, c.segId, c.kind, fr)
@@ -226,8 +260,8 @@ class VideoScanner(
                 closeScan(1, d.closed); for (id in d.discarded) stores[1].remove(id)
             }
             classic?.let { sg ->
-                val d = sg.push(fr.ptsUs, grid)
-                d.captureFor?.let { id -> stores[2].getOrPut(id) { Store() }.best = fr.toArgb(capStep) }
+                val d = if (classicRaw != null) sg.pushRaw(fr.ptsUs, classicRaw) else sg.push(fr.ptsUs, grid)
+                d.captureFor?.let { id -> stores[2].getOrPut(id) { Store() }.best = argbOf(fr) }
                 for (c in d.closed) {
                     val st = stores[2].remove(c.id) ?: continue
                     finished(2, c.startUs, c.endUs, image(st, null))
@@ -290,7 +324,15 @@ class VideoScanner(
                     fr.ptsUs = t
                     val grid = fr.grid(gridStep)
                     grids.addLast(grid)
-                    inflight.addLast(fr to pool.submit<TextMask> { mask(grid) })
+                    val minBoxH = maxOf(8, (0.045 * frameH / gridStep).toInt())
+                    inflight.addLast(fr to pool.submit<Analysed> {
+                        val m = mask(grid)
+                        if (!boxOn) Analysed(m, null, null)
+                        else Analysed(
+                            m, SubBox.find(grid, m, minBoxH),
+                            if (classic != null) TextMaskOps.compute(grid, classicMaskParams) else null
+                        )
+                    })
                     while (inflight.size > workers + 1) drainOne()
                     isActive()
                 }
@@ -314,6 +356,7 @@ class VideoScanner(
                     report = rep
                     segments += extra
                 } else report = "engine ${engines.joinToString()}: $segments subtitles\n"
+                if (boxOn) report = "== الترجمة داخل صندوق: الصندوق وُجد في ${gate.framesWithBox} من $analysed إطار — كل كتابة خارجه تُتجاهل\n" + report
                 onProgress(1f, analysed, segments)
             }
         } finally {
@@ -343,6 +386,48 @@ class VideoScanner(
                 SubImage(IntArray(0), img.width, img.height, null, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH, img.framesUsed)
             )
         )
+    }
+
+    /**
+     * AUTO box mode: decodes 24 frames spread over the video (seeking, a few seconds) and turns box
+     * mode on when the subtitles there are inside an opaque dark box.
+     */
+    private fun probeBox(isActive: () -> Boolean): Boolean {
+        val n = 24
+        var withText = 0
+        var withBox = 0
+        onLog("📦 فحص نمط الترجمة (هل هي داخل صندوق أسود؟)…")
+        for (k in 0 until n) {
+            if (!isActive()) break
+            val t = (info.durationUs * (k + 0.5) / n).toLong()
+            runCatching {
+                VideoDecoder(context, uri).decode(
+                    startUs = t,
+                    isActive = isActive,
+                    want = { pts -> pts >= t - 1_000 },
+                    onFrame = { _, img ->
+                        val r = Yuv.roiPixels(img, roi)
+                        val fr = RoiFrame(r.width(), r.height())
+                        fr.fill(img, r)
+                        val step = Yuv.gridStep(r.width())
+                        val g = fr.grid(step)
+                        val m = ScanMask.compute(g, params)
+                        if (m.count >= g.width * g.height / 400) {
+                            withText++
+                            val minH = maxOf(8, (0.045 * img.cropRect.height() / step).toInt())
+                            if (SubBox.find(g, m, minH).boxes.isNotEmpty()) withBox++
+                        }
+                        false
+                    }
+                )
+            }
+        }
+        val on = withBox >= 3 && withBox >= 0.5 * withText
+        onLog(
+            if (on) "📦 الترجمة داخل صندوق أسود ($withBox من $withText لقطة فيها نص) — ستُتجاهل أسماء الطاقم وكل كتابة خارج الصندوق"
+            else "📦 الترجمة ليست داخل صندوق ($withBox من $withText) — الكشف العادي"
+        )
+        return on
     }
 
     /** Deletes the parked evidence images (call when the job is done with this scanner). */

@@ -508,6 +508,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             analyzeEvery = s.analyzeEvery,
             videoMode = s.videoMode,
             videoEngine = s.videoEngine,
+            boxMode = s.boxMode,
             gpu = s.gpu,
             saveClean = s.saveClean,
             lang = s.subLang,

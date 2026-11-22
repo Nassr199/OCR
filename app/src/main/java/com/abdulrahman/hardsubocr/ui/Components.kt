@@ -339,7 +339,9 @@ fun SliderRow(
     range: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
     onChange: (Float) -> Unit,
-    onDone: (() -> Unit)? = null
+    onDone: (() -> Unit)? = null,
+    startLabel: String? = null,
+    endLabel: String? = null
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -353,6 +355,13 @@ fun SliderRow(
             steps = steps,
             onValueChangeFinished = onDone
         )
+        if (startLabel != null || endLabel != null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                Text(startLabel ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Text(endLabel ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

@@ -108,6 +108,16 @@ class OcrPipeline(
     val results = ConcurrentLinkedQueue<SubEntry>()
     /** Texts of tagged items ("" = read nothing); failed items are absent. */
     val tagged = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val taggedEntries = java.util.concurrent.ConcurrentHashMap<String, SubEntry>()
+
+    /**
+     * Stopped before the tagged items were resolved: their texts (tags starting with [prefix], e.g.
+     * 2.1's subtitles "b:") become ordinary results, so what was read can still be saved.
+     */
+    fun promoteTagged(prefix: String) {
+        if (results.isNotEmpty()) return
+        for ((tag, e) in taggedEntries) if (tag.startsWith(prefix)) results.add(e)
+    }
     val failures = ConcurrentLinkedQueue<Pair<String, String>>()
     val stats = PipelineStats()
 
@@ -129,7 +139,10 @@ class OcrPipeline(
         val ck = cacheKey(item)
         cache?.get(ck)?.let { cachedText ->
             stats.processed.incrementAndGet(); stats.cached.incrementAndGet()
-            item.tag?.let { tagged[it] = cachedText }
+            item.tag?.let {
+                tagged[it] = cachedText
+                if (cachedText.isNotEmpty()) taggedEntries[it] = SubEntry(item.startMs, item.endMs, cachedText)
+            }
             if (cachedText.isNotEmpty()) {
                 if (item.tag == null) results.add(SubEntry(item.startMs, item.endMs, cachedText))
                 stats.ok.incrementAndGet()
@@ -167,7 +180,10 @@ class OcrPipeline(
             is ItemOutcome.Text -> {
                 stats.ok.incrementAndGet()
                 if (item.tag == null) results.add(SubEntry(item.startMs, item.endMs, outcome.text))
-                else tagged[item.tag] = outcome.text
+                else {
+                    tagged[item.tag] = outcome.text
+                    taggedEntries[item.tag] = SubEntry(item.startMs, item.endMs, outcome.text)
+                }
             }
             is ItemOutcome.Empty -> {
                 stats.empty.incrementAndGet()

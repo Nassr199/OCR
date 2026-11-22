@@ -130,6 +130,8 @@ class JobRunner(
 
     private fun partialOutput(name: String, folder: FolderRef?, error: String?): JobOutput? {
         val p = pipeline ?: return null
+        // stopped before the engines were matched: keep 2.1's lines read so far
+        p.promoteTagged("b:")
         val merged = p.mergedResult(req.mergeMode, req.stabilize)
         if (merged.isEmpty() && error == null) return null
         return JobOutput(
@@ -330,7 +332,7 @@ class JobRunner(
         } else null
         if (imagesOnly && rgbFolder == null) throw IllegalStateException("اختر مجلد الحفظ لحفظ صور الترجمة")
         val roi = u.roi.normalized()
-        val sourceId = "video3|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}"
+        val sourceId = "video4|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}|${req.boxMode}"
         val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
         var saved = 0
@@ -354,6 +356,7 @@ class JobRunner(
                         val sc = VideoScanner(
                             context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean, req.videoEngine, req.gpu,
                             readText = !imagesOnly,
+                            boxMode = req.boxMode,
                             onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f

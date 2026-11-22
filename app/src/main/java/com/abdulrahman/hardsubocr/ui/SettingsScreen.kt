@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,7 @@ import com.abdulrahman.hardsubocr.data.Choice
 import com.abdulrahman.hardsubocr.data.CleanChoice
 import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import com.abdulrahman.hardsubocr.video.VideoEngine
+import com.abdulrahman.hardsubocr.video.BoxMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -62,6 +64,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var repair by remember { mutableStateOf(s.repairSplits) }
     var vEngine by remember { mutableStateOf(s.videoEngine) }
     var gpu by remember { mutableStateOf(s.gpu) }
+    var boxMode by remember { mutableStateOf(s.boxMode) }
     var composite by remember { mutableStateOf(s.composite) }
     var saveClean by remember { mutableStateOf(s.saveClean) }
     val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
@@ -158,24 +161,59 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 SectionLabel("محرك كشف الترجمة")
                 ChoiceList(
                     listOf(
-                        ChoiceItem(VideoEngine.ENSEMBLE, "الأقصى: 2.1 + تصحيح بالقراءة (موصى به)", "نتيجة 2.1 كما هي، ويعمل 2.0 و2.2 معه كشهود: تُقرأ صورهما حيث يختلفان عنه فقط، ولا يتغير سطر إلا إذا أثبتت القراءة أنه ناقص أو مدموج أو بتوقيت زائد. يقرأ صورًا أكثر بنحو 30–80%. تقرير name_engines.txt يبين كل تصحيح."),
+                        ChoiceItem(
+                            VideoEngine.ENSEMBLE, "الأقصى (موصى به)",
+                            "نتيجة 2.1 كما هي، و2.0 و2.2 شاهدان: لا يتغير سطر إلا إذا أثبتت القراءة أنه ناقص أو مدموج أو بتوقيت زائد. يقرأ صورًا أكثر. تقرير name_engines.txt يذكر كل تصحيح."
+                        ),
                         ChoiceItem(VideoEngine.V21, "SubScan 2.1", "قناع بعتبتين + تثبيت + إصلاح الانقسام"),
                         ChoiceItem(VideoEngine.V22, "SubScan 2.2", "2.1 + ثبات البكسل وفلتر الحركة (أسنان، حلي، أوراق)"),
                         ChoiceItem(VideoEngine.CLASSIC, "الكلاسيكي 2.0", "أبسط محرك: نص ساطع بحدود داكنة")
                     ),
                     vEngine
                 ) { vEngine = it; s.videoEngine = it }
+
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("ترجمة داخل صندوق أسود")
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(
+                            BoxMode.AUTO, "تلقائي (موصى به)",
+                            "قبل البدء يفحص 24 لقطة من الفيديو: إن كانت الترجمة داخل صندوق أسود تُتجاهل أسماء الطاقم وأي كتابة خارج الصندوق."
+                        ),
+                        ChoiceItem(BoxMode.ON, "نعم، دائمًا", "يُكشف ويُقرأ ما داخل الصندوق فقط، وما حوله في الصور يصبح أسود."),
+                        ChoiceItem(BoxMode.OFF, "لا", "للترجمة المكتوبة مباشرة على الصورة بلا صندوق.")
+                    ),
+                    boxMode
+                ) { boxMode = it; s.boxMode = it }
+
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("الدقة والسرعة")
+                Text("تحليل الإطارات", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp))
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for ((n, label) in listOf(1 to "كل إطار", 2 to "كل 2", 3 to "كل 3", 4 to "كل 4")) {
+                        FilterChip(
+                            selected = every == n,
+                            onClick = { every = n; s.analyzeEvery = n },
+                            label = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Hint("«كل إطار» = توقيت دقيق تمامًا (الأفضل). الأرقام الأكبر أسرع على الأجهزة الضعيفة وأقل دقة.")
+                SliderRow(
+                    "أقل مدة للترجمة", "$minMs مللي ثانية", minMs.toFloat(), 80f..1000f, 0,
+                    onChange = { minMs = (it / 10).roundToInt() * 10 }, onDone = { s.minDurationMs = minMs },
+                    startLabel = "80", endLabel = "1000"
+                )
+                Hint("أي قطعة أقصر من هذا تُحذف كومضة (الافتراضي 160). إذا اختفت أسطر فالسبب غالبًا كتابة أخرى كأسماء الطاقم تقطع الترجمة إلى قطع قصيرة — «ترجمة داخل صندوق» تعالج ذلك من أصله.")
                 SwitchRow(
                     "تسريع بالمعالج الرسومي (Adreno وغيره)",
-                    "OpenGL ES 3.1 Compute. يُقارن بالمعالج المركزي بكسلًا بكسل في أول 30 إطارًا، وأي اختلاف أو خطأ يوقفه تلقائيًا.",
+                    "OpenGL ES 3.1. يُقارن بالمعالج المركزي بكسلًا بكسل في أول 30 إطارًا ثم مرة كل 256 إطارًا، وأي اختلاف يوقفه تلقائيًا.",
                     gpu
                 ) { gpu = it; s.gpu = it }
-                SliderRow("تحليل كل", if (every == 1) "إطار" else "$every إطارات", every.toFloat(), 1f..4f, 2,
-                    onChange = { every = it.roundToInt() }, onDone = { s.analyzeEvery = every })
-                Hint("كل إطار = دقة توقيت كاملة. 2 أو أكثر = أسرع على الأجهزة الضعيفة.")
-                SliderRow("أقل مدة للترجمة", "$minMs مللي ث", minMs.toFloat(), 80f..1000f, 0,
-                    onChange = { minMs = (it / 10).roundToInt() * 10 }, onDone = { s.minDurationMs = minMs })
-                Hint("الترجمات الأقصر من هذا تُعتبر ومضات وتُهمل. «لا» و«نعم» تظهر عادة 300 مللي ث أو أكثر.")
+
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("صور الترجمة")
                 SwitchRow(
                     "إصلاح انقسام السطر الواحد",
                     "إذا انقسمت نفس الترجمة إلى صورتين بسبب ومضة أو تغيّر المشهد خلفها تُعاد صورة واحدة. أطفئه إن أردت كل جزء منفصلًا.",
@@ -183,7 +221,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 ) { repair = it; s.repairSplits = it }
                 SwitchRow(
                     "تنظيف الخلفية بدمج عدة إطارات",
-                    "الحروف ثابتة والخلفية تتحرك: دمج حتى 5 إطارات من نفس الترجمة يمحو الخلفية ويُبقي الحروف — قراءة أدق.",
+                    "دمج حتى 5 إطارات من نفس الترجمة يمحو الخلفية المتحركة ويُبقي الحروف — قراءة أدق.",
                     composite
                 ) { composite = it; s.composite = it }
                 SwitchRow(
