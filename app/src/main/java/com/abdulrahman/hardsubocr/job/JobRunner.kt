@@ -25,6 +25,8 @@ import com.abdulrahman.hardsubocr.img.AndroidImagePreparer
 import com.abdulrahman.hardsubocr.net.Net
 import com.abdulrahman.hardsubocr.video.VideoProbe
 import com.abdulrahman.hardsubocr.video.VideoScanner
+import com.abdulrahman.hardsubocr.video.VideoEngine
+import com.abdulrahman.hardsubocr.core.Arbiter
 import com.abdulrahman.hardsubocr.core.FrameComposite
 import com.abdulrahman.hardsubocr.data.VideoMode
 import android.graphics.Bitmap
@@ -328,11 +330,18 @@ class JobRunner(
         } else null
         if (imagesOnly && rgbFolder == null) throw IllegalStateException("اختر مجلد الحفظ لحفظ صور الترجمة")
         val roi = u.roi.normalized()
-        val sourceId = "video2|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}"
+        val sourceId = "video3|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}"
         val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
         var saved = 0
         var saveErrors = 0
+        var scan: VideoScanner.Result? = null
+        var evidenceReport = ""
+        // evidence images (ENSEMBLE): kept until the arbiter has decided which become lines
+        class AltImg(val file: File, val roiX: Int, val roiY: Int, val roiW: Int, val roiH: Int, val frameW: Int, val frameH: Int)
+        val altImgs = java.util.concurrent.ConcurrentHashMap<String, AltImg>()
+        val sent = AtomicInteger(0)
+        var scanner: VideoScanner? = null
         try {
             val p = newPipeline(engine, cache, videoPreparer)
             beginUnit(u.name, 0, p)
@@ -342,16 +351,19 @@ class JobRunner(
                 val ocr = if (imagesOnly) null else launch { p.run(ch) }
                 try {
                     withContext(Dispatchers.Default) {
-                        val scanner = VideoScanner(
+                        val sc = VideoScanner(
                             context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean, req.videoEngine, req.gpu,
+                            readText = !imagesOnly,
                             onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f
                                 phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
                             },
-                            onSegment = { segStartUs, segEndUs, img ->
+                            onSegment = { segStartUs, segEndUs, img, tag ->
                                 val startMs = segStartUs / 1000
                                 val endMs = segEndUs / 1000
+                                // "a:…" = another engine's subtitle, read only as evidence (not saved as is)
+                                val isAlt = tag?.startsWith("a:") == true
                                 val name = FrameComposite.vsfFileName(
                                     startMs, endMs, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH, "jpeg"
                                 )
@@ -361,11 +373,17 @@ class JobRunner(
                                 } finally {
                                     bmp.recycle()
                                 }
-                                if (rgbFolder != null) {
+                                if (rgbFolder != null && !isAlt) {
                                     if (runCatching { Saf.createFile(context, rgbFolder, name, "image/jpeg", jpeg) }.isSuccess) saved++
                                     else saveErrors++
                                 }
-                                if (txtFolder != null && img.clean != null) {
+                                if (isAlt && rgbFolder != null) {
+                                    val full = File(frameDir, "full_" + tag!!.replace(':', '_') + ".jpeg")
+                                    if (runCatching { full.writeBytes(jpeg) }.isSuccess) {
+                                        altImgs[tag] = AltImg(full, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH)
+                                    }
+                                }
+                                if (txtFolder != null && img.clean != null && !isAlt) {
                                     val cb = Bitmap.createBitmap(img.clean, img.width, img.height, Bitmap.Config.ARGB_8888)
                                     val png = try {
                                         AndroidImagePreparer.toPng(cb)
@@ -386,21 +404,32 @@ class JobRunner(
                                             if (sc !== b) sc.recycle(); b.recycle()
                                         }
                                     } else jpeg
-                                    val file = File(frameDir, name)
+                                    val fileName = if (isAlt) "دليل_" + tag!!.substring(2).replace(':', '_') + "_" + name else name
+                                    val file = File(frameDir, fileName)
                                     file.writeBytes(ocrBytes)
-                                    ch.trySend(OcrItem("$startMs-$endMs", name, startMs, maxOf(startMs, endMs - 1)) { file.readBytes() })
+                                    val key = if (isAlt) "$tag|$startMs-$endMs" else "$startMs-$endMs"
+                                    sent.incrementAndGet()
+                                    ch.trySend(OcrItem(key, fileName, startMs, maxOf(startMs, endMs - 1), tag) { file.readBytes() })
                                 } else {
                                     addLog("🖼 ${Timestamps.srt(startMs)} → ${Timestamps.srt(endMs)}  (${img.framesUsed} إطار)")
                                 }
                             }
                         )
-                        val r = scanner.run(isActive = { isActive })
+                        scanner = sc
+                        val r = sc.run(isActive = { isActive })
+                        scan = r
                         addLog("🎬 تم تحليل ${r.analysed} إطار — ${r.segments} ترجمة")
-                        // per-engine report next to the SRT: shows where the detectors disagree
-                        if (req.output != null && r.report.isNotBlank()) {
-                            runCatching {
-                                Saf.writeFile(context, req.output, "${base}_engines.txt", "text/plain", r.report.toByteArray(Charsets.UTF_8), true)
-                            }
+                        if (ocr != null && req.videoEngine == VideoEngine.ENSEMBLE && isActive) {
+                            // 2.1's images are read first; then the other engines' images are read only
+                            // where they disagree with 2.1 or where 2.1's image read nothing
+                            phase = "قراءة صور 2.1"
+                            while (isActive && ocr.isActive && p.stats.processed.get() < sent.get()) delay(150)
+                            val basePieces = r.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"]) }
+                            val altRaw = r.alts.map { l -> l.map { a -> Arbiter.Piece(a[0], a[1], null) } }
+                            val need = Arbiter.needed(basePieces, altRaw, r.frameUs, r.minFrames)
+                            phase = "قراءة الشهود (${need.sumOf { it.size }})"
+                            evidenceReport = sc.emitEvidence(need) { isActive }
+                            addLog("🔎 ${need.sumOf { it.size }} صورة شاهدة من 2.2 و2.0 للتحقق من 2.1")
                         }
                     }
                 } finally {
@@ -410,6 +439,44 @@ class JobRunner(
                 if (ocr != null) {
                     phase = "قراءة النصوص"
                     ocr.join()
+                }
+            }
+            // ENSEMBLE: the text read decides (2.1 kept unless what the other engines read proves it wrong)
+            var report = (scan?.report ?: "") + evidenceReport
+            val sc = scan
+            if (!imagesOnly && sc != null && req.videoEngine == VideoEngine.ENSEMBLE) {
+                phase = "مطابقة المحركات بالقراءة"
+                val basePieces = sc.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"]) }
+                val altPieces = sc.alts.mapIndexed { e, l -> l.mapIndexed { i, a -> Arbiter.Piece(a[0], a[1], p.tagged["a:$e:$i"]) } }
+                val lines = Arbiter.resolve(basePieces, altPieces, sc.frameUs, sc.minFrames)
+                for (l in lines) {
+                    val sMs = l.startUs / 1000
+                    p.results.add(SubEntry(sMs, maxOf(sMs, l.endUs / 1000 - 1), l.text))
+                }
+                val changed = lines.filter { it.note != "2.1" }
+                val rep = StringBuilder(report)
+                rep.append("== النتيجة بعد القراءة: ").append(lines.size).append(" سطر، منها ").append(changed.size).append(" تغيّر بدليل القراءة\n")
+                for (l in changed) {
+                    rep.append(Timestamps.srt(l.startUs / 1000)).append(" --> ").append(Timestamps.srt(l.endUs / 1000))
+                        .append("   ").append(l.note).append(": ").append(l.text.replace('\n', ' ')).append('\n')
+                }
+                report = rep.toString()
+                val added = changed.count { it.engine >= 0 }
+                if (changed.isNotEmpty()) addLog("🧠 القراءة صحّحت ${changed.size} سطرًا (منها $added سطر فاته 2.1)")
+                // images of the lines that came from the other engines, next to 2.1's
+                if (rgbFolder != null) withContext(Dispatchers.IO) {
+                    for (l in lines) {
+                        if (l.engine < 0) continue
+                        val a = altImgs["a:${l.engine}:${l.ref}"] ?: continue
+                        val nm = FrameComposite.vsfFileName(l.startUs / 1000, l.endUs / 1000, a.roiX, a.roiY, a.roiW, a.roiH, a.frameW, a.frameH, "jpeg")
+                        if (runCatching { Saf.createFile(context, rgbFolder, nm, "image/jpeg", a.file.readBytes()) }.isSuccess) saved++
+                    }
+                }
+            }
+            // per-engine report next to the SRT: what each detector found and what the reading changed
+            if (req.output != null && report.isNotBlank()) withContext(Dispatchers.IO) {
+                runCatching {
+                    Saf.writeFile(context, req.output, "${base}_engines.txt", "text/plain", report.toByteArray(Charsets.UTF_8), true)
                 }
             }
             val where = rgbFolder?.let { "${req.output?.name}/${it.name}" }
@@ -432,6 +499,7 @@ class JobRunner(
             )
         } finally {
             cache?.close()
+            scanner?.close()
             frameDir.deleteRecursively()
         }
     }

@@ -25,7 +25,7 @@ class MapCache : OcrCache { val m = ConcurrentHashMap<String, String>()
 
 fun items(n: Int) = (0 until n).map { i ->
     val name = if (i % 5 == 4) "empty$i" else "img$i"
-    OcrItem("k$i", name, i * 1000L, i * 1000L + 900, { name.toByteArray() })
+    OcrItem("k$i", name, i * 1000L, i * 1000L + 900) { name.toByteArray() }
 }
 fun main() = runBlocking {
     val prep = ImagePreparer { b, _, _ -> PreparedImage(b, "image/png", 10, 10) }

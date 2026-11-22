@@ -195,6 +195,9 @@ object Yuv {
  */
 class VideoDecoder(private val context: Context, private val uri: Uri) {
 
+    /** Told which decoder is used (e.g. c2.qti.avc.decoder = Qualcomm hardware). */
+    var onCodec: ((name: String, software: Boolean) -> Unit)? = null
+
     private fun createCodec(mime: String, format: MediaFormat, software: Boolean): MediaCodec {
         if (!software) return MediaCodec.createDecoderByType(mime)
         val list = MediaCodecList(MediaCodecList.REGULAR_CODECS)
@@ -251,6 +254,7 @@ class VideoDecoder(private val context: Context, private val uri: Uri) {
             if (startUs > 0) ex.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             val c = createCodec(mime, format, software)
             codec = c
+            runCatching { onCodec?.invoke(c.name, software) }
             c.configure(format, null, null, 0)
             c.start()
             val info = MediaCodec.BufferInfo()

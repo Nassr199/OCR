@@ -61,6 +61,8 @@ class OcrItem(
     val name: String,
     val startMs: Long,
     val endMs: Long,
+    /** Set for video-engine evidence: the text goes to [OcrPipeline.tagged], not to the results. */
+    val tag: String? = null,
     val load: suspend () -> ByteArray
 )
 
@@ -104,6 +106,8 @@ class OcrPipeline(
 ) {
     private val workers = concurrency.coerceIn(1, 16)
     val results = ConcurrentLinkedQueue<SubEntry>()
+    /** Texts of tagged items ("" = read nothing); failed items are absent. */
+    val tagged = java.util.concurrent.ConcurrentHashMap<String, String>()
     val failures = ConcurrentLinkedQueue<Pair<String, String>>()
     val stats = PipelineStats()
 
@@ -125,8 +129,9 @@ class OcrPipeline(
         val ck = cacheKey(item)
         cache?.get(ck)?.let { cachedText ->
             stats.processed.incrementAndGet(); stats.cached.incrementAndGet()
+            item.tag?.let { tagged[it] = cachedText }
             if (cachedText.isNotEmpty()) {
-                results.add(SubEntry(item.startMs, item.endMs, cachedText))
+                if (item.tag == null) results.add(SubEntry(item.startMs, item.endMs, cachedText))
                 stats.ok.incrementAndGet()
                 listener.onItem(item, ItemOutcome.Text(cachedText, true))
             } else {
@@ -161,9 +166,13 @@ class OcrPipeline(
         when (outcome) {
             is ItemOutcome.Text -> {
                 stats.ok.incrementAndGet()
-                results.add(SubEntry(item.startMs, item.endMs, outcome.text))
+                if (item.tag == null) results.add(SubEntry(item.startMs, item.endMs, outcome.text))
+                else tagged[item.tag] = outcome.text
             }
-            is ItemOutcome.Empty -> stats.empty.incrementAndGet()
+            is ItemOutcome.Empty -> {
+                stats.empty.incrementAndGet()
+                item.tag?.let { tagged[it] = "" }
+            }
             is ItemOutcome.Failed -> {
                 stats.failed.incrementAndGet()
                 failures.add(item.name to outcome.message)

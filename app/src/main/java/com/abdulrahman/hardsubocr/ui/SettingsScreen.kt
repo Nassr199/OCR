@@ -158,7 +158,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 SectionLabel("محرك كشف الترجمة")
                 ChoiceList(
                     listOf(
-                        ChoiceItem(VideoEngine.ENSEMBLE, "الأقصى: كل المحركات معًا (موصى به)", "2.0 و2.1 و2.2 على نفس الإطارات ثم تصويت: سطر فاته محرك يلتقطه آخر. يحفظ تقرير name_engines.txt بما وجده كل محرك."),
+                        ChoiceItem(VideoEngine.ENSEMBLE, "الأقصى: 2.1 + تصحيح بالقراءة (موصى به)", "نتيجة 2.1 كما هي، ويعمل 2.0 و2.2 معه كشهود: تُقرأ صورهما حيث يختلفان عنه فقط، ولا يتغير سطر إلا إذا أثبتت القراءة أنه ناقص أو مدموج أو بتوقيت زائد. يقرأ صورًا أكثر بنحو 30–80%. تقرير name_engines.txt يبين كل تصحيح."),
                         ChoiceItem(VideoEngine.V21, "SubScan 2.1", "قناع بعتبتين + تثبيت + إصلاح الانقسام"),
                         ChoiceItem(VideoEngine.V22, "SubScan 2.2", "2.1 + ثبات البكسل وفلتر الحركة (أسنان، حلي، أوراق)"),
                         ChoiceItem(VideoEngine.CLASSIC, "الكلاسيكي 2.0", "أبسط محرك: نص ساطع بحدود داكنة")

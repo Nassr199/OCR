@@ -64,8 +64,13 @@ N = t + 30
 roles = [("Yardımcı Yönetmen", "Gökhan Yılmaz"), ("Yapım Koordinatörü", "Damla Güneş"), ("2. Ekip Görüntü Yönetmeni", "Tuğberk Süel"),
          ("Kurgu", "Selin Aksoy"), ("Müzik", "Toygar Işıklı"), ("Senaryo", "Ece Yörenç")]
 cred = []
-for s in subs[::3]:
-    c0 = s['start'] + random.choice([-25, -8, 10, 18]); c1 = c0 + random.choice([70, 100, 130])
+import os
+WRAP = os.environ.get('WRAP') == '1'   # credits that appear before a subtitle and stay after it
+for s in (subs[::2] if WRAP else subs[::3]):
+    if WRAP:
+        c0 = s['start'] - random.choice([12, 20, 30]); c1 = s['end'] + random.choice([20, 35, 50])
+    else:
+        c0 = s['start'] + random.choice([-25, -8, 10, 18]); c1 = c0 + random.choice([70, 100, 130])
     cols = [(int(W * 0.26), *random.choice(roles)), (W // 2, *random.choice(roles)), (int(W * 0.74), *random.choice(roles))]
     cred.append(dict(start=c0, end=c1, layer=credits(cols), num=random.random() < 0.5))
 NUM = numeral()
