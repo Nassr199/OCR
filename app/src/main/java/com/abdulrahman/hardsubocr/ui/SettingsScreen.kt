@@ -40,7 +40,6 @@ import com.abdulrahman.hardsubocr.data.Choice
 import com.abdulrahman.hardsubocr.data.CleanChoice
 import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import com.abdulrahman.hardsubocr.video.VideoEngine
-import com.abdulrahman.hardsubocr.video.BoxMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -64,9 +63,6 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var repair by remember { mutableStateOf(s.repairSplits) }
     var vEngine by remember { mutableStateOf(s.videoEngine) }
     var gpu by remember { mutableStateOf(s.gpu) }
-    var boxMode by remember { mutableStateOf(s.boxMode) }
-    var composite by remember { mutableStateOf(s.composite) }
-    var saveClean by remember { mutableStateOf(s.saveClean) }
     val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
 
     Scaffold(
@@ -158,37 +154,21 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
 
             SectionCard("الفيديو", "🎬") {
-                SectionLabel("محرك كشف الترجمة")
+                SectionLabel("طريقة الكشف")
                 ChoiceList(
                     listOf(
                         ChoiceItem(
-                            VideoEngine.ENSEMBLE, "الأقصى (موصى به)",
-                            "نتيجة 2.1 كما هي، و2.0 و2.2 شاهدان: لا يتغير سطر إلا إذا أثبتت القراءة أنه ناقص أو مدموج أو بتوقيت زائد. يقرأ صورًا أكثر. تقرير name_engines.txt يذكر كل تصحيح."
+                            VideoEngine.ENSEMBLE, "الأدق (موصى به)",
+                            "ثلاث طرق كشف معًا، وحيث تختلف تُقرأ صورها ويُحسم بالنص المقروء. أبطأ قليلًا."
                         ),
-                        ChoiceItem(VideoEngine.V21, "SubScan 2.1", "قناع بعتبتين + تثبيت + إصلاح الانقسام"),
-                        ChoiceItem(VideoEngine.V22, "SubScan 2.2", "2.1 + ثبات البكسل وفلتر الحركة (أسنان، حلي، أوراق)"),
-                        ChoiceItem(VideoEngine.CLASSIC, "الكلاسيكي 2.0", "أبسط محرك: نص ساطع بحدود داكنة")
+                        ChoiceItem(VideoEngine.V21, "سريع", "طريقة كشف واحدة."),
+                        ChoiceItem(VideoEngine.CLASSIC, "حساس لكل تغيير", "يقطع عند أي تغيّر في الشريط: لا يفوّت شيئًا لكن الصور المكررة أكثر.")
                     ),
                     vEngine
                 ) { vEngine = it; s.videoEngine = it }
 
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("ترجمة داخل صندوق أسود")
-                ChoiceList(
-                    listOf(
-                        ChoiceItem(
-                            BoxMode.AUTO, "تلقائي (موصى به)",
-                            "قبل البدء يفحص 24 لقطة من الفيديو: إن كانت الترجمة داخل صندوق أسود تُتجاهل أسماء الطاقم وأي كتابة خارج الصندوق."
-                        ),
-                        ChoiceItem(BoxMode.ON, "نعم، دائمًا", "يُكشف ويُقرأ ما داخل الصندوق فقط، وما حوله في الصور يصبح أسود."),
-                        ChoiceItem(BoxMode.OFF, "لا", "للترجمة المكتوبة مباشرة على الصورة بلا صندوق.")
-                    ),
-                    boxMode
-                ) { boxMode = it; s.boxMode = it }
-
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("الدقة والسرعة")
-                Text("تحليل الإطارات", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(12.dp))
+                SectionLabel("تحليل الإطارات")
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for ((n, label) in listOf(1 to "كل إطار", 2 to "كل 2", 3 to "كل 3", 4 to "كل 4")) {
                         FilterChip(
@@ -199,36 +179,36 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         )
                     }
                 }
-                Hint("«كل إطار» = توقيت دقيق تمامًا (الأفضل). الأرقام الأكبر أسرع على الأجهزة الضعيفة وأقل دقة.")
-                SliderRow(
-                    "أقل مدة للترجمة", "$minMs مللي ثانية", minMs.toFloat(), 80f..1000f, 0,
-                    onChange = { minMs = (it / 10).roundToInt() * 10 }, onDone = { s.minDurationMs = minMs },
-                    startLabel = "80", endLabel = "1000"
-                )
-                Hint("أي قطعة أقصر من هذا تُحذف كومضة (الافتراضي 160). إذا اختفت أسطر فالسبب غالبًا كتابة أخرى كأسماء الطاقم تقطع الترجمة إلى قطع قصيرة — «ترجمة داخل صندوق» تعالج ذلك من أصله.")
-                SwitchRow(
-                    "تسريع بالمعالج الرسومي (Adreno وغيره)",
-                    "OpenGL ES 3.1. يُقارن بالمعالج المركزي بكسلًا بكسل في أول 30 إطارًا ثم مرة كل 256 إطارًا، وأي اختلاف يوقفه تلقائيًا.",
-                    gpu
-                ) { gpu = it; s.gpu = it }
+                Hint("«كل إطار» = أدق توقيت. الباقي أسرع على الأجهزة الضعيفة.")
 
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("صور الترجمة")
+                Spacer(Modifier.height(8.dp))
+                SliderRow(
+                    "أقل مدة للترجمة", if (minMs == 0) "بلا حد" else "$minMs مللي ثانية", minMs.toFloat(), 0f..1000f, 0,
+                    onChange = { minMs = (it / 10).roundToInt() * 10 }, onDone = { s.minDurationMs = minMs },
+                    startLabel = "0", endLabel = "1000"
+                )
+                Hint("أي ترجمة أقصر من هذا تُحذف. الافتراضي 80.")
+
                 SwitchRow(
                     "إصلاح انقسام السطر الواحد",
-                    "إذا انقسمت نفس الترجمة إلى صورتين بسبب ومضة أو تغيّر المشهد خلفها تُعاد صورة واحدة. أطفئه إن أردت كل جزء منفصلًا.",
+                    "إذا انقسمت نفس الترجمة إلى صورتين بسبب ومضة تُعاد صورة واحدة.",
                     repair
                 ) { repair = it; s.repairSplits = it }
+
+                Spacer(Modifier.height(12.dp))
+                SectionLabel("المعالج الرسومي")
                 SwitchRow(
-                    "تنظيف الخلفية بدمج عدة إطارات",
-                    "دمج حتى 5 إطارات من نفس الترجمة يمحو الخلفية المتحركة ويُبقي الحروف — قراءة أدق.",
-                    composite
-                ) { composite = it; s.composite = it }
-                SwitchRow(
-                    "حفظ نسخة منظفة أبيض/أسود",
-                    "مجلد name_TXTImages بجانب name_RGBImages (مثل VideoSubFinder).",
-                    saveClean
-                ) { saveClean = it; s.saveClean = it }
+                    "تسريع Vulkan",
+                    "التحليل يعمل على معالج جوالك الرسومي (Adreno وغيره) عبر تعريفه. يُقارن بالمعالج المركزي بكسلًا بكسل، وأي اختلاف يوقفه.",
+                    gpu
+                ) { gpu = it; s.gpu = it }
+                OutlinedButton(onClick = { vm.testGpu() }, enabled = !vm.gpuTesting, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (vm.gpuTesting) "جارٍ الاختبار…" else "اختبار المعالج الرسومي")
+                }
+                vm.gpuTest?.let { r ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(r, style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             SectionCard("حول", "ℹ️") {

@@ -76,6 +76,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lastErrorReport by mutableStateOf(s.lastErrorReport)
         private set
+
+    /** Result of "test the GPU" in the settings (null = not run). */
+    var gpuTest by mutableStateOf<String?>(null)
+        private set
+    var gpuTesting by mutableStateOf(false)
+        private set
+
+    fun testGpu() {
+        if (gpuTesting) return
+        gpuTesting = true
+        gpuTest = null
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.Default) {
+                runCatching { com.abdulrahman.hardsubocr.video.GpuSelfTest.run() }.getOrElse { "✖ " + (it.message ?: it.javaClass.simpleName) }
+            }
+            gpuTest = text
+            gpuTesting = false
+        }
+    }
     var fetchedGemini by mutableStateOf<List<String>>(emptyList())
         private set
     var fetchedOpenRouter by mutableStateOf<List<String>>(emptyList())
@@ -508,7 +527,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             analyzeEvery = s.analyzeEvery,
             videoMode = s.videoMode,
             videoEngine = s.videoEngine,
-            boxMode = s.boxMode,
             gpu = s.gpu,
             saveClean = s.saveClean,
             lang = s.subLang,

@@ -13,8 +13,6 @@ import com.abdulrahman.hardsubocr.core.SegmenterParams
 import com.abdulrahman.hardsubocr.core.MaskParams
 import com.abdulrahman.hardsubocr.core.SubStyle
 import com.abdulrahman.hardsubocr.core.Arbiter
-import com.abdulrahman.hardsubocr.core.SubBox
-import com.abdulrahman.hardsubocr.core.TextMaskOps
 import com.abdulrahman.hardsubocr.core.Timestamps
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -44,9 +42,6 @@ class SubImage(
 /** Which detector(s) run over the video. */
 enum class VideoEngine { ENSEMBLE, CLASSIC, V21, V22 }
 
-/** Subtitles inside an opaque dark box: AUTO = a quick look at 24 frames decides. */
-enum class BoxMode { AUTO, ON, OFF }
-
 /**
  * Decodes the whole video once (every frame, hardware MediaCodec), computes the text masks of the
  * subtitle region on all CPU cores (or the GPU, verified) in parallel and feeds them in order to the
@@ -70,7 +65,6 @@ class VideoScanner(
     private val engine: VideoEngine,
     private val useGpu: Boolean,
     private val readText: Boolean,
-    private val boxMode: BoxMode,
     private val onLog: (String) -> Unit,
     private val onProgress: (fraction: Float, analysedFrames: Int, subtitles: Int) -> Unit,
     private val onSegment: (startUs: Long, endUs: Long, image: SubImage, tag: String?) -> Unit
@@ -90,7 +84,7 @@ class VideoScanner(
     )
 
     /** What the workers compute for one frame. */
-    private class Analysed(val mask: TextMask, val box: SubBox.Found?, val classicMask: TextMask?)
+    private class Analysed(val mask: TextMask)
 
     private class Store {
         var best: IntArray? = null
@@ -113,13 +107,6 @@ class VideoScanner(
         val classic = if (useClassic) SubtitleSegmenter(
             SegmenterParams(mask = MaskParams(175, 60, 1, params.style == SubStyle.DARK))
         ) else null
-        val boxOn = when (boxMode) {
-            BoxMode.ON -> true.also { onLog("📦 الترجمة داخل صندوق: تُتجاهل كل كتابة خارج الصندوق") }
-            BoxMode.OFF -> false
-            BoxMode.AUTO -> probeBox(isActive)
-        }
-        val gate = SubBox.Gate()
-        val classicMaskParams = MaskParams(175, 60, 1, params.style == SubStyle.DARK)
         val engines = listOfNotNull(t22?.let { "2.2" }, t21?.let { "2.1" }, classic?.let { "2.0" })
         val stores = Array(3) { HashMap<Int, Store>() }
         val baseList = ArrayList<LongArray>()
@@ -143,29 +130,39 @@ class VideoScanner(
         var gridH = 1
 
         val workers = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 7)
-        // GPU (Adreno / Mali …): per-pixel stage on OpenGL ES 3.1 compute, verified against the CPU
-        var gpu: GpuClassifier? = if (useGpu) GpuClassifier.create { why -> onLog("🖥 GPU غير مستخدم: $why") } else null
-        gpu?.let { g -> onLog("🖥 GPU: ${g.renderer}") }
+        // GPU (Adreno / Mali / Xclipse …): per-pixel stage as a Vulkan compute shader on the phone's
+        // own driver, verified pixel by pixel against the CPU
+        var gpu: VulkanClassifier? = if (useGpu) VulkanClassifier.create { why -> onLog("🖥 Vulkan غير مستخدم: $why — المعالج المركزي") } else null
+        gpu?.let { g ->
+            onLog("🖥 Vulkan: ${g.summary}")
+            if (g.isSoftware) onLog("🖥 الجهاز لا يقدّم معالجًا رسوميًا حقيقيًا عبر Vulkan (${g.device}) — المعالج المركزي أسرع")
+        }
+        if (gpu?.isSoftware == true) { gpu?.close(); gpu = null }
         val verified = java.util.concurrent.atomic.AtomicInteger(0)
         val gpuCalls = java.util.concurrent.atomic.AtomicInteger(0)
+        val gpuFrames = java.util.concurrent.atomic.AtomicInteger(0)
+        val gpuNanos = java.util.concurrent.atomic.AtomicLong(0)
         val gpuOn = java.util.concurrent.atomic.AtomicBoolean(gpu != null)
         fun mask(grid: com.abdulrahman.hardsubocr.core.LumaGrid): TextMask {
             val g = gpu
             if (gpuOn.get() && g != null) {
+                val t0 = System.nanoTime()
                 val fromGpu = runCatching { g.classify(grid, params) }.getOrNull()
                 if (fromGpu != null) {
+                    gpuNanos.addAndGet(System.nanoTime() - t0)
+                    gpuFrames.incrementAndGet()
                     // first 30 frames, then one frame in 256 for the whole video: checked against the CPU
                     if (verified.get() < 30 || gpuCalls.incrementAndGet() % 256 == 0) {
                         val cpu = ScanMask.classify(grid, params)
                         if (!cpu.contentEquals(fromGpu)) {
-                            gpuOn.set(false); onLog("🖥 GPU أعطى نتيجة مختلفة عن المعالج — تم إيقافه والمتابعة على المعالج")
+                            gpuOn.set(false); onLog("🖥 Vulkan أعطى نتيجة مختلفة عن المعالج المركزي — تم إيقافه والمتابعة على المعالج")
                             return ScanMask.fromClasses(cpu, grid.width, grid.height, params)
                         }
-                        if (verified.incrementAndGet() == 30) onLog("🖥 GPU مطابق للمعالج بكسلًا بكسل ✓ (30 إطارًا) — التسريع مفعّل")
+                        if (verified.incrementAndGet() == 30) onLog("🖥 Vulkan على ${g.device}: مطابق للمعالج المركزي بكسلًا بكسل في 30 إطارًا ✓ — التحليل يعمل على المعالج الرسومي")
                     }
                     return ScanMask.fromClasses(fromGpu, grid.width, grid.height, params)
                 }
-                gpuOn.set(false); onLog("🖥 خطأ في GPU — المتابعة على المعالج")
+                gpuOn.set(false); onLog("🖥 خطأ في Vulkan — المتابعة على المعالج المركزي")
             }
             return ScanMask.compute(grid, params)
         }
@@ -174,16 +171,15 @@ class VideoScanner(
         val free = ArrayDeque<RoiFrame>()
 
         fun image(st: Store, mask: TextMask?): SubImage? {
-            val frames = if (st.pool.size >= 2) st.pool.toList() else listOfNotNull(st.best ?: st.pool.firstOrNull())
-            if (frames.isEmpty()) return null
+            // ONE real frame, the one with the most subtitle text (like VideoSubFinder): a multi-frame
+            // composite erases a line that is not on every frame (it turned «أبي» into "2.")
+            val best = st.best ?: st.pool.firstOrNull() ?: return null
             val r = rect ?: return null
-            // the whole subtitle region, as 2.1 / VideoSubFinder save it: a crop to the detected box
-            // (2.2) could cut a line the mask did not cover, and the v2.6 band crop then cut more
-            val argb = FrameComposite.combine(frames, params.style)
+            val argb = best.copyOf()
             val clean = if (saveClean && mask != null) runCatching {
                 FrameComposite.clean(argb, capW, capH, params.style, params, mask, maxOf(1, gridStep / capStep))
             }.getOrNull() else null
-            return SubImage(argb, capW, capH, clean, r.left, r.top, r.width(), r.height(), frameW, frameH, frames.size)
+            return SubImage(argb, capW, capH, clean, r.left, r.top, r.width(), r.height(), frameW, frameH, 1)
         }
 
         /** [e]: 0 = 2.2, 1 = 2.1, 2 = 2.0 */
@@ -212,19 +208,11 @@ class VideoScanner(
             for (c in list) {
                 val st = stores[e].remove(c.id) ?: continue
                 val img = image(st, c.mask)
-                // 2.1's best single frame: read only if 2.1's composite reads nothing
-                if (e == 1 && img != null && engine == VideoEngine.ENSEMBLE) parkBest(st, c.startUs, c.endUs)
                 finished(e, c.startUs, c.endUs, img)
             }
         }
 
-        var curBoxes: List<SubBox.Box> = emptyList()
-        /** The frame's image; in box mode everything outside the subtitle box is painted black. */
-        fun argbOf(fr: RoiFrame): IntArray {
-            val a = fr.toArgb(capStep)
-            if (boxOn) SubBox.paintOutside(a, capW, capH, curBoxes, gridStep.toDouble() / capStep, 2)
-            return a
-        }
+        fun argbOf(fr: RoiFrame): IntArray = fr.toArgb(capStep)
 
         fun capture(e: Int, id: Int, kind: CaptureKind, fr: RoiFrame) {
             val st = stores[e].getOrPut(id) { Store() }
@@ -239,16 +227,7 @@ class VideoScanner(
 
         fun process(fr: RoiFrame, an: Analysed, grid: com.abdulrahman.hardsubocr.core.LumaGrid) {
             analysed++
-            val raw: TextMask
-            val classicRaw: TextMask?
-            if (boxOn && an.box != null) {
-                curBoxes = gate.boxes(grid, an.mask, an.box)
-                raw = SubBox.keepInside(an.mask, curBoxes)
-                classicRaw = an.classicMask?.let { SubBox.keepInside(it, curBoxes) }
-            } else {
-                raw = an.mask
-                classicRaw = null
-            }
+            val raw = an.mask
             t22?.let { t ->
                 val d = t.pushRaw(fr.ptsUs, raw)
                 for (c in d.captures) capture(0, c.segId, c.kind, fr)
@@ -260,7 +239,7 @@ class VideoScanner(
                 closeScan(1, d.closed); for (id in d.discarded) stores[1].remove(id)
             }
             classic?.let { sg ->
-                val d = if (classicRaw != null) sg.pushRaw(fr.ptsUs, classicRaw) else sg.push(fr.ptsUs, grid)
+                val d = sg.push(fr.ptsUs, grid)
                 d.captureFor?.let { id -> stores[2].getOrPut(id) { Store() }.best = argbOf(fr) }
                 for (c in d.closed) {
                     val st = stores[2].remove(c.id) ?: continue
@@ -324,15 +303,7 @@ class VideoScanner(
                     fr.ptsUs = t
                     val grid = fr.grid(gridStep)
                     grids.addLast(grid)
-                    val minBoxH = maxOf(8, (0.045 * frameH / gridStep).toInt())
-                    inflight.addLast(fr to pool.submit<Analysed> {
-                        val m = mask(grid)
-                        if (!boxOn) Analysed(m, null, null)
-                        else Analysed(
-                            m, SubBox.find(grid, m, minBoxH),
-                            if (classic != null) TextMaskOps.compute(grid, classicMaskParams) else null
-                        )
-                    })
+                    inflight.addLast(fr to pool.submit<Analysed> { Analysed(mask(grid)) })
                     while (inflight.size > workers + 1) drainOne()
                     isActive()
                 }
@@ -350,13 +321,19 @@ class VideoScanner(
                 }
                 if (engine == VideoEngine.ENSEMBLE) {
                     fus = (info.frameUs * every).coerceAtLeast(1)
-                    minFrames = maxOf(1, (params.minDurationMs * 1000 / fus).toInt())
+                    minFrames = maxOf(3, (params.minDurationMs * 1000 / fus).toInt())
                     alts = parked.map { l -> l.map { longArrayOf(it.startUs, it.endUs) } }
                     val (rep, extra) = endOfScan(baseList, fus, minFrames, isActive)
                     report = rep
                     segments += extra
                 } else report = "engine ${engines.joinToString()}: $segments subtitles\n"
-                if (boxOn) report = "== الترجمة داخل صندوق: الصندوق وُجد في ${gate.framesWithBox} من $analysed إطار — كل كتابة خارجه تُتجاهل\n" + report
+                val gf = gpuFrames.get()
+                if (gf > 0) {
+                    val ms = gpuNanos.get() / 1e6 / gf
+                    val line = "🖥 Vulkan (${gpu?.device ?: "GPU"}) حلّل $gf إطارًا — %.2f مللي ث للإطار".format(ms)
+                    onLog(line)
+                    report = "== $line\n" + report
+                }
                 onProgress(1f, analysed, segments)
             }
         } finally {
@@ -386,48 +363,6 @@ class VideoScanner(
                 SubImage(IntArray(0), img.width, img.height, null, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH, img.framesUsed)
             )
         )
-    }
-
-    /**
-     * AUTO box mode: decodes 24 frames spread over the video (seeking, a few seconds) and turns box
-     * mode on when the subtitles there are inside an opaque dark box.
-     */
-    private fun probeBox(isActive: () -> Boolean): Boolean {
-        val n = 24
-        var withText = 0
-        var withBox = 0
-        onLog("📦 فحص نمط الترجمة (هل هي داخل صندوق أسود؟)…")
-        for (k in 0 until n) {
-            if (!isActive()) break
-            val t = (info.durationUs * (k + 0.5) / n).toLong()
-            runCatching {
-                VideoDecoder(context, uri).decode(
-                    startUs = t,
-                    isActive = isActive,
-                    want = { pts -> pts >= t - 1_000 },
-                    onFrame = { _, img ->
-                        val r = Yuv.roiPixels(img, roi)
-                        val fr = RoiFrame(r.width(), r.height())
-                        fr.fill(img, r)
-                        val step = Yuv.gridStep(r.width())
-                        val g = fr.grid(step)
-                        val m = ScanMask.compute(g, params)
-                        if (m.count >= g.width * g.height / 400) {
-                            withText++
-                            val minH = maxOf(8, (0.045 * img.cropRect.height() / step).toInt())
-                            if (SubBox.find(g, m, minH).boxes.isNotEmpty()) withBox++
-                        }
-                        false
-                    }
-                )
-            }
-        }
-        val on = withBox >= 3 && withBox >= 0.5 * withText
-        onLog(
-            if (on) "📦 الترجمة داخل صندوق أسود ($withBox من $withText لقطة فيها نص) — ستُتجاهل أسماء الطاقم وكل كتابة خارج الصندوق"
-            else "📦 الترجمة ليست داخل صندوق ($withBox من $withText) — الكشف العادي"
-        )
-        return on
     }
 
     /** Deletes the parked evidence images (call when the job is done with this scanner). */

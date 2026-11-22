@@ -8,3 +8,7 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# built in CI (native/build_android.sh)
+app/src/main/jniLibs/
+native/classify.spv.inc

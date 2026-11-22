@@ -31,6 +31,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Build Vulkan library (NDK clang + glslc, all ABIs)
+        run: bash native/build_android.sh
+
+      - name: Test the Vulkan shader against the CPU (Mesa lavapipe)
+        continue-on-error: true
+        run: bash native/test_lavapipe.sh
+
       - name: Build debug APK
         env:
           HSOCR_STORE_PASSWORD: ${{ secrets.HSOCR_STORE_PASSWORD }}
@@ -70,7 +77,8 @@ jobs:
             unzip -lv "$f" | grep -E "classes[0-9]*\.dex"
             echo "SubScan marker (subscan worker) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'subscan')"
             echo "English prompt marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'precise OCR engine for subtitles')"
-            echo "GPU compute shader marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'local_size_x = 64')"
+            echo "Vulkan libraries: $(unzip -l "$f" | grep -c 'libhsocrvk.so')"
+            unzip -l "$f" | grep 'libhsocrvk.so' || true
           done
 
       - name: Publish APK as a GitHub Release

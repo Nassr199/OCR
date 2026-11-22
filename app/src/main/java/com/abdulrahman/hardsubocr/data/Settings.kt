@@ -206,7 +206,7 @@ class Settings(context: Context) {
         set(v) = putInt("v_every", v)
 
     var minDurationMs: Int
-        get() = sp.getInt("v_min_ms2", 160)
+        get() = sp.getInt("v_min_ms2", 80)
         set(v) = putInt("v_min_ms2", v)
 
     var videoMode: VideoMode
@@ -214,7 +214,10 @@ class Settings(context: Context) {
         set(v) = put("v_mode", v.name)
 
     var videoEngine: com.abdulrahman.hardsubocr.video.VideoEngine
-        get() = enumOf("v_engine", com.abdulrahman.hardsubocr.video.VideoEngine.ENSEMBLE)
+        get() = enumOf("v_engine", com.abdulrahman.hardsubocr.video.VideoEngine.ENSEMBLE).let {
+            // 2.2 is no longer offered on its own (it still works inside "the most accurate")
+            if (it == com.abdulrahman.hardsubocr.video.VideoEngine.V22) com.abdulrahman.hardsubocr.video.VideoEngine.V21 else it
+        }
         set(v) = put("v_engine", v.name)
 
     /** OpenGL ES 3.1 compute acceleration (Adreno…), auto-verified against the CPU. */
@@ -222,27 +225,20 @@ class Settings(context: Context) {
         get() = sp.getBoolean("v_gpu", true)
         set(v) = putBool("v_gpu", v)
 
-    var boxMode: com.abdulrahman.hardsubocr.video.BoxMode
-        get() = enumOf("v_box", com.abdulrahman.hardsubocr.video.BoxMode.AUTO)
-        set(v) = put("v_box", v.name)
-
     /** Re-join one line that was cut into two pieces (flash, scene cut, false change). */
     var repairSplits: Boolean
         get() = sp.getBoolean("v_repair", true)
         set(v) = putBool("v_repair", v)
 
     /** Background removal by combining several frames of the same subtitle. */
-    var composite: Boolean
-        get() = sp.getBoolean("v_composite", true)
-        set(v) = putBool("v_composite", v)
-
     /** Also save black-on-white images (VideoSubFinder TXTImages). */
     var saveClean: Boolean
         get() = sp.getBoolean("v_clean", false)
         set(v) = putBool("v_clean", v)
 
     fun scanParams(): ScanParams = ScanParams.preset(
-        subLang, subStyle, brightThreshold, contrastDelta, repairSplits, composite, minDurationMs.toLong()
+        // composite = false: every subtitle image is ONE real frame (merging frames erased lines)
+        subLang, subStyle, brightThreshold, contrastDelta, repairSplits, false, minDurationMs.toLong()
     )
 
     // ---------------------------------------------------------------- derived

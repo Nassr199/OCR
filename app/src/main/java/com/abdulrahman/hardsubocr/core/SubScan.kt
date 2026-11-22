@@ -80,7 +80,13 @@ data class ScanParams(
     /** Letters/words closer than this (grid px, horizontally) form one text object. */
     val wordGap: Int = 6,
     /** Mean motion energy above which a text-like object is moving scenery, not a subtitle. */
-    val motionLimit: Double = 0.12
+    val motionLimit: Double = 0.12,
+    /**
+     * A separate block of text appearing next to the current text (a subtitle next to the credits,
+     * «حبيبي» 0.4 s after "Saç Tasarım"), or vanishing while the rest stays, starts a new subtitle
+     * instead of being absorbed as "growth".
+     */
+    val farCut: Boolean = true
 ) {
     /** The 2.1 engine (one-frame persistence, no motion filter) — used by the ensemble. */
     fun legacy21(): ScanParams = copy(stableWindow = 1, stableNeed = 1, motionLimit = 1.0)
@@ -589,6 +595,9 @@ class SubtitleTracker(private val p: ScanParams) {
     private var firstMismatchIdx = -1
     /** Start of the current run of frames losing the reference (A→B: A vanishes before B is stable). */
     private var lossRunUs = -1L
+    private var farSinceUs = -1L
+    private var farFrames = 0
+    private var integral = IntArray(0)
     private var lossRunIdx = -1
     private var prevPtsUs = -1L
     private var gw = 0
@@ -775,8 +784,35 @@ class SubtitleTracker(private val p: ScanParams) {
                 val c = cmpTo(cur, m, mDil)
                 cmp = c
                 val young = ptsUs - cur.startUs <= p.growWindowMs * 1000
-                val growth = c.lost <= 0.12 && c.gained >= p.growGain && m.count > cur.stableCount * 1.12
+                val far = p.farCut && farChange(cur, m, c)
+                if (far) {
+                    if (farFrames == 0) farSinceUs = ptsUs
+                    farFrames++
+                } else {
+                    farFrames = 0; farSinceUs = -1
+                }
+                val growth = !far && c.lost <= 0.12 && c.gained >= p.growGain && m.count > cur.stableCount * 1.12
                 match = (young && growth) || !isChange(c)
+                if (match && far && farFrames >= p.confirmFrames) {
+                    // a separate text block appeared / vanished while the rest stays: the subtitle changed.
+                    // The new state keeps the same age baseline, so it holds everything still on screen.
+                    val at = farSinceUs
+                    cur.endUs = at
+                    hold(cur, closed, discarded)
+                    val seg = Seg(nextId++, at, true, gw, gh, cur.startFrame)
+                    seg.lastUs = ptsUs
+                    seg.add(m)
+                    seg.bestScore = m.count.toDouble()
+                    current = seg
+                    captures.add(Capture(seg.id, CaptureKind.BEST))
+                    cand = null
+                    firstMismatchUs = -1
+                    lossRunUs = -1
+                    farFrames = 0
+                    farSinceUs = -1
+                    expireHeld(ptsUs, closed, discarded)
+                    return ScanDecision(captures, closed, discarded)
+                }
                 if (match) {
                     cur.growFrames = if (growth) cur.growFrames + 1 else 0
                     if (growth && (young || cur.growFrames >= p.growConfirmFrames)) {
@@ -881,6 +917,56 @@ class SubtitleTracker(private val p: ScanParams) {
         }
         expireHeld(ptsUs, closed, discarded)
         return ScanDecision(captures, closed, discarded)
+    }
+
+    /**
+     * True when a block of text at least [minFar] pixels big appeared farther than r from all the
+     * current text (or such a block of the current text vanished while something stays). Fade-in
+     * (new pixels next to the existing strokes) is never "far".
+     */
+    private fun farChange(s: Seg, m: TextMask, c: MaskCmp): Boolean {
+        if (!s.isText || (c.gained < 0.02 && c.lost < 0.02)) return false
+        if (frameIdx - s.startFrame <= 3 || s.n < 3) return false
+        val minFar = maxOf(p.minTextPixels * 2, (0.05 * maxOf(s.stableCount, m.count)).toInt())
+        if (s.stableCount < minFar) return false
+        val r = maxOf(2, gh / 40)
+        if (farCount(m.bits, s.stable, r, minFar) >= minFar) return true
+        return m.count >= minFar && farCount(s.stable, m.bits, r, minFar) >= minFar
+    }
+
+    /** Pixels of [a] with no pixel of [b] within [r] (square window); stops counting at [stopAt]. */
+    private fun farCount(a: BooleanArray, b: BooleanArray, r: Int, stopAt: Int): Int {
+        val w = gw
+        val h = gh
+        val stride = w + 1
+        if (integral.size != stride * (h + 1)) integral = IntArray(stride * (h + 1))
+        val ii = integral
+        for (y in 0 until h) {
+            var run = 0
+            val row = y * w
+            val o = (y + 1) * stride
+            for (x in 0 until w) {
+                if (b[row + x]) run++
+                ii[o + x + 1] = ii[o - stride + x + 1] + run
+            }
+        }
+        var n = 0
+        for (y in 0 until h) {
+            val y0 = maxOf(0, y - r)
+            val y1 = minOf(h, y + r + 1)
+            val row = y * w
+            for (x in 0 until w) {
+                if (!a[row + x] || b[row + x]) continue
+                val x0 = maxOf(0, x - r)
+                val x1 = minOf(w, x + r + 1)
+                val sum = ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0]
+                if (sum == 0) {
+                    n++
+                    if (n >= stopAt) return n
+                }
+            }
+        }
+        return n
     }
 
     private fun planCaptures(s: Seg, ptsUs: Long, m: TextMask, c: MaskCmp, out: MutableList<Capture>) {

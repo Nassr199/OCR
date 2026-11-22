@@ -46,7 +46,6 @@ data class JobRequest(
     val videoMode: VideoMode,
     val videoEngine: VideoEngine,
     val gpu: Boolean,
-    val boxMode: com.abdulrahman.hardsubocr.video.BoxMode = com.abdulrahman.hardsubocr.video.BoxMode.AUTO,
     val saveClean: Boolean,
     val lang: SubLang,
     val profile: AiProfile?,

@@ -332,7 +332,7 @@ class JobRunner(
         } else null
         if (imagesOnly && rgbFolder == null) throw IllegalStateException("اختر مجلد الحفظ لحفظ صور الترجمة")
         val roi = u.roi.normalized()
-        val sourceId = "video4|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}|${req.boxMode}"
+        val sourceId = "video5|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}"
         val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
         var saved = 0
@@ -356,7 +356,6 @@ class JobRunner(
                         val sc = VideoScanner(
                             context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean, req.videoEngine, req.gpu,
                             readText = !imagesOnly,
-                            boxMode = req.boxMode,
                             onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f

@@ -29,7 +29,11 @@ enum class CleanMode {
 }
 
 object Cleaner {
-    fun clean(raw: String, mode: CleanMode, stripDiacritics: Boolean = false): String {
+    fun clean(raw0: String, mode: CleanMode, stripDiacritics: Boolean = false): String {
+        // Arabic subtitles: an OCR line without a single Arabic letter is background text read
+        // together with the subtitle (credits "2. Ekip Görüntü Yönetmeni", "Tuğberk Süel", logos)
+        val raw = if (mode == CleanMode.ENGLISH || '\n' !in raw0) raw0
+        else raw0.split('\n').filter { ArabicText.hasArabic(it) }.joinToString("\n")
         val t = when (mode) {
             CleanMode.PRO -> ArabicText.arabicFilter(raw)
             CleanMode.PRECISE -> ArabicText.cleanOcrOutput(raw).let { if (ArabicText.isSymbolsOnly(it)) "" else it }
