@@ -86,7 +86,14 @@ data class ScanParams(
      * «حبيبي» 0.4 s after "Saç Tasarım"), or vanishing while the rest stays, starts a new subtitle
      * instead of being absorbed as "growth".
      */
-    val farCut: Boolean = true
+    val farCut: Boolean = true,
+    /**
+     * When the text around a subtitle disappears and nothing new comes (the credits beside «أبي»
+     * fade out), the part of the subtitle still on screen keeps the state alive instead of turning
+     * into "background" and leaving a hole in the subtitle's time. Everything else is decided
+     * exactly as without it.
+     */
+    val carryText: Boolean = true
 ) {
     /** The 2.1 engine (one-frame persistence, no motion filter) — used by the ensemble. */
     fun legacy21(): ScanParams = copy(stableWindow = 1, stableNeed = 1, motionLimit = 1.0)
@@ -547,6 +554,18 @@ class ScanDecision(val captures: List<Capture>, val closed: List<ScanSegment>, v
 class SubtitleTracker(private val p: ScanParams) {
 
     private inner class Seg(val id: Int, var startUs: Long, val isText: Boolean, w: Int, h: Int, val startFrame: Int) {
+        /** frame index at which this state was created (startFrame may be an inherited age baseline) */
+        val createdFrame = frameIdx
+        /**
+         * Set when only the remaining part of the previous subtitle is on screen (it is carried over:
+         * older than [startFrame]). Such a state is judged as a state without text, like before.
+         */
+        var carry: BooleanArray? = null
+        /**
+         * A carried line still on screen when new text replaced the carried state: not part of this
+         * state (nothing is judged with it), but it is the subtitle if this state's own text leaves.
+         */
+        var dormant: BooleanArray? = null
         var lastUs = startUs
         var endUs = -1L
         val counts = if (isText) ShortArray(w * h) else ShortArray(0)
@@ -584,6 +603,11 @@ class SubtitleTracker(private val p: ScanParams) {
 
     private class Cand(val startUs: Long, val prevUs: Long, var mask: TextMask, var dil: BooleanArray, val isText: Boolean, val startFrame: Int) {
         var count = 1
+        /** the remaining part of the current subtitle, carried into this state (see [persistentOf]) */
+        var carry: BooleanArray? = null
+        /** with [carry]: the mask without it; every comparison uses this one, as before */
+        var own: TextMask? = null
+        var ownDil: BooleanArray? = null
     }
 
     private var current: Seg? = null
@@ -720,14 +744,48 @@ class SubtitleTracker(private val p: ScanParams) {
     private var frameIdx = 0
 
     /** Pixels of [m] that appeared at or after [startFrame] (with slack): background that was already there is ignored. */
-    private fun fgSince(m: TextMask, startFrame: Int): TextMask {
+    private fun fgSince(m: TextMask, startFrame: Int, carry: BooleanArray? = null): TextMask {
         val limit = frameIdx - startFrame + p.confirmFrames + 3
         val out = BooleanArray(m.bits.size)
         var c = 0
-        for (i in out.indices) if (m.bits[i] && age[i] <= limit) {
+        for (i in out.indices) if (m.bits[i] && (age[i] <= limit || (carry != null && carry[i]))) {
             out[i] = true; c++
         }
         return if (c == m.count) m else TextMask(m.width, m.height, out, c)
+    }
+
+    /**
+     * The part of subtitle [s] that has stayed on screen without a break since the state was created
+     * and is still there — only when it stands out as a line: static texture that came with a scene
+     * change (and so got into the state) fills every row of the band about evenly and is not carried.
+     */
+    private fun persistentOf(s: Seg, mAll: TextMask): BooleanArray? {
+        if (!p.carryText || !s.isText || s.carry != null) return null
+        val need = frameIdx - s.createdFrame - 1
+        if (need < 1) return null
+        val d = s.dormant
+        val n = mAll.bits.size
+        val out = BooleanArray(n)
+        val rowsAll = IntArray(gh)
+        val carriedRow = BooleanArray(gh)
+        var c = 0
+        for (i in 0 until n) if (mAll.bits[i] && age[i] >= need) {
+            val y = i / gw
+            rowsAll[y]++
+            if (s.stable[i] || (d != null && d[i])) {
+                out[i] = true; c++; carriedRow[y] = true
+            }
+        }
+        if (c < p.minTextPixels) return null
+        // everything else that stayed on screen as long, row by row: the clutter level of this picture
+        val other = ArrayList<Int>(gh)
+        var sum = 0
+        var rowsIn = 0
+        for (y in 0 until gh) if (carriedRow[y]) {
+            sum += rowsAll[y]; rowsIn++
+        } else other.add(rowsAll[y])
+        val clutter = if (other.size >= 3) other.sorted()[other.size / 2] else 0
+        return if (sum.toDouble() / rowsIn >= 2.0 * clutter + 1) out else null
     }
 
     var framesSeen = 0
@@ -765,9 +823,13 @@ class SubtitleTracker(private val p: ScanParams) {
         frameIdx++
         lastMask = mAll
         // judged against the current state: ignore what was already on screen before it began
-        val m = ScanMask.lineFilter(current?.let { fgSince(mAll, it.startFrame) } ?: mAll, p)
+        val m = ScanMask.lineFilter(current?.let { fgSince(mAll, it.startFrame, it.carry) } ?: mAll, p)
         val text = ScanMask.isText(m, p)
         val mDil = TextMaskOps.dilate(m, DIL)
+        // a carried state is judged without its carried line, exactly as the state without text it replaces
+        val carried = current?.carry != null
+        val m0 = if (carried) ScanMask.lineFilter(fgSince(mAll, current!!.startFrame), p) else m
+        val m0Dil = if (carried) TextMaskOps.dilate(m0, DIL) else mDil
 
         val captures = ArrayList<Capture>(2)
         val closed = ArrayList<ScanSegment>(1)
@@ -780,7 +842,11 @@ class SubtitleTracker(private val p: ScanParams) {
             var restart = false
             if (!cur.isText && !text) match = true
             else if (cur.isText != text) match = false
-            else {
+            else if (carried) {
+                // only the remaining line is there: it lasts until something new is text (or it leaves)
+                cmp = cmpTo(cur, m, mDil)
+                match = !ScanMask.isText(m0, p)
+            } else {
                 val c = cmpTo(cur, m, mDil)
                 cmp = c
                 val young = ptsUs - cur.startUs <= p.growWindowMs * 1000
@@ -800,6 +866,7 @@ class SubtitleTracker(private val p: ScanParams) {
                     cur.endUs = at
                     hold(cur, closed, discarded)
                     val seg = Seg(nextId++, at, true, gw, gh, cur.startFrame)
+                    seg.dormant = cur.dormant
                     seg.lastUs = ptsUs
                     seg.add(m)
                     seg.bestScore = m.count.toDouble()
@@ -856,19 +923,40 @@ class SubtitleTracker(private val p: ScanParams) {
             firstMismatchUs = ptsUs; firstMismatchIdx = frameIdx
         }
         val c0 = cand
+        val c0Mask = c0?.own ?: c0?.mask
+        val c0Dil = c0?.ownDil ?: c0?.dil
         val sameAsCand = c0 != null && c0.isText == text && (!text ||
-            !isChange(MaskCompare.compare(c0.mask.bits, c0.mask.count, c0.dil, m.bits, m.count, mDil, gw, gh)))
+            !isChange(MaskCompare.compare(c0Mask!!.bits, c0Mask.count, c0Dil!!, m0.bits, m0.count, m0Dil, gw, gh)))
         if (sameAsCand) {
             c0!!.count++
             val cm = ScanMask.lineFilter(fgSince(mAll, c0.startFrame), p)
             if (ScanMask.isText(cm, p) == c0.isText) {
-                c0.mask = cm; c0.dil = TextMaskOps.dilate(cm, DIL)
+                if (c0.carry != null) {
+                    c0.own = cm; c0.ownDil = TextMaskOps.dilate(cm, DIL)
+                    val wc = ScanMask.lineFilter(fgSince(mAll, c0.startFrame, c0.carry), p)
+                    c0.mask = wc; c0.dil = TextMaskOps.dilate(wc, DIL)
+                } else {
+                    c0.mask = cm; c0.dil = TextMaskOps.dilate(cm, DIL)
+                }
             }
         } else {
             // a new state starts now: only what appeared in the last few frames belongs to it
-            val cm = if (text) ScanMask.lineFilter(fgSince(mAll, frameIdx), p) else m
+            val cm = if (text) ScanMask.lineFilter(fgSince(mAll, frameIdx), p) else m0
             val ct = if (text) ScanMask.isText(cm, p) else false
-            cand = Cand(ptsUs, if (before >= 0) before else ptsUs, if (ct) cm else m, TextMaskOps.dilate(if (ct) cm else m, DIL), text, frameIdx - 1)
+            val base = if (ct) cm else m0
+            cand = Cand(ptsUs, if (before >= 0) before else ptsUs, base, if (ct) TextMaskOps.dilate(cm, DIL) else m0Dil, text, frameIdx - 1)
+            // nothing new is text, yet part of the current subtitle is still on screen: it stays a
+            // subtitle (before, it became "background" here and the subtitle's time got a hole)
+            val carry = if (text && !ct && cur != null) persistentOf(cur, mAll) else null
+            if (carry != null) {
+                val wc = ScanMask.lineFilter(fgSince(mAll, frameIdx, carry), p)
+                if (ScanMask.isText(wc, p)) {
+                    val cd = cand!!
+                    cd.carry = carry
+                    cd.own = cd.mask; cd.ownDil = cd.dil
+                    cd.mask = wc; cd.dil = TextMaskOps.dilate(wc, DIL)
+                }
+            }
         }
         val cc = cand!!
         if (cur != null && cc.count < p.confirmFrames) {
@@ -883,7 +971,8 @@ class SubtitleTracker(private val p: ScanParams) {
             if (p.stableNeed > 1 && lossRunUs in 0 until end && firstMismatchIdx - lossRunIdx <= p.stableNeed) end = lossRunUs
             cur.endUs = end
             if (cur.isText) {
-                start = maxOf(start, end)
+                // after a carried state the next one starts where it would after a state without text
+                if (cur.carry != null) cur.endUs = minOf(end, start) else start = maxOf(start, end)
                 hold(cur, closed, discarded)
             }
         }
@@ -894,19 +983,23 @@ class SubtitleTracker(private val p: ScanParams) {
 
         if (cc.isText) {
             val h = held
+            val om = cc.own ?: cc.mask
+            val oDil = cc.ownDil ?: cc.dil
             if (p.repairSplits && h != null && backDate(cc.startUs) - h.endUs <= p.bridgeMs * 1000 &&
-                !isChange(MaskCompare.compare(h.stable, h.stableCount, h.stableDil, cc.mask.bits, cc.mask.count, cc.dil, gw, gh))
+                !isChange(MaskCompare.compare(h.stable, h.stableCount, h.stableDil, om.bits, om.count, oDil, gw, gh))
             ) {
                 // Same subtitle again after a flash / short blank / false change: continue it.
                 held = null
                 h.endUs = -1
                 h.lastUs = ptsUs
-                h.add(cc.mask)
+                h.add(om)
                 current = h
-                planCaptures(h, ptsUs, cc.mask, cmpTo(h, cc.mask, cc.dil), captures)
+                planCaptures(h, ptsUs, om, cmpTo(h, om, oDil), captures)
                 return ScanDecision(captures, closed, discarded)
             }
             val seg = Seg(nextId++, start, true, gw, gh, cc.startFrame)
+            seg.carry = cc.carry
+            if (cc.carry == null && cur != null) seg.dormant = cur.carry ?: cur.dormant
             seg.lastUs = ptsUs
             seg.add(cc.mask)
             current = seg

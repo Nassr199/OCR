@@ -33,6 +33,7 @@ fun ocrMiddle0(gts: List<Gt>, s: Int, e: Int): String {
 }
 
 class Out(val s: Int, val e: Int, val text: String)
+val PER = LinkedHashMap<String, LinkedHashMap<String, String>>()
 
 fun e2e(name: String, gts: List<Gt>, lines0: List<Out>, calls: Int) {
     val ms = FRAME_US / 1000
@@ -50,6 +51,11 @@ fun e2e(name: String, gts: List<Gt>, lines0: List<Out>, calls: Int) {
             if (iou >= 0.5) { correct++; err += (Math.abs(best.s - g.start) + Math.abs(best.e - g.end)) / 2.0 }
         }
     }
+    if (System.getenv("PERLINE") != null) for (g in gts) {
+        val mine = lines.filter { it.text == g.text && ov(it.s, it.e, g.start, g.end) > 0 }
+        val best = mine.maxByOrNull { ov(it.s, it.e, g.start, g.end).toDouble() / (maxOf(it.e, g.end) - minOf(it.s, g.start)) }
+        PER.getOrPut(name) { LinkedHashMap() }["${g.start}-${g.end}"] = best?.let { "${it.s}-${it.e}" } ?: "none"
+    }
     val wrong = lines.count { l -> gts.none { it.text == l.text && ov(l.s, l.e, it.start, it.end) > 0 } }
     println(String.format("  %-26s lines found %5.1f%%  correct(IoU>=.5) %5.1f%%  missing %2d  wrong %2d  dup %2d  mean err %.2f f  OCR %d",
         name, 100.0 * found / gts.size, 100.0 * correct / gts.size, gts.size - found, wrong, dups, if (correct > 0) err / correct else 0.0, calls))
@@ -65,25 +71,42 @@ fun main(args: Array<String>) {
         FRAME_US = 1_000_000L / j["fps"].toString().toInt()
         val lang = if (name == "en") SubLang.ENGLISH else SubLang.ARABIC
         val c20 = runOld(prefix)
-        val v21x = runNew(prefix, ScanParams.preset(lang).legacy21().copy(farCut = false)).first
+        val v21x = runNew(prefix, ScanParams.preset(lang).legacy21().copy(farCut = false, carryText = false)).first
+        val v26 = runNew(prefix, ScanParams.preset(lang).legacy21().copy(carryText = false)).first
         val v21 = runNew(prefix, ScanParams.preset(lang).legacy21()).first
         val v22 = runNew(prefix, ScanParams.preset(lang)).first
         println("=== $name  (${gts.size} subtitles)")
         // images are now ONE best frame (no multi-frame composite): best = most text pixels
         e2e("2.0 alone", gts, c20.map { Out(it.s, it.e, ocrMiddle(gts, it.s, it.e)) }, c20.size)
         e2e("2.1 exact (2.4)", gts, v21x.map { Out(it.s, it.e, ocrBest(gts, it.s, it.e)) }, v21x.size)
-        e2e("2.1 + separate-block cut", gts, v21.map { Out(it.s, it.e, ocrBest(gts, it.s, it.e)) }, v21.size)
+        e2e("2.6 (cut, no carry)", gts, v26.map { Out(it.s, it.e, ocrBest(gts, it.s, it.e)) }, v26.size)
+        e2e("2.6.1 (carried line)  ", gts, v21.map { Out(it.s, it.e, ocrBest(gts, it.s, it.e)) }, v21.size)
+        val gaps = { l: List<Seg> -> gts.count { g -> val mine = l.filter { it.s < g.end && it.e > g.start }.sortedBy { it.s }
+            mine.zipWithNext().any { (a, b) -> b.s - a.e >= 2 && b.s < g.end - 1 && a.e > g.start } } }
+        println("      subtitles with a hole between two of their pieces: 2.6 ${gaps(v26)}, 2.6.1 ${gaps(v21)}")
         fun piece(s: Seg, t: String?) = Arbiter.Piece(s.s * FRAME_US, s.e * FRAME_US, t)
-        val base = v21.map { piece(it, ocrBest(gts, it.s, it.e)) }
-        val altsRaw = listOf(v22.map { piece(it, null) }, c20.map { piece(it, null) }, v21.map { piece(it, null) })
-        val need = Arbiter.needed(base, altsRaw, FRAME_US, 4)
-        val alts = listOf(
-            v22.mapIndexed { i, s -> piece(s, if (i in need[0]) ocrBest(gts, s.s, s.e) else null) },
-            c20.mapIndexed { i, s -> piece(s, if (i in need[1]) ocrMiddle(gts, s.s, s.e) else null) },
-            v21.mapIndexed { i, s -> piece(s, if (i in need[2]) ocrBest(gts, s.s, s.e) else null) })
-        val res = Arbiter.resolve(base, alts, FRAME_US, 4)
-        e2e("max (new base + reading)", gts, res.map { Out((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt(), it.text) },
-            base.size + need.sumOf { it.size })
+        val v22n = runNew(prefix, ScanParams.preset(lang).copy(carryText = false)).first
+        var res: List<Arbiter.Line> = emptyList()
+        for ((label, b21, b22) in listOf(Triple("max 2.6", v26, v22n), Triple("max 2.6.1 (الأدق)      ", v21, v22))) {
+            val base = b21.map { piece(it, ocrBest(gts, it.s, it.e)) }
+            val altsRaw = listOf(b22.map { piece(it, null) }, c20.map { piece(it, null) }, b21.map { piece(it, null) })
+            val need = Arbiter.needed(base, altsRaw, FRAME_US, 4)
+            val alts = listOf(
+                b22.mapIndexed { i, s -> piece(s, if (i in need[0]) ocrBest(gts, s.s, s.e) else null) },
+                c20.mapIndexed { i, s -> piece(s, if (i in need[1]) ocrMiddle(gts, s.s, s.e) else null) },
+                b21.mapIndexed { i, s -> piece(s, if (i in need[2]) ocrBest(gts, s.s, s.e) else null) })
+            res = Arbiter.resolve(base, alts, FRAME_US, 4)
+            e2e(label, gts, res.map { Out((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt(), it.text) },
+                base.size + need.sumOf { it.size })
+        }
+        if (System.getenv("PERLINE") != null) {
+            for ((a, b) in listOf("2.6 (cut, no carry)" to "2.6.1 (carried line)  ", "max 2.6" to "max 2.6.1 (الأدق)      ")) {
+                val pa = PER[a]!!; val pb = PER[b]!!
+                fun err(gk: String, v: String): Int { if (v == "none") return 999; val (gs, ge) = gk.split("-").map { it.toInt() }; val (s0, e0) = v.split("-").map { it.toInt() }; return Math.abs(s0 - gs) + Math.abs(e0 - ge) }
+                for (k in pa.keys) { val ea = err(k, pa[k]!!); val eb = err(k, pb[k]!!); if (Math.abs(ea - eb) >= 2) println("      [$b vs $a] GT $k: ${pa[k]} -> ${pb[k]}  (err $ea -> $eb)") }
+            }
+            PER.clear()
+        }
         if (System.getenv("V") != null) res.filter { it.note != "2.1" }.forEach { println("      ${it.startUs / FRAME_US}-${it.endUs / FRAME_US} ${it.note}: ${it.text}") }
     }
 }
