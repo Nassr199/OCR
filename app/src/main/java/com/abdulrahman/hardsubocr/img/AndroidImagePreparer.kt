@@ -4,17 +4,23 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.ImagePreparer
+import com.abdulrahman.hardsubocr.core.ImageV26
 import com.abdulrahman.hardsubocr.core.LensProtocol
 import com.abdulrahman.hardsubocr.core.OcrError
+import com.abdulrahman.hardsubocr.core.PngGray
 import com.abdulrahman.hardsubocr.core.PreparedImage
 import java.io.ByteArrayOutputStream
 
 /**
- * Lens: PNG, longest side <= 1500 px (same as chrome-lens-py).
- * Gemini / OpenRouter: original PNG/JPEG/WebP bytes are sent untouched (no quality loss);
- * BMP or huge images are re-encoded to PNG.
+ * - enhance = false: Lens gets PNG ≤ 1500 px (like chrome-lens-py); Gemini/OpenRouter get the
+ *   original PNG/JPEG/WebP bytes untouched.
+ * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
+ *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
  */
-class AndroidImagePreparer : ImagePreparer {
+class AndroidImagePreparer(
+    private val enhance: Boolean = false,
+    private val cropBand: Boolean = true
+) : ImagePreparer {
 
     override fun prepare(bytes: ByteArray, nameHint: String, kind: EngineKind): PreparedImage {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -24,6 +30,8 @@ class AndroidImagePreparer : ImagePreparer {
         if (w <= 0 || h <= 0) throw OcrError.Failed("تعذر قراءة الصورة: $nameHint")
         val mime = bounds.outMimeType ?: "image/png"
         val longest = maxOf(w, h)
+
+        if (enhance) return enhanced(bytes, w, h, kind)
 
         return when (kind) {
             EngineKind.LENS -> {
@@ -41,16 +49,36 @@ class AndroidImagePreparer : ImagePreparer {
         }
     }
 
-    private fun encodePng(bytes: ByteArray, w: Int, h: Int, maxDim: Int): PreparedImage {
-        val longest = maxOf(w, h)
+    private fun decode(bytes: ByteArray, w: Int, h: Int, maxDim: Int): Bitmap {
         var sample = 1
-        while (longest / (sample * 2) >= maxDim) sample *= 2
+        while (maxOf(w, h) / (sample * 2) >= maxDim) sample *= 2
         val opts = BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
-        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
             ?: throw OcrError.Failed("تعذر فك ترميز الصورة")
+    }
+
+    private fun enhanced(bytes: ByteArray, w: Int, h: Int, kind: EngineKind): PreparedImage {
+        val bmp = decode(bytes, w, h, 4096)
+        val bw = bmp.width
+        val bh = bmp.height
+        val px = IntArray(bw * bh)
+        bmp.getPixels(px, 0, bw, 0, 0, bw, bh)
+        bmp.recycle()
+        val out = ImageV26.prepare(
+            px, bw, bh,
+            ImageV26.Options(
+                cropBand = cropBand,
+                maxDimension = if (kind == EngineKind.LENS) LensProtocol.MAX_DIMENSION else 0
+            )
+        )
+        return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)
+    }
+
+    private fun encodePng(bytes: ByteArray, w: Int, h: Int, maxDim: Int): PreparedImage {
+        val decoded = decode(bytes, w, h, maxDim)
         val bmp = scaleToFit(decoded, maxDim)
         try {
             return PreparedImage(toPng(bmp), "image/png", bmp.width, bmp.height)

@@ -3,6 +3,8 @@ package com.abdulrahman.hardsubocr.job
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.abdulrahman.hardsubocr.core.describeError
+import com.abdulrahman.hardsubocr.core.stackTraceOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -73,7 +75,7 @@ object JobManager {
             } catch (e: CancellationException) {
                 // the runner already published the partial result
             } catch (e: Throwable) {
-                _state.value = JobState.Error("خطأ غير متوقع: ${e.message ?: e.javaClass.simpleName}", emptyList())
+                _state.value = JobState.Error("خطأ غير متوقع: ${describeError(e)}", emptyList(), stackTraceOf(e))
             } finally {
                 pending = null
                 job = null

@@ -8,6 +8,7 @@ class FakeHttp(val responses: MutableList<HttpResponse>) : HttpTransport {
 }
 fun r(code: Int, body: String, h: Map<String,String> = emptyMap()) = HttpResponse(code, body.toByteArray(), h)
 fun main() = runBlocking {
+    mediaFallbackTest()
     val img = PreparedImage(byteArrayOf(1,2,3), "image/png", 1, 1)
     // Gemini success with a thought part
     val h = FakeHttp(mutableListOf(r(200, """{"candidates":[{"content":{"parts":[{"text":"thinking...","thought":true},{"text":"مرحبا\nبك"}],"role":"model"},"finishReason":"STOP"}]}""")))
@@ -49,4 +50,16 @@ fun main() = runBlocking {
     // model listing
     val h5 = FakeHttp(mutableListOf(r(200, """{"models":[{"name":"models/gemini-3.6-flash","supportedGenerationMethods":["generateContent","countTokens"]},{"name":"models/gemini-embedding-2","supportedGenerationMethods":["embedContent"]},{"name":"models/gemini-3.5-flash-lite","supportedGenerationMethods":["generateContent"]}]}""")))
     println("models=" + GeminiEngine.listModels(h5, "K"))
+}
+
+suspend fun mediaFallbackTest() {
+    val img = PreparedImage(byteArrayOf(1,2,3), "image/png", 1, 1)
+    val h = FakeHttp(mutableListOf(
+        r(400, """{"error":{"code":400,"message":"Invalid value at 'generation_config.media_resolution'","status":"INVALID_ARGUMENT"}}"""),
+        r(200, """{"candidates":[{"content":{"parts":[{"text":"نص"}]},"finishReason":"STOP"}]}""")
+    ))
+    val g = GeminiEngine(h, "KEY", "gemini-4-hydrogen", ThinkingLevel.LOW)
+    try { g.recognize(img) } catch (e: OcrError.Retryable) { println("media fallback: ${e.message} after=${e.retryAfterMs}") }
+    val second = g.recognize(img)
+    println("  second=$second hasMedia=" + String(h.seen[1].body!!).contains("mediaResolution") + " hasThinking=" + String(h.seen[1].body!!).contains("thinkingLevel"))
 }

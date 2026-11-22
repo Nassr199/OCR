@@ -1,6 +1,7 @@
 package com.abdulrahman.hardsubocr.job
 
 import android.net.Uri
+import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.CleanMode
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.MergeMode
@@ -39,7 +40,11 @@ data class JobRequest(
     val lensRegion: String,
     val segmenter: SegmenterParams,
     val analyzeEvery: Int,
-    val exportFrames: Boolean
+    val exportFrames: Boolean,
+    val profile: AiProfile?,
+    val enhance: Boolean,
+    val mediaHigh: Boolean,
+    val stabilize: Boolean
 )
 
 data class Progress(
@@ -86,5 +91,5 @@ sealed class JobState {
     object Idle : JobState()
     data class Running(val progress: Progress) : JobState()
     data class Done(val outputs: List<JobOutput>, val stopped: Boolean, val elapsedSec: Double, val summary: String) : JobState()
-    data class Error(val message: String, val outputs: List<JobOutput>) : JobState()
+    data class Error(val message: String, val outputs: List<JobOutput>, val details: String? = null) : JobState()
 }

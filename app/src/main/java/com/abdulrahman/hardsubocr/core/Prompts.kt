@@ -101,6 +101,27 @@ object Prompts {
         "Read character-by-character. Verify every letter. Zero tolerance for errors.\n" +
         ""
 
+    /** OCR_SYSTEM_PROMPT of ocr_windows_v2.6.py (single-pass conservative OCR, diacritics optional). */
+    const val GEMINI_V26_PROMPT: String =
+        "You are performing ULTRA-PRECISE Optical Character Recognition (OCR) on Arabic subtitle images.\n" +
+        "This is PURE PIXEL EXTRACTION - you are a high-precision scanner, NOT an editor or interpreter.\n" +
+        "\n" +
+        "CRITICAL RULES:\n" +
+        "- Extract only the main Arabic subtitle dialogue.\n" +
+        "- Ignore watermarks, logos, channel names, static overlays, and all non-Arabic text.\n" +
+        "- Read the base Arabic letters first. Never invent or repair letters.\n" +
+        "- Preserve punctuation, numbers, brackets, spacing, and line breaks exactly when visible.\n" +
+        "- Arabic diacritics are OPTIONAL, not required.\n" +
+        "- Add a diacritic only if it is unmistakably visible in the pixels and clearly attached to a specific letter.\n" +
+        "- If a diacritic is faint, blurred, stylized, tiny, partially cut, or uncertain, OMIT it.\n" +
+        "- Never add grammatical endings from context.\n" +
+        "- Never split a word into separate letters.\n" +
+        "- Never add tatweel/kashida (ـ).\n" +
+        "- If no Arabic subtitle dialogue exists, output an empty string \"\".\n" +
+        "\n" +
+        "Output only the subtitle text with no commentary.\n" +
+        ""
+
     /** OpenRouter prompt of HardSubArabicOCR_v2_PRO.py. */
     const val OPENROUTER_PROMPT: String = "اقرأ الترجمة العربية المدمجة داخل الصورة فقط. تجاهل تماماً أي نص في الخلفية مثل HOTEL/POLICE/EXIT والشعارات والعلامات المائية وأسماء القنوات. أعد النص العربي الظاهر كترجمة فقط. احذف تماماً أي تركي أو إنجليزي أو أي لغة أخرى حتى لو كان في نفس السطر. لا تذكر النصوص الخلفية أو الشعارات. إذا لم توجد ترجمة عربية أعد فراغاً."
 }

@@ -1,8 +1,10 @@
 package com.abdulrahman.hardsubocr.data
 
 import android.content.Context
+import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.CleanMode
 import com.abdulrahman.hardsubocr.core.EngineKind
+import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.MergeMode
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
@@ -11,6 +13,12 @@ enum class SourceMode { IMAGE, FOLDER, MULTI, VIDEO }
 
 /** AUTO = the behaviour of the Windows program that originally used this engine. */
 enum class Choice { AUTO, PRO, STRICT_OR_PRECISE }
+
+/** Text cleaning override (names kept compatible with v1.0 settings). */
+enum class CleanChoice { AUTO, PRO, STRICT_OR_PRECISE, V26 }
+
+/** Image enhancement before sending (v2.6 prepare_image_for_ocr). */
+enum class EnhanceChoice { AUTO, ON, OFF }
 
 /** Normalised (0..1) subtitle region of the video frame. */
 data class RoiRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
@@ -51,7 +59,7 @@ class Settings(context: Context) {
         set(v) = put("openrouter_key", SecureStore.encrypt(v.trim()))
 
     var geminiModel: String
-        get() = str("gemini_model", "gemini-3-flash-preview")
+        get() = str("gemini_model", GeminiEngine.DEFAULT_MODEL)
         set(v) = put("gemini_model", v.trim())
 
     var openRouterModel: String
@@ -78,9 +86,31 @@ class Settings(context: Context) {
         get() = enumOf("merge_choice", Choice.AUTO)
         set(v) = put("merge_choice", v.name)
 
-    var cleanChoice: Choice
-        get() = enumOf("clean_choice", Choice.AUTO)
+    var cleanChoice: CleanChoice
+        get() = enumOf("clean_choice", CleanChoice.AUTO)
         set(v) = put("clean_choice", v.name)
+
+    var profileGemini: AiProfile
+        get() = enumOf("profile_gemini", AiProfile.V26)
+        set(v) = put("profile_gemini", v.name)
+
+    var profileOpenRouter: AiProfile
+        get() = enumOf("profile_openrouter", AiProfile.PRO)
+        set(v) = put("profile_openrouter", v.name)
+
+    var enhanceChoice: EnhanceChoice
+        get() = enumOf("enhance_choice", EnhanceChoice.AUTO)
+        set(v) = put("enhance_choice", v.name)
+
+    /** Gemini generationConfig.mediaResolution = HIGH (sharper small text / diacritics). */
+    var mediaHigh: Boolean
+        get() = sp.getBoolean("media_high", true)
+        set(v) = putBool("media_high", v)
+
+    /** Last crash/error report shown on the next start (for screenshots). */
+    var lastErrorReport: String?
+        get() = sp.getString("last_error_report", null)
+        set(v) = put("last_error_report", v)
 
     var stripDiacritics: Boolean
         get() = sp.getBoolean("strip_diacritics", false)
@@ -175,17 +205,33 @@ class Settings(context: Context) {
         set(v) = putBool("v_export", v)
 
     // ---------------------------------------------------------------- derived
+    fun profileFor(kind: EngineKind): AiProfile? = when (kind) {
+        EngineKind.GEMINI -> profileGemini
+        EngineKind.OPENROUTER -> profileOpenRouter
+        EngineKind.LENS -> null
+    }
+
     fun cleanModeFor(kind: EngineKind): CleanMode = when (cleanChoice) {
-        Choice.PRO -> CleanMode.PRO
-        Choice.STRICT_OR_PRECISE -> CleanMode.PRECISE
-        Choice.AUTO -> if (kind == EngineKind.GEMINI) CleanMode.PRECISE else CleanMode.PRO
+        CleanChoice.PRO -> CleanMode.PRO
+        CleanChoice.STRICT_OR_PRECISE -> CleanMode.PRECISE
+        CleanChoice.V26 -> CleanMode.V26
+        CleanChoice.AUTO -> profileFor(kind)?.clean ?: CleanMode.PRO
     }
 
     fun mergeModeFor(kind: EngineKind): MergeMode = when (mergeChoice) {
         Choice.PRO -> MergeMode.PRO
         Choice.STRICT_OR_PRECISE -> MergeMode.STRICT
-        Choice.AUTO -> if (kind == EngineKind.GEMINI) MergeMode.STRICT else MergeMode.PRO
+        Choice.AUTO -> profileFor(kind)?.merge ?: MergeMode.PRO
     }
+
+    fun enhanceFor(kind: EngineKind): Boolean = when (enhanceChoice) {
+        EnhanceChoice.ON -> true
+        EnhanceChoice.OFF -> false
+        EnhanceChoice.AUTO -> profileFor(kind)?.enhanceImages ?: false
+    }
+
+    fun stabilizeFor(kind: EngineKind): Boolean = cleanModeFor(kind) != CleanMode.PRO &&
+        ((profileFor(kind)?.stabilize ?: false) || cleanChoice == CleanChoice.V26)
 
     fun workersFor(kind: EngineKind): Int = if (kind == EngineKind.LENS) workersLens else workersAi
 }

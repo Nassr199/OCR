@@ -19,7 +19,10 @@ enum class CleanMode {
     PRO,
 
     /** clean_ocr_output() of the CLI v2.1: keeps line breaks and diacritics exactly. */
-    PRECISE
+    PRECISE,
+
+    /** v2.6: clean_ocr_output() + conservative_clean_diacritics() (fragmented words, over-marked words). */
+    V26
 }
 
 object Cleaner {
@@ -27,9 +30,11 @@ object Cleaner {
         val t = when (mode) {
             CleanMode.PRO -> ArabicText.arabicFilter(raw)
             CleanMode.PRECISE -> ArabicText.cleanOcrOutput(raw).let { if (ArabicText.isSymbolsOnly(it)) "" else it }
+            CleanMode.V26 -> ArabicV26.conservativeCleanDiacritics(ArabicText.cleanOcrOutput(raw))
+                .let { if (it.isEmpty() || ArabicText.isSymbolsOnly(it)) "" else it }
         }
         if (t.isEmpty()) return ""
-        return if (stripDiacritics && mode == CleanMode.PRECISE) ArabicText.stripDiacritics(t).trim() else t
+        return if (stripDiacritics && mode != CleanMode.PRO) ArabicText.pyStrip(ArabicText.stripDiacritics(t)) else t
     }
 }
 
@@ -140,8 +145,8 @@ class OcrPipeline(
             ItemOutcome.Failed(e.message ?: "خطأ")
         } catch (e: OutOfMemoryError) {
             ItemOutcome.Failed("الذاكرة غير كافية لهذه الصورة")
-        } catch (e: Exception) {
-            ItemOutcome.Failed(e.message ?: e.javaClass.simpleName)
+        } catch (e: Throwable) {
+            ItemOutcome.Failed(describeError(e))
         }
 
         stats.processed.incrementAndGet()
@@ -194,11 +199,36 @@ class OcrPipeline(
         }
     }
 
-    fun mergedResult(mode: MergeMode): List<SubEntry> {
-        val items = results.toList()
+    /**
+     * Final subtitles. With [stabilize] the v2.6 cross-frame diacritics consensus runs first, so the
+     * merge then sees identical texts for repeated frames of the same line.
+     */
+    fun mergedResult(mode: MergeMode, stabilize: Boolean = false): List<SubEntry> {
+        var items = results.toList().sortedBy { it.startMs }
+        if (stabilize && cleanMode != CleanMode.PRO) items = ArabicV26.stabilizeConsecutiveDiacritics(items)
         return when (mode) {
             MergeMode.PRO -> Merge.mergePro(items, 350, normalize = cleanMode == CleanMode.PRO)
             MergeMode.STRICT -> Merge.mergeStrict(items)
         }
     }
+}
+
+/** "Type: message ← cause" chain, readable in a screenshot. */
+fun describeError(e: Throwable): String {
+    val parts = ArrayList<String>()
+    var cur: Throwable? = e
+    var depth = 0
+    while (cur != null && depth < 4) {
+        val msg = cur.message?.takeIf { it.isNotBlank() }
+        parts.add(if (msg != null) "${cur.javaClass.simpleName}: $msg" else cur.javaClass.simpleName)
+        cur = cur.cause.takeIf { it !== cur }
+        depth++
+    }
+    return parts.joinToString(" ← ")
+}
+
+fun stackTraceOf(e: Throwable): String {
+    val sw = java.io.StringWriter()
+    e.printStackTrace(java.io.PrintWriter(sw))
+    return sw.toString()
 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.abdulrahman.hardsubocr.App
+import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.LumaGrid
@@ -21,6 +22,8 @@ import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.TextMaskOps
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.data.Choice
+import com.abdulrahman.hardsubocr.data.CleanChoice
+import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import com.abdulrahman.hardsubocr.data.FileOcrCache
 import com.abdulrahman.hardsubocr.data.FolderRef
 import com.abdulrahman.hardsubocr.data.RoiRect
@@ -60,6 +63,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var geminiModel by mutableStateOf(s.geminiModel)
     var openRouterModel by mutableStateOf(s.openRouterModel)
     var thinking by mutableStateOf(s.thinking)
+        private set
+    var profileGemini by mutableStateOf(s.profileGemini)
+        private set
+    var profileOpenRouter by mutableStateOf(s.profileOpenRouter)
+        private set
+    var enhanceChoice by mutableStateOf(s.enhanceChoice)
+        private set
+    var mediaHigh by mutableStateOf(s.mediaHigh)
+        private set
+    var lastErrorReport by mutableStateOf(s.lastErrorReport)
         private set
     var fetchedGemini by mutableStateOf<List<String>>(emptyList())
         private set
@@ -159,13 +172,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun modelSuggestions(): List<String> = when (engine) {
-        EngineKind.GEMINI -> (listOf(
-            "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"
-        ) + fetchedGemini).distinct()
-        EngineKind.OPENROUTER -> (listOf(
-            OpenRouterEngine.DEFAULT_MODEL, "google/gemini-3-flash-preview", "google/gemini-3.5-flash-lite"
-        ) + fetchedOpenRouter).distinct()
+        EngineKind.GEMINI -> (GeminiEngine.SUGGESTED_MODELS + fetchedGemini).distinct()
+        EngineKind.OPENROUTER -> (OpenRouterEngine.SUGGESTED_MODELS + fetchedOpenRouter).distinct()
         EngineKind.LENS -> emptyList()
+    }
+
+    fun chooseProfile(p: AiProfile) {
+        if (engine == EngineKind.OPENROUTER) {
+            profileOpenRouter = p; s.profileOpenRouter = p
+        } else {
+            profileGemini = p; s.profileGemini = p
+        }
+    }
+
+    fun currentProfile(): AiProfile = if (engine == EngineKind.OPENROUTER) profileOpenRouter else profileGemini
+
+    /** Effective "enhance images" for the selected engine (AUTO follows the profile). */
+    fun enhanceEffective(): Boolean = when (enhanceChoice) {
+        EnhanceChoice.ON -> true
+        EnhanceChoice.OFF -> false
+        EnhanceChoice.AUTO -> engine != EngineKind.LENS && currentProfile().enhanceImages
+    }
+
+    fun setEnhance(on: Boolean) {
+        enhanceChoice = if (on) EnhanceChoice.ON else EnhanceChoice.OFF
+        s.enhanceChoice = enhanceChoice
+    }
+
+    fun chooseEnhanceChoice(c: EnhanceChoice) {
+        enhanceChoice = c; s.enhanceChoice = c
+    }
+
+    fun chooseMediaHigh(v: Boolean) {
+        mediaHigh = v; s.mediaHigh = v
+    }
+
+    fun dismissErrorReport() {
+        lastErrorReport = null; s.lastErrorReport = null
     }
 
     fun fetchModels() {
@@ -452,7 +495,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 minDurationMs = s.minDurationMs.toLong()
             ),
             analyzeEvery = s.analyzeEvery,
-            exportFrames = s.exportFrames
+            exportFrames = s.exportFrames,
+            profile = s.profileFor(e),
+            enhance = s.enhanceFor(e),
+            mediaHigh = s.mediaHigh,
+            stabilize = s.stabilizeFor(e)
         )
         JobManager.start(ctx, req)
     }
@@ -537,9 +584,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return if (b < 1024 * 1024) "${b / 1024} KB" else "%.1f MB".format(java.util.Locale.US, b / 1048576.0)
     }
 
-    fun choiceLabel(c: Choice, merge: Boolean): String = when (c) {
-        Choice.AUTO -> "تلقائي حسب المحرك"
-        Choice.PRO -> if (merge) "PRO (فجوة 0.35 ث + تشابه 90%)" else "PRO (سطر واحد، بدون تشكيل)"
-        Choice.STRICT_OR_PRECISE -> if (merge) "صارم v2.1 (الإطارات المقسّمة فقط)" else "دقيق v2.1 (يحفظ الأسطر والتشكيل)"
+    fun mergeLabel(c: Choice): String = when (c) {
+        Choice.AUTO -> "تلقائي حسب الأسلوب"
+        Choice.PRO -> "PRO (فجوة 0.35 ث + تشابه 90%)"
+        Choice.STRICT_OR_PRECISE -> "صارم v2.1 (الإطارات المقسّمة فقط)"
+    }
+
+    fun cleanLabel(c: CleanChoice): String = when (c) {
+        CleanChoice.AUTO -> "تلقائي حسب الأسلوب"
+        CleanChoice.PRO -> "PRO (سطر واحد، بدون تشكيل)"
+        CleanChoice.STRICT_OR_PRECISE -> "دقيق v2.1 (يحفظ الأسطر والتشكيل)"
+        CleanChoice.V26 -> "v2.6 (حارس التشكيل)"
+    }
+
+    fun enhanceLabel(c: EnhanceChoice): String = when (c) {
+        EnhanceChoice.AUTO -> "تلقائي حسب الأسلوب"
+        EnhanceChoice.ON -> "دائمًا"
+        EnhanceChoice.OFF -> "أبدًا"
     }
 }

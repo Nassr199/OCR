@@ -81,28 +81,57 @@ class LensEngine(
 
 enum class ThinkingLevel(val api: String?) { DEFAULT(null), MINIMAL("minimal"), LOW("low"), MEDIUM("medium"), HIGH("high") }
 
+/**
+ * Reading style for the AI engines — each bundles the prompt and the post-processing of one
+ * Windows program, so results match what the user already tuned there.
+ */
+enum class AiProfile(
+    val id: String,
+    val prompt: String,
+    val clean: CleanMode,
+    val merge: MergeMode,
+    val enhanceImages: Boolean,
+    val stabilize: Boolean
+) {
+    /** ocr_windows_v2.6.py: subtitle-band image enhancement, conservative prompt, diacritics guard. */
+    V26("v26", Prompts.GEMINI_V26_PROMPT, CleanMode.V26, MergeMode.STRICT, true, true),
+
+    /** ocr_windows_v2.1.py: long ultra-precise prompt, clean_ocr_output, merge rules 2A–2E. */
+    V21("v21", Prompts.GEMINI_SYSTEM_PROMPT, CleanMode.PRECISE, MergeMode.STRICT, false, false),
+
+    /** HardSubArabicOCR_v2_PRO.py (OpenRouter): short Arabic prompt, arabic_filter, merge_entries. */
+    PRO("pro", Prompts.OPENROUTER_PROMPT, CleanMode.PRO, MergeMode.PRO, false, false)
+}
+
 class GeminiEngine(
     private val http: HttpTransport,
     private val apiKey: String,
     model: String,
-    private val thinking: ThinkingLevel = ThinkingLevel.LOW,
-    private val systemPrompt: String = Prompts.GEMINI_SYSTEM_PROMPT
+    thinking: ThinkingLevel = ThinkingLevel.LOW,
+    private val profile: AiProfile = AiProfile.V26,
+    highResolution: Boolean = true
 ) : OcrEngine {
     val model: String = model.trim().removePrefix("models/")
     override val kind = EngineKind.GEMINI
-    override val cacheId = "gemini:${this.model}"
+    override val cacheId = "gemini:${this.model}:${profile.id}:${if (highResolution) "hi" else "def"}"
+
+    /** Lowered automatically when a model rejects it (e.g. Gemini 4 / 3.8 have no "minimal"). */
+    @Volatile
+    var thinkingLevel: String? = thinking.api
+        private set
 
     @Volatile
-    private var thinkingSupported = thinking.api != null
+    var mediaHigh: Boolean = highResolution
+        private set
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل Gemini API Key أولاً")
         if (this.model.isBlank()) throw OcrError.Fatal("اختر موديل Gemini")
     }
 
-    fun buildBody(image: PreparedImage, withThinking: Boolean): String = buildJsonObject {
+    fun buildBody(image: PreparedImage, thinking: String?, high: Boolean): String = buildJsonObject {
         putJsonObject("systemInstruction") {
-            putJsonArray("parts") { addJsonObject { put("text", systemPrompt) } }
+            putJsonArray("parts") { addJsonObject { put("text", profile.prompt) } }
         }
         putJsonArray("contents") {
             addJsonObject {
@@ -127,18 +156,19 @@ class GeminiEngine(
             put("temperature", 0.0)
             put("topP", 1.0)
             put("candidateCount", 1)
-            val level = thinking.api
-            if (withThinking && level != null) putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
+            if (high) put("mediaResolution", "MEDIA_RESOLUTION_HIGH")
+            if (thinking != null) putJsonObject("thinkingConfig") { put("thinkingLevel", thinking) }
         }
     }.toString()
 
     override suspend fun recognize(image: PreparedImage): String {
-        val useThinking = thinkingSupported
+        val level = thinkingLevel
+        val high = mediaHigh
         val resp = http.execute(
             HttpRequest(
                 url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent",
                 headers = mapOf("x-goog-api-key" to apiKey),
-                body = buildBody(image, useThinking).toByteArray(Charsets.UTF_8),
+                body = buildBody(image, level, high).toByteArray(Charsets.UTF_8),
                 contentType = "application/json; charset=utf-8",
                 timeoutMs = 120_000
             )
@@ -147,14 +177,30 @@ class GeminiEngine(
 
         val err = GeminiErrors.parse(resp.text)
         val msg = err.message.ifBlank { shortBody(resp.text) }
-        if (resp.code == 400 && useThinking && msg.contains("thinking", ignoreCase = true)) {
-            thinkingSupported = false // model without thinking levels -> retry immediately without it
-            throw OcrError.Retryable("الموديل لا يدعم مستوى التفكير — إعادة بدونه", retryAfterMs = 0)
+        val low = msg.lowercase()
+        if (resp.code == 400 && level != null && low.contains("thinking")) {
+            // minimal -> low -> (no thinking config)
+            thinkingLevel = if (level == "minimal") "low" else null
+            throw OcrError.Retryable("الموديل لا يدعم مستوى التفكير «$level» — تعديل تلقائي", retryAfterMs = 0)
+        }
+        if (resp.code == 400 && high && (low.contains("media_resolution") || low.contains("mediaresolution") ||
+                low.contains("media resolution"))
+        ) {
+            mediaHigh = false
+            throw OcrError.Retryable("الموديل لا يدعم الدقة العالية للصور — إعادة بالافتراضي", retryAfterMs = 0)
         }
         throw GeminiErrors.classify(resp.code, err.status, msg, err.retryDelayMs)
     }
 
     companion object {
+        /** Newest first (verified Nov 2026). "Fetch models" adds whatever the key can really use. */
+        val SUGGESTED_MODELS = listOf(
+            "gemini-4-hydrogen", "gemini-4-argon", "gemini-4-carbon",
+            "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite",
+            "gemini-3-flash-preview", "gemini-3.1-flash-lite"
+        )
+        const val DEFAULT_MODEL = "gemini-4-hydrogen"
+
         fun parseText(body: String): String {
             val root = parseJsonOrNull(body).obj() ?: throw OcrError.Retryable("رد Gemini غير مفهوم")
             val cands = root["candidates"].arr()
@@ -192,8 +238,10 @@ class GeminiEngine(
                 val methods = o["supportedGenerationMethods"].arr()?.mapNotNull { it.str() } ?: emptyList()
                 if ("generateContent" !in methods) return@mapNotNull null
                 o["name"].str()?.removePrefix("models/")
-            }.filter { !it.contains("embedding") && !it.contains("tts") && !it.contains("image") }
-                .sortedDescending()
+            }.filter {
+                !it.contains("embedding") && !it.contains("tts") && !it.contains("image") &&
+                    !it.contains("live") && !it.contains("banana") && !it.contains("lyria")
+            }.sortedDescending()
         }
     }
 }
@@ -236,11 +284,12 @@ class OpenRouterEngine(
     private val http: HttpTransport,
     private val apiKey: String,
     model: String,
-    private val prompt: String = Prompts.OPENROUTER_PROMPT
+    private val profile: AiProfile = AiProfile.PRO
 ) : OcrEngine {
+    private val prompt: String = profile.prompt
     val model: String = model.trim().ifBlank { DEFAULT_MODEL }
     override val kind = EngineKind.OPENROUTER
-    override val cacheId = "openrouter:${this.model}"
+    override val cacheId = "openrouter:${this.model}:${profile.id}"
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل OpenRouter API Key أولاً")
@@ -298,6 +347,10 @@ class OpenRouterEngine(
 
     companion object {
         const val DEFAULT_MODEL = "google/gemini-3.1-flash-lite"
+        val SUGGESTED_MODELS = listOf(
+            DEFAULT_MODEL, "google/gemini-4-hydrogen", "google/gemini-4-argon",
+            "google/gemini-3.8-flash", "google/gemini-3.5-flash-lite", "google/gemini-3-flash-preview"
+        )
 
         fun parseText(root: JsonObject?): String {
             val choices = root?.get("choices").arr() ?: throw OcrError.Retryable("رد OpenRouter غير مفهوم")

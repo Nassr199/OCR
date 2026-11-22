@@ -2,7 +2,7 @@
 
 package com.abdulrahman.hardsubocr.ui
 
-import androidx.compose.foundation.horizontalScroll
+import com.abdulrahman.hardsubocr.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.abdulrahman.hardsubocr.data.Choice
+import com.abdulrahman.hardsubocr.data.CleanChoice
+import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -47,6 +48,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var workersAi by remember { mutableIntStateOf(s.workersAi) }
     var retries by remember { mutableIntStateOf(s.retries) }
     var clean by remember { mutableStateOf(s.cleanChoice) }
+    var enhance by remember { mutableStateOf(vm.enhanceChoice) }
     var merge by remember { mutableStateOf(s.mergeChoice) }
     var strip by remember { mutableStateOf(s.stripDiacritics) }
     var bom by remember { mutableStateOf(s.bom) }
@@ -92,14 +94,39 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
 
             SectionCard("تنظيف النص", "🧹") {
-                ChoiceChips(Choice.entries, clean, { vm.choiceLabel(it, merge = false) }) { clean = it; s.cleanChoice = it }
-                Hint("تلقائي: Lens وOpenRouter ← arabic_filter (PRO)، وGemini ← clean_ocr_output (v2.1).")
-                SwitchRow("إزالة التشكيل في الوضع الدقيق", "يُبقي النص كما هو مع حذف الحركات فقط", strip) { strip = it; s.stripDiacritics = it }
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "Lens ← PRO، وGemini/OpenRouter ← حسب الأسلوب المختار"),
+                        ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل المشوّه فقط ويُبقي الصحيح، ويصلح الكلمات المتقطعة"),
+                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "clean_ocr_output كما في v2.1"),
+                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "arabic_filter كما في نسخة PRO")
+                    ),
+                    clean
+                ) { clean = it; s.cleanChoice = it }
+                SwitchRow("إزالة التشكيل نهائيًا", "يحذف كل الحركات من النص الناتج (في الوضع الدقيق وv2.6)", strip) { strip = it; s.stripDiacritics = it }
             }
 
             SectionCard("دمج المقاطع", "🔗") {
-                ChoiceChips(Choice.entries, merge, { vm.choiceLabel(it, merge = true) }) { merge = it; s.mergeChoice = it }
-                Hint("تلقائي: Lens وOpenRouter ← merge_entries (PRO)، وGemini ← merge_ocr_entries (v2.1) بقواعد 2A–2E كما هي.")
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens ← PRO، والذكاء الاصطناعي ← حسب الأسلوب"),
+                        ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "merge_entries من نسخة PRO"),
+                        ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "merge_ocr_entries من v2.1 بقواعد 2A–2E")
+                    ),
+                    merge
+                ) { merge = it; s.mergeChoice = it }
+            }
+
+            SectionCard("تحسين الصور (v2.6)", "🖼") {
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب v2.6، ومعطّل مع Lens وPRO"),
+                        ChoiceItem(EnhanceChoice.ON, vm.enhanceLabel(EnhanceChoice.ON), null),
+                        ChoiceItem(EnhanceChoice.OFF, vm.enhanceLabel(EnhanceChoice.OFF), null)
+                    ),
+                    enhance
+                ) { enhance = it; vm.chooseEnhanceChoice(it) }
+                Hint("قصّ شريط الترجمة (6–94% عرضًا، 35–96% ارتفاعًا) ← تكبير Lanczos للصور الصغيرة ← رمادي ← autocontrast ← تباين 1.12 ← حدّة. مطابق لـ Pillow بكسلًا بكسل.")
             }
 
             SectionCard("ملف SRT", "📄") {
@@ -137,21 +164,12 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
 
             SectionCard("حول", "ℹ️") {
-                Text("HardSub Arabic OCR — Android 1.0.0", fontWeight = FontWeight.Bold)
-                Hint("تحويل أصلي (Kotlin + Jetpack Compose) لنسخة ويندوز v2 PRO وخط Gemini v2.1، مع منطق التنظيف والدمج والتشابه مطابق حرفيًا للنسخة الأصلية.")
+                Text("HardSub Arabic OCR — Android ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
+                Hint("تحويل أصلي (Kotlin + Jetpack Compose) لنسخة ويندوز v2 PRO وخط Gemini v2.1 وسكربت v2.6، مع منطق التنظيف والدمج والتشابه ومعالجة الصور مطابق للنسخ الأصلية. يدعم Gemini 4.")
                 Spacer(Modifier.height(4.dp))
                 Text("المفاتيح مشفّرة بـ Android Keystore ولا تُرسل إلا للخدمة المختارة.", style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun ChoiceChips(values: List<Choice>, selected: Choice, label: (Choice) -> String, onSelect: (Choice) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (v in values) FilterChip(selected = v == selected, onClick = { onSelect(v) }, label = { Text(label(v)) })
         }
     }
 }

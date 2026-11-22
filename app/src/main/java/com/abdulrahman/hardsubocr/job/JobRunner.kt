@@ -1,7 +1,7 @@
 package com.abdulrahman.hardsubocr.job
 
 import android.content.Context
-import com.abdulrahman.hardsubocr.core.CleanMode
+import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ItemOutcome
@@ -16,6 +16,8 @@ import com.abdulrahman.hardsubocr.core.RetryPolicy
 import com.abdulrahman.hardsubocr.core.Srt
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.Timestamps
+import com.abdulrahman.hardsubocr.core.describeError
+import com.abdulrahman.hardsubocr.core.stackTraceOf
 import com.abdulrahman.hardsubocr.data.FileOcrCache
 import com.abdulrahman.hardsubocr.data.FolderRef
 import com.abdulrahman.hardsubocr.data.Saf
@@ -42,7 +44,8 @@ class JobRunner(
 ) {
     private val startedAt = System.currentTimeMillis()
     private val log = ConcurrentLinkedDeque<String>()
-    private val preparer = AndroidImagePreparer()
+    private val imagePreparer = AndroidImagePreparer(enhance = req.enhance, cropBand = true)
+    private val videoPreparer = AndroidImagePreparer(enhance = req.enhance, cropBand = false)
 
     // live unit state for the progress ticker
     @Volatile private var pipeline: OcrPipeline? = null
@@ -62,11 +65,19 @@ class JobRunner(
 
     private fun buildEngine(): OcrEngine = when (req.engine) {
         EngineKind.LENS -> LensEngine(Net.transport, req.lensLanguage, req.lensRegion)
-        EngineKind.GEMINI -> GeminiEngine(Net.transport, req.geminiKey, req.geminiModel, req.thinking)
-        EngineKind.OPENROUTER -> OpenRouterEngine(Net.transport, req.openRouterKey, req.openRouterModel)
+        EngineKind.GEMINI -> GeminiEngine(
+            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh
+        )
+        EngineKind.OPENROUTER -> OpenRouterEngine(
+            Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO
+        )
     }
 
-    private fun newPipeline(engine: OcrEngine, cache: FileOcrCache?): OcrPipeline = OcrPipeline(
+    private fun newPipeline(
+        engine: OcrEngine,
+        cache: FileOcrCache?,
+        preparer: AndroidImagePreparer = imagePreparer
+    ): OcrPipeline = OcrPipeline(
         engine = engine,
         preparer = preparer,
         cleanMode = req.cleanMode,
@@ -113,7 +124,7 @@ class JobRunner(
 
     private fun partialOutput(name: String, folder: FolderRef?, error: String?): JobOutput? {
         val p = pipeline ?: return null
-        val merged = p.mergedResult(req.mergeMode)
+        val merged = p.mergedResult(req.mergeMode, req.stabilize)
         if (merged.isEmpty() && error == null) return null
         return JobOutput(
             name = name, uri = null, entries = merged, savedIn = null, folderForSave = folder,
@@ -153,15 +164,16 @@ class JobRunner(
                         throw e
                     } catch (e: OcrError.Fatal) {
                         throw e
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         val name = unitName(unit)
-                        addLog("✖ $name — ${e.message}")
-                        val out = partialOutput(name, outputFolderFor(unit), e.message ?: e.javaClass.simpleName)
-                            ?: JobOutput(name, null, emptyList(), null, outputFolderFor(unit), error = e.message ?: "خطأ")
+                        val why = if (e is IllegalStateException || e is java.io.IOException) (e.message ?: describeError(e)) else describeError(e)
+                        addLog("✖ $name — $why")
+                        val out = partialOutput(name, outputFolderFor(unit), why)
+                            ?: JobOutput(name, null, emptyList(), null, outputFolderFor(unit), error = why)
                         outputs.add(out)
                         if (units.size == 1) {
                             ticker.cancel()
-                            publish(JobState.Error(e.message ?: "خطأ", outputs))
+                            publish(JobState.Error(why, outputs, stackTraceOf(e)))
                             return@coroutineScope
                         }
                     }
@@ -236,7 +248,7 @@ class JobRunner(
         ch.close()
         p.run(ch)
         p.failures.firstOrNull()?.let { throw IllegalStateException(it.second) }
-        val entries = p.mergedResult(req.mergeMode)
+        val entries = p.mergedResult(req.mergeMode, req.stabilize)
         val base = unitName(u)
         if (ts == null) {
             // Like the Windows build this mode needs a time code for SRT — here we still show the text.
@@ -282,7 +294,7 @@ class JobRunner(
             ch.close()
             p.run(ch)
             phase = "دمج وحفظ"
-            val entries = p.mergedResult(req.mergeMode)
+            val entries = p.mergedResult(req.mergeMode, req.stabilize)
             val target = req.output ?: folder
             val (uri, savedIn) = withContext(Dispatchers.IO) { save(target, folder.name, entries) }
             return JobOutput(folder.name, uri, entries, savedIn, target, p.failures.toList(), noTs)
@@ -305,7 +317,7 @@ class JobRunner(
         val cache = if (req.resume) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
         try {
-            val p = newPipeline(engine, cache)
+            val p = newPipeline(engine, cache, videoPreparer)
             beginUnit(u.name, 0, p)
             decodeFraction = 0f
             val ch = Channel<OcrItem>(Channel.UNLIMITED)
@@ -350,7 +362,7 @@ class JobRunner(
                 ocr.join()
             }
             phase = "دمج وحفظ"
-            val entries = p.mergedResult(req.mergeMode)
+            val entries = p.mergedResult(req.mergeMode, req.stabilize)
             val (uri, savedIn) = withContext(Dispatchers.IO) { save(req.output, base, entries) }
             return JobOutput(base, uri, entries, savedIn, req.output, p.failures.toList())
         } finally {
@@ -359,6 +371,4 @@ class JobRunner(
         }
     }
 
-    @Suppress("unused")
-    private fun describe(mode: CleanMode) = if (mode == CleanMode.PRO) "PRO" else "دقيق"
 }
