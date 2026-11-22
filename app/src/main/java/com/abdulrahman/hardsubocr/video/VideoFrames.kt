@@ -134,6 +134,13 @@ object Yuv {
     fun toBitmap(image: Image, r: Rect, step: Int = 1): Bitmap {
         val w = maxOf(1, r.width() / step)
         val h = maxOf(1, r.height() / step)
+        return Bitmap.createBitmap(toArgb(image, r, step), w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** Same as [toBitmap] but as an ARGB array (kept in memory for multi-frame composites). */
+    fun toArgb(image: Image, r: Rect, step: Int = 1): IntArray {
+        val w = maxOf(1, r.width() / step)
+        val h = maxOf(1, r.height() / step)
         val px = IntArray(w * h)
         val yP = image.planes[0]
         val uP = image.planes[1]
@@ -171,7 +178,7 @@ object Yuv {
                 px[o + i] = -0x1000000 or (rr shl 16) or (gg shl 8) or bb
             }
         }
-        return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+        return px
     }
 
     fun previewBitmap(image: Image, maxWidth: Int = 1280): Bitmap {

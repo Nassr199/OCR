@@ -5,7 +5,9 @@ import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.CleanMode
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.MergeMode
-import com.abdulrahman.hardsubocr.core.SegmenterParams
+import com.abdulrahman.hardsubocr.core.ScanParams
+import com.abdulrahman.hardsubocr.core.SubLang
+import com.abdulrahman.hardsubocr.data.VideoMode
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.data.FolderRef
@@ -38,9 +40,11 @@ data class JobRequest(
     val resume: Boolean,
     val lensLanguage: String,
     val lensRegion: String,
-    val segmenter: SegmenterParams,
+    val scan: ScanParams,
     val analyzeEvery: Int,
-    val exportFrames: Boolean,
+    val videoMode: VideoMode,
+    val saveClean: Boolean,
+    val lang: SubLang,
     val profile: AiProfile?,
     val enhance: Boolean,
     val mediaHigh: Boolean,
@@ -84,7 +88,11 @@ data class JobOutput(
     val partial: Boolean = false,
     val error: String? = null,
     /** Single image without a VideoSubFinder time code: the plain OCR text. */
-    val plainText: String? = null
+    val plainText: String? = null,
+    /** Extra line for the result card (e.g. where the subtitle images were saved). */
+    val info: String? = null,
+    /** Video "images only" mode: number of subtitle images written. */
+    val imagesSaved: Int = 0
 )
 
 sealed class JobState {

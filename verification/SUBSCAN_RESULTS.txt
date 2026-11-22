@@ -1,0 +1,22 @@
+=== Arabic video ar: 3685 frames, 56 subtitles, grid 640x108
+previous segmenter (v2.0)          found  43/56 (76.8%)  split 13  over-merged  5  false+  0  boundary ±2f  22  mean err 13.38 f
+    all:43/56(split 13)  flash:3/7(split 6)  short:0/4  yellow:5/6(split 2)  gray:2/6  two-line:4/4(split 2)  lookalike:4/4
+SubScan (new)  1784 µs/frame       found  56/56 (100.0%)  split  0  over-merged  0  false+  0  boundary ±2f  56  mean err 0.21 f
+    all:56/56  flash:7/7  short:4/4  yellow:6/6  gray:6/6  two-line:4/4  lookalike:4/4
+SubScan, split repair OFF          found  54/56 (96.4%)  split  6  over-merged  0  false+  0  boundary ±2f  50  mean err 1.84 f
+    all:54/56(split 6)  flash:5/7(split 6)  short:4/4  yellow:6/6  gray:6/6  two-line:4/4  lookalike:4/4
+composite: bright background pixels single=4746 composite=0  (frames=5)
+=== English video en: 2992 frames, 48 subtitles, grid 640x108
+previous segmenter (v2.0)          found  35/48 (72.9%)  split  6  over-merged  3  false+  1  boundary ±2f  21  mean err 8.44 f
+    all:35/48(split 6)  flash:1/6(split 4)  short:0/4  yellow:4/6  gray:0/4  two-line:4/4(split 1)  lookalike:4/4
+SubScan (new)  1721 µs/frame       found  47/48 (97.9%)  split  1  over-merged  0  false+  1  boundary ±2f  47  mean err 0.19 f
+    all:47/48(split 1)  flash:6/6  short:4/4  yellow:6/6  gray:3/4(split 1)  two-line:4/4  lookalike:4/4
+SubScan, split repair OFF          found  45/48 (93.8%)  split  5  over-merged  0  false+  1  boundary ±2f  43  mean err 0.99 f
+    all:45/48(split 5)  flash:4/6(split 4)  short:4/4  yellow:6/6  gray:3/4(split 1)  two-line:4/4  lookalike:4/4
+=== Arabic video ar2: 3733 frames, 56 subtitles, grid 640x108
+previous segmenter (v2.0)          found  36/56 (64.3%)  split 12  over-merged  6  false+  3  boundary ±2f  19  mean err 17.81 f
+    all:36/56(split 12)  flash:0/7(split 6)  short:0/4  yellow:4/6  gray:2/6  two-line:4/4(split 2)  lookalike:4/4
+SubScan (new)  1470 µs/frame       found  53/56 (94.6%)  split  2  over-merged  2  false+  1  boundary ±2f  49  mean err 3.40 f
+    all:53/56(split 2)  flash:7/7  short:3/4  yellow:6/6  gray:6/6  two-line:4/4  lookalike:4/4
+SubScan, split repair OFF          found  47/56 (83.9%)  split  8  over-merged  2  false+  1  boundary ±2f  43  mean err 3.77 f
+    all:47/56(split 8)  flash:1/7(split 6)  short:3/4  yellow:6/6  gray:6/6  two-line:4/4  lookalike:4/4

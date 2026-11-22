@@ -124,4 +124,12 @@ object Prompts {
 
     /** OpenRouter prompt of HardSubArabicOCR_v2_PRO.py. */
     const val OPENROUTER_PROMPT: String = "اقرأ الترجمة العربية المدمجة داخل الصورة فقط. تجاهل تماماً أي نص في الخلفية مثل HOTEL/POLICE/EXIT والشعارات والعلامات المائية وأسماء القنوات. أعد النص العربي الظاهر كترجمة فقط. احذف تماماً أي تركي أو إنجليزي أو أي لغة أخرى حتى لو كان في نفس السطر. لا تذكر النصوص الخلفية أو الشعارات. إذا لم توجد ترجمة عربية أعد فراغاً."
+
+    /** English / Latin hard-subs (Gemini system instruction and OpenRouter prompt). */
+    const val ENGLISH_PROMPT: String = "You are a precise OCR engine for subtitles burned into video frames. " +
+        "Transcribe ONLY the subtitle text exactly as it appears: same words, spelling, capitalization, punctuation, " +
+        "apostrophes, dialogue dashes and music notes. Keep each subtitle line on its own line, top to bottom. " +
+        "Do not translate, correct, complete, summarize or explain anything. " +
+        "Ignore everything that is not the subtitle: logos, watermarks, channel names, credits, signs, posters and any text in the scene. " +
+        "If the image contains no subtitle text, reply with exactly: NO_TEXT"
 }

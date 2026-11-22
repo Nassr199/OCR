@@ -22,7 +22,10 @@ enum class CleanMode {
     PRECISE,
 
     /** v2.6: clean_ocr_output() + conservative_clean_diacritics() (fragmented words, over-marked words). */
-    V26
+    V26,
+
+    /** English / Latin subtitles: Arabic filters would delete every line. */
+    ENGLISH
 }
 
 object Cleaner {
@@ -32,7 +35,9 @@ object Cleaner {
             CleanMode.PRECISE -> ArabicText.cleanOcrOutput(raw).let { if (ArabicText.isSymbolsOnly(it)) "" else it }
             CleanMode.V26 -> ArabicV26.conservativeCleanDiacritics(ArabicText.cleanOcrOutput(raw))
                 .let { if (it.isEmpty() || ArabicText.isSymbolsOnly(it)) "" else it }
+            CleanMode.ENGLISH -> EnglishText.clean(raw)
         }
+        if (mode == CleanMode.ENGLISH) return t
         if (t.isEmpty()) return ""
         return if (stripDiacritics && mode != CleanMode.PRO) ArabicText.pyStrip(ArabicText.stripDiacritics(t)) else t
     }
@@ -208,7 +213,8 @@ class OcrPipeline(
         if (stabilize && cleanMode != CleanMode.PRO) items = ArabicV26.stabilizeConsecutiveDiacritics(items)
         return when (mode) {
             MergeMode.PRO -> Merge.mergePro(items, 350, normalize = cleanMode == CleanMode.PRO)
-            MergeMode.STRICT -> Merge.mergeStrict(items)
+            MergeMode.STRICT -> Merge.mergeSplits(items)
+            MergeMode.NONE -> Merge.noMerge(items)
         }
     }
 }

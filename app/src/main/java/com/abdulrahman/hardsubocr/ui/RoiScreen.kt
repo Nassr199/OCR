@@ -209,14 +209,14 @@ fun RoiScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Text("${vm.maskCount} px", style = MaterialTheme.typography.labelMedium)
                 }
                 SwitchRow("إظهار القناع الأحمر", null, vm.showMask) { vm.showMask = it }
-                SliderRow("حد سطوع النص", "${bright.roundToInt()}", bright, 100f..250f, 0,
+                SliderRow("حد سطوع النص", "${bright.roundToInt()}", bright, 90f..240f, 0,
                     onChange = { bright = it }, onDone = { vm.setMaskParams(bright = bright.roundToInt()) })
                 SliderRow("تباين الحدود", "${contrast.roundToInt()}", contrast, 20f..150f, 0,
                     onChange = { contrast = it }, onDone = { vm.setMaskParams(contrast = contrast.roundToInt()) })
                 SwitchRow("نص داكن على خلفية فاتحة", "نادر — فعّله فقط إن كانت الترجمة سوداء", vm.darkText) {
                     vm.setMaskParams(dark = it)
                 }
-                Hint("انقل الشريط إلى لحظة فيها ترجمة: يجب أن تغطي البكسلات الحمراء حروف الترجمة فقط. الافتراضي (175 / 60) مناسب للترجمة البيضاء أو الصفراء ذات الحدود السوداء.")
+                Hint("انقل الشريط إلى لحظة فيها ترجمة: يجب أن تغطي البكسلات الحمراء حروف الترجمة فقط. الافتراضي (150 / 60) مناسب للترجمة البيضاء والصفراء والرمادية ذات الحدود أو الظل. لا يلزم أن تكون كل الحروف حمراء — الأهم ألا تكون الخلفية حمراء.")
             }
             Spacer(Modifier.height(16.dp))
         }

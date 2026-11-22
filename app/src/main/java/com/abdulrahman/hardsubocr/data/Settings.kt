@@ -7,12 +7,18 @@ import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.MergeMode
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
+import com.abdulrahman.hardsubocr.core.ScanParams
+import com.abdulrahman.hardsubocr.core.SubLang
+import com.abdulrahman.hardsubocr.core.SubStyle
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 
 enum class SourceMode { IMAGE, FOLDER, MULTI, VIDEO }
 
 /** AUTO = the behaviour of the Windows program that originally used this engine. */
-enum class Choice { AUTO, PRO, STRICT_OR_PRECISE }
+enum class Choice { AUTO, PRO, STRICT_OR_PRECISE, NONE }
+
+/** Video: only save the subtitle images (VideoSubFinder-style), or save them and read them too. */
+enum class VideoMode { FRAMES_ONLY, FRAMES_AND_TEXT }
 
 /** Text cleaning override (names kept compatible with v1.0 settings). */
 enum class CleanChoice { AUTO, PRO, STRICT_OR_PRECISE, V26 }
@@ -176,33 +182,55 @@ class Settings(context: Context) {
             putFloat("roi_l", v.left); putFloat("roi_t", v.top); putFloat("roi_r", v.right); putFloat("roi_b", v.bottom)
         }
 
+    var subLang: SubLang
+        get() = enumOf("sub_lang", SubLang.ARABIC)
+        set(v) = put("sub_lang", v.name)
+
+    // v2.1: new detector → new keys so the old 175 / 0.32 defaults are not carried over
     var brightThreshold: Int
-        get() = sp.getInt("v_bright", 175)
-        set(v) = putInt("v_bright", v)
+        get() = sp.getInt("v_bright2", 150)
+        set(v) = putInt("v_bright2", v)
 
     var contrastDelta: Int
-        get() = sp.getInt("v_contrast", 60)
-        set(v) = putInt("v_contrast", v)
+        get() = sp.getInt("v_contrast2", 60)
+        set(v) = putInt("v_contrast2", v)
 
     var darkText: Boolean
         get() = sp.getBoolean("v_dark", false)
         set(v) = putBool("v_dark", v)
 
-    var changeThreshold: Float
-        get() = sp.getFloat("v_change", 0.32f)
-        set(v) = putFloat("v_change", v)
+    val subStyle: SubStyle get() = if (darkText) SubStyle.DARK else SubStyle.LIGHT
 
     var analyzeEvery: Int
         get() = sp.getInt("v_every", 1)
         set(v) = putInt("v_every", v)
 
     var minDurationMs: Int
-        get() = sp.getInt("v_min_ms", 200)
-        set(v) = putInt("v_min_ms", v)
+        get() = sp.getInt("v_min_ms2", 160)
+        set(v) = putInt("v_min_ms2", v)
 
-    var exportFrames: Boolean
-        get() = sp.getBoolean("v_export", false)
-        set(v) = putBool("v_export", v)
+    var videoMode: VideoMode
+        get() = enumOf("v_mode", VideoMode.FRAMES_AND_TEXT)
+        set(v) = put("v_mode", v.name)
+
+    /** Re-join one line that was cut into two pieces (flash, scene cut, false change). */
+    var repairSplits: Boolean
+        get() = sp.getBoolean("v_repair", true)
+        set(v) = putBool("v_repair", v)
+
+    /** Background removal by combining several frames of the same subtitle. */
+    var composite: Boolean
+        get() = sp.getBoolean("v_composite", true)
+        set(v) = putBool("v_composite", v)
+
+    /** Also save black-on-white images (VideoSubFinder TXTImages). */
+    var saveClean: Boolean
+        get() = sp.getBoolean("v_clean", false)
+        set(v) = putBool("v_clean", v)
+
+    fun scanParams(): ScanParams = ScanParams.preset(
+        subLang, subStyle, brightThreshold, contrastDelta, repairSplits, composite, minDurationMs.toLong()
+    )
 
     // ---------------------------------------------------------------- derived
     fun profileFor(kind: EngineKind): AiProfile? = when (kind) {
@@ -211,7 +239,7 @@ class Settings(context: Context) {
         EngineKind.LENS -> null
     }
 
-    fun cleanModeFor(kind: EngineKind): CleanMode = when (cleanChoice) {
+    fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH else when (cleanChoice) {
         CleanChoice.PRO -> CleanMode.PRO
         CleanChoice.STRICT_OR_PRECISE -> CleanMode.PRECISE
         CleanChoice.V26 -> CleanMode.V26
@@ -221,6 +249,7 @@ class Settings(context: Context) {
     fun mergeModeFor(kind: EngineKind): MergeMode = when (mergeChoice) {
         Choice.PRO -> MergeMode.PRO
         Choice.STRICT_OR_PRECISE -> MergeMode.STRICT
+        Choice.NONE -> MergeMode.NONE
         Choice.AUTO -> profileFor(kind)?.merge ?: MergeMode.PRO
     }
 
@@ -230,7 +259,7 @@ class Settings(context: Context) {
         EnhanceChoice.AUTO -> profileFor(kind)?.enhanceImages ?: false
     }
 
-    fun stabilizeFor(kind: EngineKind): Boolean = cleanModeFor(kind) != CleanMode.PRO &&
+    fun stabilizeFor(kind: EngineKind): Boolean = subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
         ((profileFor(kind)?.stabilize ?: false) || cleanChoice == CleanChoice.V26)
 
     fun workersFor(kind: EngineKind): Int = if (kind == EngineKind.LENS) workersLens else workersAi

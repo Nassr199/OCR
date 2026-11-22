@@ -175,4 +175,24 @@ object Saf {
         ) ?: throw FileNotFoundException("تعذر إنشاء المجلد $name")
         return FolderRef(parent.treeUri, DocumentsContract.getDocumentId(uri), name)
     }
+
+    /**
+     * Empty sub folder for a new export (like VideoSubFinder's "clear folders" before a run):
+     * an existing one with the same name is deleted first, so re-running never mixes old images.
+     */
+    fun freshSubFolder(context: Context, parent: FolderRef, name: String): FolderRef {
+        listChildren(context, parent).firstOrNull { it.isDir && it.name == name }?.let {
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, it.uri) }
+        }
+        return subFolder(context, parent, name)
+    }
+
+    /** Creates a new file without listing the folder first (fast path for hundreds of exported images). */
+    fun createFile(context: Context, folder: FolderRef, name: String, mime: String, data: ByteArray): Uri {
+        val cr = context.contentResolver
+        val created = DocumentsContract.createDocument(cr, folder.documentUri, mime, name)
+            ?: throw FileNotFoundException("تعذر إنشاء $name")
+        if (!writeTo(cr, created, data)) throw FileNotFoundException("تعذر الكتابة في $name")
+        return created
+    }
 }

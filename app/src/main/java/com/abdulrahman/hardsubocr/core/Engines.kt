@@ -109,11 +109,14 @@ class GeminiEngine(
     model: String,
     thinking: ThinkingLevel = ThinkingLevel.LOW,
     private val profile: AiProfile = AiProfile.V26,
-    highResolution: Boolean = true
+    highResolution: Boolean = true,
+    private val lang: SubLang = SubLang.ARABIC
 ) : OcrEngine {
     val model: String = model.trim().removePrefix("models/")
     override val kind = EngineKind.GEMINI
-    override val cacheId = "gemini:${this.model}:${profile.id}:${if (highResolution) "hi" else "def"}"
+    override val cacheId = "gemini:${this.model}:${profile.id}:${if (highResolution) "hi" else "def"}" +
+        (if (lang == SubLang.ARABIC) "" else ":${lang.code}")
+    private val systemPrompt = if (lang == SubLang.ENGLISH) Prompts.ENGLISH_PROMPT else profile.prompt
 
     /** Lowered automatically when a model rejects it (e.g. Gemini 4 / 3.8 have no "minimal"). */
     @Volatile
@@ -131,7 +134,7 @@ class GeminiEngine(
 
     fun buildBody(image: PreparedImage, thinking: String?, high: Boolean): String = buildJsonObject {
         putJsonObject("systemInstruction") {
-            putJsonArray("parts") { addJsonObject { put("text", profile.prompt) } }
+            putJsonArray("parts") { addJsonObject { put("text", systemPrompt) } }
         }
         putJsonArray("contents") {
             addJsonObject {
@@ -284,12 +287,13 @@ class OpenRouterEngine(
     private val http: HttpTransport,
     private val apiKey: String,
     model: String,
-    private val profile: AiProfile = AiProfile.PRO
+    private val profile: AiProfile = AiProfile.PRO,
+    private val lang: SubLang = SubLang.ARABIC
 ) : OcrEngine {
-    private val prompt: String = profile.prompt
+    private val prompt: String = if (lang == SubLang.ENGLISH) Prompts.ENGLISH_PROMPT else profile.prompt
     val model: String = model.trim().ifBlank { DEFAULT_MODEL }
     override val kind = EngineKind.OPENROUTER
-    override val cacheId = "openrouter:${this.model}:${profile.id}"
+    override val cacheId = "openrouter:${this.model}:${profile.id}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}")
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل OpenRouter API Key أولاً")

@@ -55,12 +55,12 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var crlf by remember { mutableStateOf(s.crlf) }
     var overwrite by remember { mutableStateOf(s.overwrite) }
     var resume by remember { mutableStateOf(s.resume) }
-    var lang by remember { mutableStateOf(s.lensLanguage) }
     var region by remember { mutableStateOf(s.lensRegion) }
     var every by remember { mutableIntStateOf(s.analyzeEvery) }
     var minMs by remember { mutableIntStateOf(s.minDurationMs) }
-    var change by remember { mutableFloatStateOf(s.changeThreshold) }
-    var export by remember { mutableStateOf(s.exportFrames) }
+    var repair by remember { mutableStateOf(s.repairSplits) }
+    var composite by remember { mutableStateOf(s.composite) }
+    var saveClean by remember { mutableStateOf(s.saveClean) }
     val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
 
     Scaffold(
@@ -96,31 +96,32 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             SectionCard("تنظيف النص", "🧹") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "Lens ← PRO، وGemini/OpenRouter ← حسب الأسلوب المختار"),
+                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "Lens ← سريع، وGemini/OpenRouter ← حسب الأسلوب المختار. (الإنجليزية لها تنظيف خاص تلقائيًا)"),
                         ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل المشوّه فقط ويُبقي الصحيح، ويصلح الكلمات المتقطعة"),
-                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "clean_ocr_output كما في v2.1"),
-                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "arabic_filter كما في نسخة PRO")
+                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف الردود والرموز الزائدة فقط ويُبقي الأسطر والتشكيل كما قرأها الموديل"),
+                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل — مناسب لـ Lens")
                     ),
                     clean
                 ) { clean = it; s.cleanChoice = it }
-                SwitchRow("إزالة التشكيل نهائيًا", "يحذف كل الحركات من النص الناتج (في الوضع الدقيق وv2.6)", strip) { strip = it; s.stripDiacritics = it }
+                SwitchRow("إزالة التشكيل نهائيًا", "يحذف كل الحركات من النص الناتج", strip) { strip = it; s.stripDiacritics = it }
             }
 
             SectionCard("دمج المقاطع", "🔗") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens ← PRO، والذكاء الاصطناعي ← حسب الأسلوب"),
-                        ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "merge_entries من نسخة PRO"),
-                        ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "merge_ocr_entries من v2.1 بقواعد 2A–2E")
+                        ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens ← دمج التكرار، والذكاء الاصطناعي ← حسب الأسلوب"),
+                        ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "يجمع المقاطع المتقاربة (أقل من 0.35 ث) المتشابهة 90% أو أكثر في ترجمة واحدة"),
+                        ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "يجمع فقط صورتين متلاصقتين (فرق ≤ 10 مللي ث) بنفس النص، مثل 0_01_55_280__0_01_56_879 و0_01_56_880__… — ولا يدمج نصين مختلفين أبدًا"),
+                        ChoiceItem(Choice.NONE, vm.mergeLabel(Choice.NONE), "كل صورة = ترجمة مستقلة بتوقيتها كما هو، حتى لو تكرر النص (مشهدان مختلفان)")
                     ),
                     merge
                 ) { merge = it; s.mergeChoice = it }
             }
 
-            SectionCard("تحسين الصور (v2.6)", "🖼") {
+            SectionCard("تحسين الصور", "🖼") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب v2.6، ومعطّل مع Lens وPRO"),
+                        ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «ذكي + تشكيل»، ومعطّل مع Lens و«سريع»"),
                         ChoiceItem(EnhanceChoice.ON, vm.enhanceLabel(EnhanceChoice.ON), null),
                         ChoiceItem(EnhanceChoice.OFF, vm.enhanceLabel(EnhanceChoice.OFF), null)
                     ),
@@ -145,10 +146,9 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
             SectionCard("Google Lens", "🔎") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(lang, { lang = it; s.lensLanguage = it }, label = { Text("اللغة") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(region, { region = it; s.lensRegion = it }, label = { Text("المنطقة") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
-                Hint("القيم الافتراضية: ar و US (نفس chrome-lens-py).")
+                Hint("المنطقة الافتراضية US. لغة Lens تُضبط تلقائيًا من «لغة الترجمة» في الشاشة الرئيسية.")
             }
 
             SectionCard("الفيديو", "🎬") {
@@ -157,15 +157,27 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Hint("كل إطار = دقة توقيت كاملة. 2 أو أكثر = أسرع على الأجهزة الضعيفة.")
                 SliderRow("أقل مدة للترجمة", "$minMs مللي ث", minMs.toFloat(), 80f..1000f, 0,
                     onChange = { minMs = (it / 10).roundToInt() * 10 }, onDone = { s.minDurationMs = minMs })
-                SliderRow("حساسية تغيّر الترجمة", String.format(Locale.US, "%.2f", change), change, 0.15f..0.60f, 0,
-                    onChange = { change = it }, onDone = { s.changeThreshold = change })
-                Hint("أقل = يكتشف تغييرات أصغر (قد يقسم الترجمة الواحدة، والدمج يعالج ذلك). أكبر = أكثر تحفظًا.")
-                SwitchRow("حفظ صور الترجمات المقتطعة", "مجلد name_frames بأسماء VideoSubFinder يمكن فتحه في نسخة ويندوز", export) { export = it; s.exportFrames = it }
+                Hint("الترجمات الأقصر من هذا تُعتبر ومضات وتُهمل. «لا» و«نعم» تظهر عادة 300 مللي ث أو أكثر.")
+                SwitchRow(
+                    "إصلاح انقسام السطر الواحد",
+                    "إذا انقسمت نفس الترجمة إلى صورتين بسبب ومضة أو تغيّر المشهد خلفها تُعاد صورة واحدة. أطفئه إن أردت كل جزء منفصلًا.",
+                    repair
+                ) { repair = it; s.repairSplits = it }
+                SwitchRow(
+                    "تنظيف الخلفية بدمج عدة إطارات",
+                    "الحروف ثابتة والخلفية تتحرك: دمج حتى 5 إطارات من نفس الترجمة يمحو الخلفية ويُبقي الحروف — قراءة أدق.",
+                    composite
+                ) { composite = it; s.composite = it }
+                SwitchRow(
+                    "حفظ نسخة منظفة أبيض/أسود",
+                    "مجلد name_TXTImages بجانب name_RGBImages (مثل VideoSubFinder).",
+                    saveClean
+                ) { saveClean = it; s.saveClean = it }
             }
 
             SectionCard("حول", "ℹ️") {
                 Text("HardSub Arabic OCR — Android ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
-                Hint("تحويل أصلي (Kotlin + Jetpack Compose) لنسخة ويندوز v2 PRO وخط Gemini v2.1 وسكربت v2.6، مع منطق التنظيف والدمج والتشابه ومعالجة الصور مطابق للنسخ الأصلية. يدعم Gemini 4.")
+                Hint("تطبيق أندرويد أصلي (Kotlin + Jetpack Compose) لاستخراج الترجمة المدمجة: محرك فيديو عربي أولًا أقوى من VideoSubFinder، وقراءة بـ Google Lens أو Gemini 4 أو OpenRouter.")
                 Spacer(Modifier.height(4.dp))
                 Text("المفاتيح مشفّرة بـ Android Keystore ولا تُرسل إلا للخدمة المختارة.", style = MaterialTheme.typography.bodySmall)
             }

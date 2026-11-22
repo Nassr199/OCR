@@ -25,6 +25,10 @@ import com.abdulrahman.hardsubocr.img.AndroidImagePreparer
 import com.abdulrahman.hardsubocr.net.Net
 import com.abdulrahman.hardsubocr.video.VideoProbe
 import com.abdulrahman.hardsubocr.video.VideoScanner
+import com.abdulrahman.hardsubocr.core.FrameComposite
+import com.abdulrahman.hardsubocr.data.VideoMode
+import android.graphics.Bitmap
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -64,12 +68,12 @@ class JobRunner(
     }
 
     private fun buildEngine(): OcrEngine = when (req.engine) {
-        EngineKind.LENS -> LensEngine(Net.transport, req.lensLanguage, req.lensRegion)
+        EngineKind.LENS -> LensEngine(Net.transport, req.lang.code, req.lensRegion)
         EngineKind.GEMINI -> GeminiEngine(
-            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh
+            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh, req.lang
         )
         EngineKind.OPENROUTER -> OpenRouterEngine(
-            Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO
+            Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO, req.lang
         )
     }
 
@@ -184,7 +188,12 @@ class JobRunner(
                 publish(
                     JobState.Done(
                         outputs, stopped = false, elapsedSec = (System.currentTimeMillis() - startedAt) / 1000.0,
-                        summary = if (units.size > 1) "تم إنشاء $n ملفات SRT" else "تم إنشاء $totalEntries مقطع ترجمة"
+                        summary = when {
+                            outputs.any { it.imagesSaved > 0 } && outputs.all { it.entries.isEmpty() } ->
+                                "تم حفظ ${outputs.sumOf { it.imagesSaved }} صورة ترجمة"
+                            units.size > 1 -> "تم إنشاء $n ملفات SRT"
+                            else -> "تم إنشاء $totalEntries مقطع ترجمة"
+                        }
                     )
                 )
             } catch (e: CancellationException) {
@@ -307,64 +316,113 @@ class JobRunner(
         phase = "تحليل الفيديو"
         unitTitle = u.name
         val base = unitName(u)
+        val imagesOnly = req.videoMode == VideoMode.FRAMES_ONLY
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, u.uri) }
         val frameDir = File(context.cacheDir, "video-frames/${System.currentTimeMillis()}").apply { mkdirs() }
-        val exportFolder = if (req.exportFrames && req.output != null) withContext(Dispatchers.IO) {
-            runCatching { Saf.subFolder(context, req.output, "${base}_frames") }.getOrNull()
+        // Images are saved first, VideoSubFinder style: <name>_RGBImages (+ <name>_TXTImages).
+        val rgbFolder = if (req.output != null) withContext(Dispatchers.IO) {
+            runCatching { Saf.freshSubFolder(context, req.output, "${base}_RGBImages") }.getOrNull()
         } else null
+        val txtFolder = if (req.output != null && req.saveClean) withContext(Dispatchers.IO) {
+            runCatching { Saf.freshSubFolder(context, req.output, "${base}_TXTImages") }.getOrNull()
+        } else null
+        if (imagesOnly && rgbFolder == null) throw IllegalStateException("اختر مجلد الحفظ لحفظ صور الترجمة")
         val roi = u.roi.normalized()
-        val sourceId = "video|${u.uri}|${roi}|${req.segmenter}|${req.analyzeEvery}"
-        val cache = if (req.resume) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
+        val sourceId = "video2|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}"
+        val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
+        var saved = 0
+        var saveErrors = 0
         try {
             val p = newPipeline(engine, cache, videoPreparer)
             beginUnit(u.name, 0, p)
             decodeFraction = 0f
             val ch = Channel<OcrItem>(Channel.UNLIMITED)
             coroutineScope {
-                val ocr = launch { p.run(ch) }
+                val ocr = if (imagesOnly) null else launch { p.run(ch) }
                 try {
                     withContext(Dispatchers.Default) {
                         val scanner = VideoScanner(
-                            context, u.uri, info, roi, req.segmenter, req.analyzeEvery,
-                            onProgress = { f, frames ->
+                            context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean,
+                            onProgress = { f, frames, subs ->
                                 decodeFraction = f
-                                phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار"
+                                phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
                             },
-                            onSegment = { seg, crop ->
+                            onSegment = { seg, img ->
                                 val startMs = seg.startUs / 1000
                                 val endMs = seg.endUs / 1000
-                                val name = Timestamps.vsfName(startMs, endMs)
-                                // Lens only accepts <= 1500 px: scale once here instead of decode+re-encode later.
-                                val scaled = AndroidImagePreparer.scaleToFit(crop, maxCrop)
-                                val png = try {
-                                    AndroidImagePreparer.toPng(scaled)
+                                val name = FrameComposite.vsfFileName(
+                                    startMs, endMs, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH, "jpeg"
+                                )
+                                val bmp = Bitmap.createBitmap(img.argb, img.width, img.height, Bitmap.Config.ARGB_8888)
+                                val jpeg = try {
+                                    ByteArrayOutputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it); it.toByteArray() }
                                 } finally {
-                                    if (scaled !== crop) scaled.recycle()
+                                    bmp.recycle()
                                 }
-                                val file = File(frameDir, name)
-                                file.writeBytes(png)
-                                if (exportFolder != null) {
-                                    runCatching { Saf.writeFile(context, exportFolder, name, "image/png", png, true) }
+                                if (rgbFolder != null) {
+                                    if (runCatching { Saf.createFile(context, rgbFolder, name, "image/jpeg", jpeg) }.isSuccess) saved++
+                                    else saveErrors++
+                                }
+                                if (txtFolder != null && img.clean != null) {
+                                    val cb = Bitmap.createBitmap(img.clean, img.width, img.height, Bitmap.Config.ARGB_8888)
+                                    val png = try {
+                                        AndroidImagePreparer.toPng(cb)
+                                    } finally {
+                                        cb.recycle()
+                                    }
+                                    runCatching { Saf.createFile(context, txtFolder, name.substringBeforeLast('.') + ".png", "image/png", png) }
                                 }
                                 discoveredSegments.incrementAndGet()
-                                ch.trySend(OcrItem("$startMs-$endMs", name, startMs, endMs) { file.readBytes() })
+                                if (!imagesOnly) {
+                                    // OCR input: Lens only accepts <= 1500 px
+                                    val ocrBytes = if (img.width > maxCrop) {
+                                        val b = Bitmap.createBitmap(img.argb, img.width, img.height, Bitmap.Config.ARGB_8888)
+                                        val sc = AndroidImagePreparer.scaleToFit(b, maxCrop)
+                                        try {
+                                            ByteArrayOutputStream().use { sc.compress(Bitmap.CompressFormat.JPEG, 95, it); it.toByteArray() }
+                                        } finally {
+                                            if (sc !== b) sc.recycle(); b.recycle()
+                                        }
+                                    } else jpeg
+                                    val file = File(frameDir, name)
+                                    file.writeBytes(ocrBytes)
+                                    ch.trySend(OcrItem("$startMs-$endMs", name, startMs, maxOf(startMs, endMs - 1)) { file.readBytes() })
+                                } else {
+                                    addLog("🖼 ${Timestamps.srt(startMs)} → ${Timestamps.srt(endMs)}  (${img.framesUsed} إطار)")
+                                }
                             }
                         )
                         val r = scanner.run(isActive = { isActive })
-                        addLog("🎬 تم تحليل ${r.analysed} إطار — ${r.segments} مقطع ترجمة")
+                        addLog("🎬 تم تحليل ${r.analysed} إطار — ${r.segments} ترجمة")
                     }
                 } finally {
                     ch.close()
                 }
                 decodeFraction = 1f
-                phase = "قراءة النصوص"
-                ocr.join()
+                if (ocr != null) {
+                    phase = "قراءة النصوص"
+                    ocr.join()
+                }
+            }
+            val where = rgbFolder?.let { "${req.output?.name}/${it.name}" }
+            if (imagesOnly) {
+                return JobOutput(
+                    rgbFolder!!.name, null, emptyList(), where, req.output,
+                    info = "تم حفظ $saved صورة ترجمة في: $where" +
+                        (if (txtFolder != null) "\nونسخ منظفة في: ${req.output?.name}/${txtFolder.name}" else "") +
+                        (if (saveErrors > 0) "\nتعذر حفظ $saveErrors صورة" else "") +
+                        "\nلاستخراج النص لاحقًا: اختر «مجلد صور» وحدد هذا المجلد.",
+                    imagesSaved = saved
+                )
             }
             phase = "دمج وحفظ"
             val entries = p.mergedResult(req.mergeMode, req.stabilize)
             val (uri, savedIn) = withContext(Dispatchers.IO) { save(req.output, base, entries) }
-            return JobOutput(base, uri, entries, savedIn, req.output, p.failures.toList())
+            return JobOutput(
+                base, uri, entries, savedIn, req.output, p.failures.toList(),
+                info = where?.let { "صور الترجمة محفوظة في: $it ($saved صورة)" }
+            )
         } finally {
             cache?.close()
             frameDir.deleteRecursively()

@@ -89,6 +89,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.abdulrahman.hardsubocr.core.AiProfile
+import com.abdulrahman.hardsubocr.core.SubLang
+import com.abdulrahman.hardsubocr.data.VideoMode
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.core.Timestamps
@@ -313,7 +315,11 @@ private fun ActionBar(vm: MainViewModel, running: Boolean, onStart: () -> Unit, 
                 Button(onClick = onStart, modifier = Modifier.height(54.dp), shape = RoundedCornerShape(18.dp)) {
                     Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
                     Text(
-                        if (vm.sourceMode == SourceMode.MULTI) "استخراج الكل" else "استخراج",
+                        when {
+                            vm.sourceMode == SourceMode.MULTI -> "استخراج الكل"
+                            vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY -> "حفظ الصور"
+                            else -> "استخراج"
+                        },
                         fontSize = 16.sp, fontWeight = FontWeight.Bold
                     )
                 }
@@ -381,18 +387,18 @@ private fun EngineCard(vm: MainViewModel, enabled: Boolean) {
 @Composable
 private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean, lens: Boolean) {
     SwitchRow(
-        "تحسين الصور قبل القراءة (v2.6)",
+        "تحسين الصور قبل القراءة",
         if (lens) "قصّ منطقة الترجمة + تكبير + تباين وحدّة. جرّبه إن كانت النتائج ضعيفة."
-        else "قصّ منطقة الترجمة + تكبير Lanczos + تباين وحدّة — مطابق لسكربت v2.6 بكسلًا بكسل.",
+        else "قصّ منطقة الترجمة + تكبير Lanczos + تباين وحدّة (مطابق لـ Pillow بكسلًا بكسل).",
         vm.enhanceEffective(),
         enabled
     ) { vm.setEnhance(it) }
 }
 
 private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.V26 -> "موجّه v2.6 + تحسين الصور + حارس التشكيل + تثبيت التشكيل بين الإطارات المتتالية. الأفضل مع Gemini 4."
-    AiProfile.V21 -> "موجّه النظام الكامل من v2.1 مع تنظيف دقيق يحفظ الأسطر والتشكيل، ودمج صارم."
-    AiProfile.PRO -> "موجّه PRO المختصر: سطر واحد بدون تشكيل، ودمج PRO. الأسرع والأرخص."
+    AiProfile.V26 -> "تحسين الصور + حماية التشكيل + تثبيت التشكيل بين الإطارات المتتالية. الأفضل مع Gemini 4."
+    AiProfile.V21 -> "تعليمات مفصّلة جدًا وتنظيف حرفي يحفظ الأسطر والتشكيل كما هي، ودمج الانقسام فقط."
+    AiProfile.PRO -> "تعليمات مختصرة: سطر واحد بدون تشكيل، ودمج التكرار الذكي. الأسرع والأرخص."
 }
 
 private val thinkingOptions = listOf(
@@ -489,7 +495,7 @@ private fun ApiEngineFields(vm: MainViewModel, enabled: Boolean, gemini: Boolean
     Spacer(Modifier.height(6.dp))
     SectionLabel("الأسلوب")
     Segmented(
-        listOf(AiProfile.V26 to "v2.6 ذكي", AiProfile.V21 to "v2.1 دقيق", AiProfile.PRO to "PRO سريع"),
+        listOf(AiProfile.V26 to "ذكي + تشكيل", AiProfile.V21 to "حرفي دقيق", AiProfile.PRO to "سريع"),
         vm.currentProfile(),
         enabled
     ) { vm.chooseProfile(it) }
@@ -540,6 +546,17 @@ private fun SourceCard(
     onOpenRoi: () -> Unit
 ) {
     SectionCard("المصدر", "🗂") {
+        SectionLabel("لغة الترجمة في الفيديو/الصور")
+        Segmented(
+            listOf(SubLang.ARABIC to "العربية", SubLang.ENGLISH to "English"),
+            vm.subLang,
+            enabled
+        ) { vm.chooseLang(it) }
+        Hint(
+            if (vm.subLang == SubLang.ARABIC) "مضبوط للعربية: الحروف المتصلة، النقاط والتشكيل، ومنع انقسام السطر الواحد."
+            else "English mode: Latin-tuned detection, English OCR prompt and cleaning.",
+            Modifier.padding(top = 4.dp, bottom = 10.dp, start = 4.dp)
+        )
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SelectTile("🖼", "صورة", "صورة واحدة", vm.sourceMode == SourceMode.IMAGE, enabled, Modifier.weight(1f).fillMaxHeight()) {
                 vm.chooseSource(SourceMode.IMAGE)
@@ -622,7 +639,20 @@ private fun SourceCard(
                     ),
                     Modifier.padding(top = 4.dp)
                 )
-                Hint("يُحلَّل الفيديو إطارًا بإطار لاكتشاف ظهور واختفاء كل ترجمة، ثم تُقرأ لقطة واحدة لكل ترجمة — بدون VideoSubFinder.")
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("بعد تحليل الفيديو")
+                Segmented(
+                    listOf(VideoMode.FRAMES_AND_TEXT to "الصور + استخراج النص", VideoMode.FRAMES_ONLY to "حفظ الصور فقط"),
+                    vm.videoMode,
+                    enabled
+                ) { vm.chooseVideoMode(it) }
+                Hint(
+                    if (vm.videoMode == VideoMode.FRAMES_ONLY)
+                        "تُحفظ صورة لكل ترجمة في مجلد name_RGBImages بأسماء VideoSubFinder ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد — لا يحتاج مفتاح API الآن."
+                    else
+                        "تُحفظ صور الترجمات أولًا في name_RGBImages، وتُقرأ بالتوازي أثناء التحليل، ثم يُكتب ملف SRT.",
+                    Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
+                )
             }
         }
     }
@@ -734,14 +764,16 @@ private fun ResultCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        if (o.plainText != null) o.name else "${o.name}.srt", fontWeight = FontWeight.SemiBold,
+                        if (o.plainText != null || o.imagesSaved > 0) o.name else "${o.name}.srt", fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
-                    Text("${o.entries.size} مقطع", style = MaterialTheme.typography.bodySmall)
+                    Text(if (o.imagesSaved > 0 && o.entries.isEmpty()) "${o.imagesSaved} صورة" else "${o.entries.size} مقطع", style = MaterialTheme.typography.bodySmall)
                 }
+                o.info?.let { Hint(it, Modifier.padding(top = 4.dp)) }
                 val info = buildList {
                     if (o.uri != null) add("محفوظ في: ${o.savedIn ?: "الملف المختار"}")
                     else if (o.plainText == null && o.entries.isNotEmpty()) add(if (o.partial) "جزئي — غير محفوظ" else "غير محفوظ")
+                    else if (o.imagesSaved == 0 && o.entries.isEmpty() && o.plainText == null && o.error == null) add("لم تُكتشف أي ترجمة")
                     if (o.failures.isNotEmpty()) add("فشلت ${o.failures.size} صورة")
                     if (o.withoutTimestamp > 0) add("${o.withoutTimestamp} بدون توقيت")
                     o.error?.let { add(it) }

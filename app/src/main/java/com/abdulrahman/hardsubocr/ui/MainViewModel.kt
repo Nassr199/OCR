@@ -14,12 +14,14 @@ import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.LumaGrid
-import com.abdulrahman.hardsubocr.core.MaskParams
+import com.abdulrahman.hardsubocr.core.ScanMask
+import com.abdulrahman.hardsubocr.core.ScanParams
+import com.abdulrahman.hardsubocr.core.SubLang
+import com.abdulrahman.hardsubocr.core.SubStyle
+import com.abdulrahman.hardsubocr.data.VideoMode
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
-import com.abdulrahman.hardsubocr.core.SegmenterParams
 import com.abdulrahman.hardsubocr.core.Srt
 import com.abdulrahman.hardsubocr.core.SubEntry
-import com.abdulrahman.hardsubocr.core.TextMaskOps
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.data.Choice
 import com.abdulrahman.hardsubocr.data.CleanChoice
@@ -123,6 +125,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var contrastDelta by mutableStateOf(s.contrastDelta)
         private set
     var darkText by mutableStateOf(s.darkText)
+        private set
+    var subLang by mutableStateOf(s.subLang)
+        private set
+    var videoMode by mutableStateOf(s.videoMode)
         private set
     private var previewJob: Job? = null
     private var maskJob: Job? = null
@@ -386,6 +392,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun chooseLang(l: SubLang) {
+        subLang = l; s.subLang = l; recomputeMask()
+    }
+
+    fun chooseVideoMode(m: VideoMode) {
+        videoMode = m; s.videoMode = m
+    }
+
     fun setMaskParams(bright: Int = brightThreshold, contrast: Int = contrastDelta, dark: Boolean = darkText) {
         brightThreshold = bright; contrastDelta = contrast; darkText = dark
         s.brightThreshold = bright; s.contrastDelta = contrast; s.darkText = dark
@@ -395,7 +409,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun recomputeMask() {
         val bmp = preview ?: return
         val r = roi.normalized()
-        val params = MaskParams(brightThreshold, contrastDelta, 1, darkText)
+        val params = ScanParams.preset(subLang, if (darkText) SubStyle.DARK else SubStyle.LIGHT, brightThreshold, contrastDelta)
         maskJob?.cancel()
         maskJob = viewModelScope.launch {
             val res = withContext(Dispatchers.Default) { runCatching { maskOf(bmp, r, params) }.getOrNull() }
@@ -406,7 +420,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Same grid + mask as the decoder, computed from the preview frame (luma from RGB, BT.601). */
-    private fun maskOf(bmp: Bitmap, r: RoiRect, params: MaskParams): Pair<Bitmap, Int> {
+    private fun maskOf(bmp: Bitmap, r: RoiRect, params: ScanParams): Pair<Bitmap, Int> {
         val l = (r.left * bmp.width).toInt().coerceIn(0, bmp.width - 2)
         val t = (r.top * bmp.height).toInt().coerceIn(0, bmp.height - 2)
         val rw = ((r.right * bmp.width).toInt() - l).coerceIn(2, bmp.width - l)
@@ -424,7 +438,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val bb = c and 0xFF
             luma[gy * gw + gx] = (((66 * rr + 129 * gg + 25 * bb + 128) shr 8) + 16).coerceIn(0, 255).toByte()
         }
-        val mask = TextMaskOps.compute(LumaGrid(gw, gh, luma), params)
+        val mask = ScanMask.lineFilter(ScanMask.compute(LumaGrid(gw, gh, luma), params), params)
         val out = IntArray(gw * gh)
         for (i in out.indices) if (mask.bits[i]) out[i] = 0xE6FF3B30.toInt()
         return Bitmap.createBitmap(out, gw, gh, Bitmap.Config.ARGB_8888) to mask.count
@@ -432,13 +446,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun textDetected(): Boolean {
         val m = maskOverlay ?: return false
-        return maskCount >= maxOf(16, (0.003 * m.width * m.height).toInt())
+        return maskCount >= maxOf(24, (0.0006 * m.width * m.height).toInt())
     }
 
     // ================================================================== start / stop
     fun canStart(): String? {
         if (JobManager.isRunning) return "يوجد استخراج قيد التشغيل"
-        when (engine) {
+        val imagesOnly = sourceMode == SourceMode.VIDEO && videoMode == VideoMode.FRAMES_ONLY
+        if (!imagesOnly) when (engine) {
             EngineKind.GEMINI -> if (geminiKey.isBlank()) return "أدخل Gemini API Key أولاً"
             EngineKind.OPENROUTER -> if (openRouterKey.isBlank()) return "أدخل OpenRouter API Key أولاً"
             EngineKind.LENS -> Unit
@@ -449,7 +464,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             SourceMode.MULTI -> if (multi.isEmpty()) "أضف مجلدًا واحدًا على الأقل." else null
             SourceMode.VIDEO -> when {
                 video == null -> "اختر فيديو أولاً."
-                output == null -> "اختر مجلد حفظ الترجمات أولاً."
+                output == null -> if (imagesOnly) "اختر مجلد الحفظ أولاً — فيه تُحفظ صور الترجمة." else "اختر مجلد حفظ الترجمات أولاً."
                 else -> null
             }
         }
@@ -489,13 +504,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             resume = s.resume,
             lensLanguage = s.lensLanguage,
             lensRegion = s.lensRegion,
-            segmenter = SegmenterParams(
-                mask = MaskParams(s.brightThreshold, s.contrastDelta, 1, s.darkText),
-                changeThreshold = s.changeThreshold.toDouble(),
-                minDurationMs = s.minDurationMs.toLong()
-            ),
+            scan = s.scanParams(),
             analyzeEvery = s.analyzeEvery,
-            exportFrames = s.exportFrames,
+            videoMode = s.videoMode,
+            saveClean = s.saveClean,
+            lang = s.subLang,
             profile = s.profileFor(e),
             enhance = s.enhanceFor(e),
             mediaHigh = s.mediaHigh,
@@ -585,20 +598,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun mergeLabel(c: Choice): String = when (c) {
-        Choice.AUTO -> "تلقائي حسب الأسلوب"
-        Choice.PRO -> "PRO (فجوة 0.35 ث + تشابه 90%)"
-        Choice.STRICT_OR_PRECISE -> "صارم v2.1 (الإطارات المقسّمة فقط)"
+        Choice.AUTO -> "تلقائي (حسب الأسلوب)"
+        Choice.PRO -> "دمج التكرار الذكي"
+        Choice.STRICT_OR_PRECISE -> "دمج الانقسام فقط (آمن)"
+        Choice.NONE -> "بدون دمج إطلاقًا"
     }
 
     fun cleanLabel(c: CleanChoice): String = when (c) {
-        CleanChoice.AUTO -> "تلقائي حسب الأسلوب"
-        CleanChoice.PRO -> "PRO (سطر واحد، بدون تشكيل)"
-        CleanChoice.STRICT_OR_PRECISE -> "دقيق v2.1 (يحفظ الأسطر والتشكيل)"
-        CleanChoice.V26 -> "v2.6 (حارس التشكيل)"
+        CleanChoice.AUTO -> "تلقائي (حسب الأسلوب)"
+        CleanChoice.V26 -> "حماية التشكيل (موصى به)"
+        CleanChoice.STRICT_OR_PRECISE -> "حرفي متعدد الأسطر"
+        CleanChoice.PRO -> "سريع: سطر واحد بدون تشكيل"
     }
 
     fun enhanceLabel(c: EnhanceChoice): String = when (c) {
-        EnhanceChoice.AUTO -> "تلقائي حسب الأسلوب"
+        EnhanceChoice.AUTO -> "تلقائي (حسب الأسلوب)"
         EnhanceChoice.ON -> "دائمًا"
         EnhanceChoice.OFF -> "أبدًا"
     }
