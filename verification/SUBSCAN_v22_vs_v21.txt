@@ -1,0 +1,10 @@
+v2.1  ar4                          found  27/39 (69.2%)  split 14  over-merged  0  other 12  boundary ±2f  16  mean err 3.57 f
+v2.2  ar4                          found  36/39 (92.3%)  split  9  over-merged  0  other  9  boundary ±2f  20  mean err 4.32 f
+v2.1  ar3                          found  37/39 (94.9%)  split  4  over-merged  0  other  7  boundary ±2f  30  mean err 3.11 f
+v2.2  ar3                          found  37/39 (94.9%)  split  3  over-merged  0  other  3  boundary ±2f  26  mean err 2.93 f
+v2.1  ar                           found  56/56 (100.0%)  split  0  over-merged  0  other  0  boundary ±2f  56  mean err 0.21 f
+v2.2  ar                           found  56/56 (100.0%)  split  0  over-merged  0  other  0  boundary ±2f  55  mean err 0.23 f
+v2.1  en                           found  48/48 (100.0%)  split  0  over-merged  0  other  1  boundary ±2f  48  mean err 0.19 f
+v2.2  en                           found  48/48 (100.0%)  split  1  over-merged  0  other  1  boundary ±2f  47  mean err 0.26 f
+v2.1  ar2                          found  53/56 (94.6%)  split  2  over-merged  2  other  1  boundary ±2f  49  mean err 3.40 f
+v2.2  ar2                          found  53/56 (94.6%)  split  1  over-merged  0  other  0  boundary ±2f  48  mean err 0.32 f

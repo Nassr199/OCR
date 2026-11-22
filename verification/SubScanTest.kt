@@ -5,14 +5,15 @@ import java.io.RandomAccessFile
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 
-class Gt(val start: Int, val end: Int, val text: String, val tag: String)
-class Seg(val s: Int, val e: Int)
+class Gt(val start: Int, val end: Int, val text: String, val tag: String, val box: IntArray? = null)
+class Seg(val s: Int, val e: Int, val box: IntArray? = null, val motion: Double = 0.0)
 
 fun loadTruth(prefix: String): Triple<JsonObject, List<Gt>, IntArray> {
     val j = Json.parseToJsonElement(File("$prefix.json").readText()).jsonObject
     val subs = j["subs"]!!.jsonArray.map {
         val o = it.jsonObject
-        Gt(o["start"]!!.jsonPrimitive.int, o["end"]!!.jsonPrimitive.int, o["text"]!!.jsonPrimitive.content, o["tag"]!!.jsonPrimitive.content)
+        Gt(o["start"]!!.jsonPrimitive.int, o["end"]!!.jsonPrimitive.int, o["text"]!!.jsonPrimitive.content, o["tag"]!!.jsonPrimitive.content,
+            o["box"]?.jsonArray?.map { v -> v.jsonPrimitive.int }?.toIntArray())
     }
     return Triple(j, subs, intArrayOf(j["frames"]!!.jsonPrimitive.int, j["gw"]!!.jsonPrimitive.int, j["gh"]!!.jsonPrimitive.int))
 }
@@ -25,7 +26,7 @@ fun frames(prefix: String, n: Int, gw: Int, gh: Int): Sequence<ByteArray> = sequ
     }
 }
 
-const val FRAME_US = 40_000L
+var FRAME_US = 40_000L
 
 fun runNew(prefix: String, p: ScanParams): Pair<List<Seg>, Long> {
     val (_, _, d) = loadTruth(prefix)
@@ -35,10 +36,10 @@ fun runNew(prefix: String, p: ScanParams): Pair<List<Seg>, Long> {
     var f = 0
     for (b in frames(prefix, d[0], d[1], d[2])) {
         val r = tr.push(f * FRAME_US, LumaGrid(d[1], d[2], b))
-        r.closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt())) }
+        r.closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt(), intArrayOf(it.x0, it.y0, it.x1, it.y1))) }
         f++
     }
-    tr.finish(f * FRAME_US).closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt())) }
+    tr.finish(f * FRAME_US).closed.forEach { out.add(Seg((it.startUs / FRAME_US).toInt(), (it.endUs / FRAME_US).toInt(), intArrayOf(it.x0, it.y0, it.x1, it.y1))) }
     return out.sortedBy { it.s } to (System.nanoTime() - t0) / d[0] / 1000
 }
 
@@ -57,6 +58,20 @@ fun runOld(prefix: String): List<Seg> {
 }
 
 fun ov(a: Int, b: Int, c: Int, d: Int) = maxOf(0, minOf(b, d) - maxOf(a, c))
+/** With ground-truth boxes: does the segment's box lie (mostly) on the subtitle's box? */
+fun onBox(s: Seg, g: Gt): Boolean {
+    val b = g.box ?: return true
+    val sb = s.box ?: return true
+    val ix = ov(sb[0], sb[2] + 1, b[0] - 3, b[2] + 4); val iy = ov(sb[1], sb[3] + 1, b[1] - 3, b[3] + 4)
+    return ix * iy >= 0.5 * (sb[2] - sb[0] + 1) * (sb[3] - sb[1] + 1)
+}
+
+fun motionReport(gts: List<Gt>, segs: List<Seg>) {
+    val sub = segs.filter { s -> gts.any { g -> onBox(s, g) && ov(s.s, s.e, g.start, g.end) > 0 } }.map { it.motion }.sorted()
+    val other = segs.filter { s -> gts.none { g -> onBox(s, g) && ov(s.s, s.e, g.start, g.end) > 0 } }.map { it.motion }.sorted()
+    fun q(l: List<Double>, f: Double) = if (l.isEmpty()) Double.NaN else l[((l.size - 1) * f).toInt()]
+    println(String.format("    motion: subtitles n=%d p50 %.3f p90 %.3f max %.3f | other n=%d p10 %.3f p50 %.3f", sub.size, q(sub, .5), q(sub, .9), q(sub, 1.0), other.size, q(other, .1), q(other, .5)))
+}
 
 fun score(name: String, gts: List<Gt>, segs: List<Seg>, verbose: Boolean = false) {
     var found = 0; var split = 0; var merged = 0; var fp = 0; var exact = 0
@@ -65,8 +80,9 @@ fun score(name: String, gts: List<Gt>, segs: List<Seg>, verbose: Boolean = false
     val problems = ArrayList<String>()
     for (g in gts) {
         val dur = g.end - g.start
-        val hits = segs.filter { ov(it.s, it.e, g.start, g.end) >= minOf(3, dur / 2 + 1) }
-        val best = segs.maxByOrNull { ov(it.s, it.e, g.start, g.end) }
+        val mine = segs.filter { onBox(it, g) }
+        val hits = mine.filter { ov(it.s, it.e, g.start, g.end) >= minOf(3, dur / 2 + 1) }
+        val best = mine.maxByOrNull { ov(it.s, it.e, g.start, g.end) }
         val cov = if (best == null) 0.0 else ov(best.s, best.e, g.start, g.end).toDouble() / dur
         val isFound = cov >= 0.5
         val isSplit = hits.size >= 2
@@ -83,12 +99,12 @@ fun score(name: String, gts: List<Gt>, segs: List<Seg>, verbose: Boolean = false
         }
     }
     for (s in segs) {
-        val covered = gts.filter { ov(s.s, s.e, it.start, it.end) >= 0.5 * (it.end - it.start) }
+        val covered = gts.filter { onBox(s, it) && ov(s.s, s.e, it.start, it.end) >= 0.5 * (it.end - it.start) }
         if (covered.size >= 2) { merged += covered.size - 1; problems.add("MERGED  ${s.s}-${s.e}: " + covered.joinToString(" | ") { it.text }) }
-        val best = gts.maxOfOrNull { ov(s.s, s.e, it.start, it.end) } ?: 0
-        if (best < 0.3 * (s.e - s.s)) { fp++; problems.add("FALSE+  ${s.s}-${s.e}") }
+        val best = gts.filter { onBox(s, it) }.maxOfOrNull { ov(s.s, s.e, it.start, it.end) } ?: 0
+        if (best < 0.3 * (s.e - s.s)) { fp++; problems.add("OTHER   ${s.s}-${s.e} box ${s.box?.joinToString(",")}") }
     }
-    println(String.format("%-34s found %3d/%d (%.1f%%)  split %2d  over-merged %2d  false+ %2d  boundary ±2f %3d  mean err %.2f f",
+    println(String.format("%-34s found %3d/%d (%.1f%%)  split %2d  over-merged %2d  other %2d  boundary ±2f %3d  mean err %.2f f",
         name, found, gts.size, 100.0 * found / gts.size, split, merged, fp, exact, if (found > 0) bErr / found else 0.0))
     println("    " + byTag.entries.joinToString("  ") { "${it.key}:${it.value[0]}/${it.value[1]}" + (if (it.value[2] > 0) "(split ${it.value[2]})" else "") })
     if (verbose) problems.forEach { println("      $it") }
@@ -122,10 +138,11 @@ fun compositeTest(prefix: String, p: ScanParams) {
 
 fun main(args: Array<String>) {
     val verbose = args.contains("-v")
-    for (lang in (args.filter { !it.startsWith("-") }.ifEmpty { listOf("ar", "en") })) {
+    for (lang in (args.filter { !it.startsWith("-") }.ifEmpty { listOf("ar", "en", "ar2", "ar3") })) {
         val prefix = "/home/claude/vt/$lang"
         if (!File("$prefix.json").exists()) continue
-        val (_, gts, d) = loadTruth(prefix)
+        val (jj, gts, d) = loadTruth(prefix)
+        FRAME_US = 1_000_000L / jj["fps"]!!.jsonPrimitive.int
         println("=== ${if (lang.startsWith("ar")) "Arabic" else "English"} video $lang: ${d[0]} frames, ${gts.size} subtitles, grid ${d[1]}x${d[2]}")
         score("previous segmenter (v2.0)", gts, runOld(prefix), verbose && args.contains("-old"))
         val p = ScanParams.preset(if (lang.startsWith("ar")) SubLang.ARABIC else SubLang.ENGLISH)
@@ -133,6 +150,6 @@ fun main(args: Array<String>) {
         score("SubScan (new)  ${us} µs/frame", gts, segs, verbose)
         val (segs2, _) = runNew(prefix, p.copy(repairSplits = false))
         score("SubScan, split repair OFF", gts, segs2, false)
-        if (lang == "ar") compositeTest(prefix, p)
+        if (lang == "ar" || lang == "ar3") compositeTest(prefix, p)
     }
 }

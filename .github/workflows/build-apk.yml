@@ -68,7 +68,7 @@ jobs:
           for f in app/build/outputs/apk/*/*.apk; do
             echo "== $f  ($(stat -c%s "$f") bytes)"
             unzip -lv "$f" | grep -E "classes[0-9]*\.dex"
-            echo "SubScan marker (_RGBImages) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c '_RGBImages')"
+            echo "SubScan marker (subscan worker) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'subscan')"
             echo "English prompt marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'precise OCR engine for subtitles')"
           done
 

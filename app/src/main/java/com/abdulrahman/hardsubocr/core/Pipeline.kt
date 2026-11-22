@@ -38,6 +38,9 @@ object Cleaner {
             CleanMode.ENGLISH -> EnglishText.clean(raw)
         }
         if (mode == CleanMode.ENGLISH) return t
+        // Arabic subtitles: a result without a single Arabic letter is background text
+        // (credits "Gökhan Yılmaz", numerals "2.", channel logos) — never a subtitle line.
+        if (!ArabicText.hasArabic(t)) return ""
         if (t.isEmpty()) return ""
         return if (stripDiacritics && mode != CleanMode.PRO) ArabicText.pyStrip(ArabicText.stripDiacritics(t)) else t
     }

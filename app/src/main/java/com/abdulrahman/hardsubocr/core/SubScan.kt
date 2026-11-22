@@ -73,7 +73,14 @@ data class ScanParams(
     val bridgeMs: Long = 280,
     /** Frames kept per subtitle for the background-cleaning composite (1 = best frame only). */
     val compositeFrames: Int = 5,
-    val captureSpacingMs: Long = 200
+    val captureSpacingMs: Long = 200,
+    /** Temporal stability: a pixel is text only if present in [stableNeed] of the last [stableWindow] frames. */
+    val stableWindow: Int = 5,
+    val stableNeed: Int = 4,
+    /** Letters/words closer than this (grid px, horizontally) form one text object. */
+    val wordGap: Int = 6,
+    /** Mean motion energy above which a text-like object is moving scenery, not a subtitle. */
+    val motionLimit: Double = 0.12
 ) {
     companion object {
         /** Tuned defaults per language. [sensitivity] 0..1 scales the change thresholds (0.5 = default). */
@@ -314,6 +321,31 @@ object ScanMask {
         return false
     }
 
+    /** Dilation by [rx] horizontally and [ry] vertically (joins the letters/words of one line). */
+    fun dilateXY(a: BooleanArray, w: Int, h: Int, rx: Int, ry: Int): BooleanArray {
+        val tmp = BooleanArray(a.size)
+        for (y in 0 until h) {
+            val row = y * w
+            var last = -100000
+            for (x in 0 until w) {
+                if (a[row + x]) last = x
+                if (x - last <= rx) tmp[row + x] = true
+            }
+            last = 100000
+            for (x in w - 1 downTo 0) {
+                if (a[row + x]) last = x
+                if (last - x <= rx) tmp[row + x] = true
+            }
+        }
+        if (ry <= 0) return tmp
+        val out = BooleanArray(a.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!tmp[y * w + x]) continue
+            for (yy in maxOf(0, y - ry)..minOf(h - 1, y + ry)) out[yy * w + x] = true
+        }
+        return out
+    }
+
     /** Square min filter (separable, edges clamped). */
     fun minFilter(v: IntArray, w: Int, h: Int, r: Int): IntArray {
         val tmp = IntArray(v.size)
@@ -450,8 +482,32 @@ object MaskCompare {
 
 // ================================================================================ tracker
 
-/** A finished subtitle: [endUs] is exclusive (first frame without it). [mask] = its stable text mask on the grid. */
-class ScanSegment(val id: Int, val startUs: Long, val endUs: Long, val mask: TextMask)
+/**
+ * A finished subtitle: [endUs] is exclusive (first frame without it). [mask] = its stable text mask on
+ * the grid; [x0]..[y1] = bounding box of that mask in grid pixels (inclusive).
+ */
+class ScanSegment(val id: Int, val startUs: Long, val endUs: Long, val mask: TextMask) {
+    val x0: Int
+    val y0: Int
+    val x1: Int
+    val y1: Int
+
+    init {
+        var a = mask.width
+        var b = mask.height
+        var c = -1
+        var d = -1
+        for (i in mask.bits.indices) if (mask.bits[i]) {
+            val x = i % mask.width
+            val y = i / mask.width
+            if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y
+        }
+        if (c < 0) {
+            a = 0; b = 0; c = mask.width - 1; d = mask.height - 1
+        }
+        x0 = a; y0 = b; x1 = c; y1 = d
+    }
+}
 
 /** BEST: replace the best frame. POOL: add to the composite pool. RESTART: drop best+pool, this frame becomes best. */
 enum class CaptureKind { BEST, POOL, RESTART }
@@ -512,9 +568,118 @@ class SubtitleTracker(private val p: ScanParams) {
     private var nextId = 1
     private var prevRawDil: BooleanArray? = null
     private var firstMismatchUs = -1L
+    private var firstMismatchIdx = -1
+    /** Start of the current run of frames losing the reference (A→B: A vanishes before B is stable). */
+    private var lossRunUs = -1L
+    private var lossRunIdx = -1
     private var prevPtsUs = -1L
     private var gw = 0
     private var gh = 0
+    private var presence = ByteArray(0)
+    private val history = ArrayDeque<BooleanArray>()
+    private val ptsRing = LongArray(64)
+
+    /** Per-pixel motion energy: running average (~25 frames) of "this pixel flipped since the last frame". */
+    private var energy = FloatArray(0)
+    private var lastRaw: BooleanArray? = null
+
+    private fun updateMotion(raw: TextMask) {
+        val n = raw.bits.size
+        if (energy.size != n) energy = FloatArray(n)
+        val prev = lastRaw
+        if (prev != null && prev.size == n) {
+            for (i in 0 until n) energy[i] = energy[i] * 0.96f + if (prev[i] != raw.bits[i]) 0.04f else 0f
+        }
+        lastRaw = raw.bits
+    }
+
+    /**
+     * Removes whole text-like objects whose area keeps changing (teeth while talking, jewellery,
+     * foliage, water): a burned-in subtitle flips its pixels once when it appears and then sits still.
+     */
+    private fun suppressMoving(m: TextMask): TextMask {
+        if (m.count == 0 || p.motionLimit >= 1.0) return m
+        val w = m.width
+        val h = m.height
+        val n = m.bits.size
+        val joined = ScanMask.dilateXY(m.bits, w, h, p.wordGap, 1)
+        val label = IntArray(n)
+        val queue = IntArray(n)
+        val out = m.bits.copyOf()
+        var removed = 0
+        var next = 0
+        for (s0 in 0 until n) {
+            if (!joined[s0] || label[s0] != 0) continue
+            next++
+            var qh = 0
+            var qt = 0
+            queue[qt++] = s0; label[s0] = next
+            var e = 0.0
+            var c = 0
+            while (qh < qt) {
+                val i = queue[qh++]
+                if (m.bits[i]) {
+                    e += energy[i]; c++
+                }
+                val x = i % w
+                val y = i / w
+                for (dy in -1..1) {
+                    val yy = y + dy
+                    if (yy < 0 || yy >= h) continue
+                    for (dx in -1..1) {
+                        val xx = x + dx
+                        if (xx < 0 || xx >= w) continue
+                        val j = yy * w + xx
+                        if (joined[j] && label[j] == 0) {
+                            label[j] = next; queue[qt++] = j
+                        }
+                    }
+                }
+            }
+            if (c > 0 && e / c > p.motionLimit) {
+                for (k in 0 until qt) {
+                    val i = queue[k]
+                    if (out[i]) {
+                        out[i] = false; removed++
+                    }
+                }
+            }
+        }
+        return if (removed == 0) m else TextMask(w, h, out, m.count - removed)
+    }
+
+    private fun stabilize(raw: TextMask): TextMask {
+        val n = raw.bits.size
+        if (presence.size != n) {
+            presence = ByteArray(n); history.clear()
+        }
+        for (i in 0 until n) if (raw.bits[i]) presence[i]++
+        history.addLast(raw.bits)
+        if (history.size > p.stableWindow) {
+            val old = history.removeFirst()
+            for (i in 0 until n) if (old[i]) presence[i]--
+        }
+        val need = minOf(p.stableNeed, history.size)
+        val out = BooleanArray(n)
+        var c = 0
+        for (i in 0 until n) if (raw.bits[i] && presence[i] >= need) {
+            out[i] = true; c++
+        }
+        return TextMask(raw.width, raw.height, out, c)
+    }
+
+    /** Text becomes visible in the stable mask (stableNeed - 1) frames after it really appeared. */
+    private fun backDate(us: Long): Long {
+        val lag = p.stableNeed - 1
+        if (lag <= 0 || frameIdx <= lag) return us
+        // ptsRing holds the pts of analysed frames by index; find the frame `lag` before the one at `us`
+        for (k in 0 until minOf(frameIdx, ptsRing.size - lag)) {
+            val idx = frameIdx - 1 - k // 0-based index of an analysed frame
+            if (ptsRing[idx % ptsRing.size] == us && idx - lag >= 0) return ptsRing[(idx - lag) % ptsRing.size]
+        }
+        return us
+    }
+
     /** Consecutive analysed frames each pixel has been text-like (static background grows old). */
     private var age = IntArray(0)
     private var frameIdx = 0
@@ -543,18 +708,23 @@ class SubtitleTracker(private val p: ScanParams) {
             c.lost >= p.changeExtreme || c.gained >= p.changeExtreme ||
             (c.bandLost >= p.bandThreshold && c.bandGained >= p.bandThreshold)
 
-    fun push(ptsUs: Long, grid: LumaGrid): ScanDecision {
+    fun push(ptsUs: Long, grid: LumaGrid): ScanDecision = pushRaw(ptsUs, ScanMask.compute(grid, p))
+
+    /**
+     * Same as [push] with the per-frame mask already computed ([ScanMask.compute] is independent per
+     * frame, so the video scanner runs it on all CPU cores and feeds the results here in order).
+     */
+    fun pushRaw(ptsUs: Long, raw: TextMask): ScanDecision {
         framesSeen++
-        gw = grid.width; gh = grid.height
+        gw = raw.width; gh = raw.height
         val before = prevPtsUs
         prevPtsUs = ptsUs
 
-        val raw = ScanMask.compute(grid, p)
-        val rawDil = TextMaskOps.dilate(raw, 1)
-        // Burned-in text is static; moving bright background is not (one-frame persistence).
-        val prev = prevRawDil
-        val mAll = if (prev != null && prev.size == raw.bits.size) TextMaskOps.intersect(raw, prev) else raw
-        prevRawDil = rawDil
+        // Burned-in text sits on the same pixels frame after frame; moving detail (teeth, jewellery,
+        // leaves, lights) does not: keep pixels present in >= stableNeed of the last stableWindow frames.
+        updateMotion(raw)
+        val mAll = suppressMoving(stabilize(raw))
+        ptsRing[frameIdx % ptsRing.size] = ptsUs
         if (age.size != mAll.bits.size) age = IntArray(mAll.bits.size)
         for (i in age.indices) age[i] = if (mAll.bits[i]) age[i] + 1 else 0
         frameIdx++
@@ -595,6 +765,14 @@ class SubtitleTracker(private val p: ScanParams) {
                 cur.lastUs = ptsUs
                 cand = null
                 firstMismatchUs = -1
+                val lc = cmp
+                if (lc != null && lc.lost >= p.changeBoth) {
+                    if (lossRunUs < 0) {
+                        lossRunUs = ptsUs; lossRunIdx = frameIdx
+                    }
+                } else {
+                    lossRunUs = -1
+                }
                 if (cur.isText && cmp != null) {
                     if (restart) {
                         cur.pool = 0
@@ -612,7 +790,9 @@ class SubtitleTracker(private val p: ScanParams) {
         }
 
         // ---- mismatch: candidate for a new state
-        if (firstMismatchUs < 0) firstMismatchUs = ptsUs
+        if (firstMismatchUs < 0) {
+            firstMismatchUs = ptsUs; firstMismatchIdx = frameIdx
+        }
         val c0 = cand
         val sameAsCand = c0 != null && c0.isText == text && (!text ||
             !isChange(MaskCompare.compare(c0.mask.bits, c0.mask.count, c0.dil, m.bits, m.count, mDil, gw, gh)))
@@ -634,10 +814,11 @@ class SubtitleTracker(private val p: ScanParams) {
             return ScanDecision(captures, closed, discarded)
         }
 
-        // ---- accept the new state
-        var start = cc.prevUs
+        // ---- accept the new state (start corrected for the stability delay)
+        var start = if (cc.isText) backDate(cc.startUs) else cc.prevUs
         if (cur != null) {
-            val end = minOf(firstMismatchUs, cc.startUs)
+            var end = minOf(firstMismatchUs, cc.startUs)
+            if (lossRunUs in 0 until end && firstMismatchIdx - lossRunIdx <= p.stableNeed) end = lossRunUs
             cur.endUs = end
             if (cur.isText) {
                 start = maxOf(start, end)
@@ -647,10 +828,11 @@ class SubtitleTracker(private val p: ScanParams) {
         current = null
         cand = null
         firstMismatchUs = -1
+        lossRunUs = -1
 
         if (cc.isText) {
             val h = held
-            if (p.repairSplits && h != null && cc.startUs - h.endUs <= p.bridgeMs * 1000 &&
+            if (p.repairSplits && h != null && backDate(cc.startUs) - h.endUs <= p.bridgeMs * 1000 &&
                 !isChange(MaskCompare.compare(h.stable, h.stableCount, h.stableDil, cc.mask.bits, cc.mask.count, cc.dil, gw, gh))
             ) {
                 // Same subtitle again after a flash / short blank / false change: continue it.

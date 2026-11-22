@@ -210,7 +210,7 @@ object ArabicText {
     private const val EXTRA_KEEP = "[](){}<>+-=*/%:;,.!?…–—_"
     private val NONE_WORDS = setOf("none", "no text", "no subtitle", "text not found", "na", "n/a")
 
-    private fun hasArabic(s: String): Boolean {
+    fun hasArabic(s: String): Boolean {
         for (c in s) if (c in '؀'..'ۿ') return true
         return false
     }
