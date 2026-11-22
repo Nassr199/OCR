@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.abdulrahman.hardsubocr.data.Choice
 import com.abdulrahman.hardsubocr.data.CleanChoice
 import com.abdulrahman.hardsubocr.data.EnhanceChoice
+import com.abdulrahman.hardsubocr.video.VideoEngine
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -59,6 +60,8 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var every by remember { mutableIntStateOf(s.analyzeEvery) }
     var minMs by remember { mutableIntStateOf(s.minDurationMs) }
     var repair by remember { mutableStateOf(s.repairSplits) }
+    var vEngine by remember { mutableStateOf(s.videoEngine) }
+    var gpu by remember { mutableStateOf(s.gpu) }
     var composite by remember { mutableStateOf(s.composite) }
     var saveClean by remember { mutableStateOf(s.saveClean) }
     val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
@@ -152,6 +155,21 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
 
             SectionCard("الفيديو", "🎬") {
+                SectionLabel("محرك كشف الترجمة")
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(VideoEngine.ENSEMBLE, "الأقصى: كل المحركات معًا (موصى به)", "2.0 و2.1 و2.2 على نفس الإطارات ثم تصويت: سطر فاته محرك يلتقطه آخر. يحفظ تقرير name_engines.txt بما وجده كل محرك."),
+                        ChoiceItem(VideoEngine.V21, "SubScan 2.1", "قناع بعتبتين + تثبيت + إصلاح الانقسام"),
+                        ChoiceItem(VideoEngine.V22, "SubScan 2.2", "2.1 + ثبات البكسل وفلتر الحركة (أسنان، حلي، أوراق)"),
+                        ChoiceItem(VideoEngine.CLASSIC, "الكلاسيكي 2.0", "أبسط محرك: نص ساطع بحدود داكنة")
+                    ),
+                    vEngine
+                ) { vEngine = it; s.videoEngine = it }
+                SwitchRow(
+                    "تسريع بالمعالج الرسومي (Adreno وغيره)",
+                    "OpenGL ES 3.1 Compute. يُقارن بالمعالج المركزي بكسلًا بكسل في أول 30 إطارًا، وأي اختلاف أو خطأ يوقفه تلقائيًا.",
+                    gpu
+                ) { gpu = it; s.gpu = it }
                 SliderRow("تحليل كل", if (every == 1) "إطار" else "$every إطارات", every.toFloat(), 1f..4f, 2,
                     onChange = { every = it.roundToInt() }, onDone = { s.analyzeEvery = every })
                 Hint("كل إطار = دقة توقيت كاملة. 2 أو أكثر = أسرع على الأجهزة الضعيفة.")

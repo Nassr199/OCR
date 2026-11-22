@@ -213,6 +213,15 @@ class Settings(context: Context) {
         get() = enumOf("v_mode", VideoMode.FRAMES_AND_TEXT)
         set(v) = put("v_mode", v.name)
 
+    var videoEngine: com.abdulrahman.hardsubocr.video.VideoEngine
+        get() = enumOf("v_engine", com.abdulrahman.hardsubocr.video.VideoEngine.ENSEMBLE)
+        set(v) = put("v_engine", v.name)
+
+    /** OpenGL ES 3.1 compute acceleration (Adreno…), auto-verified against the CPU. */
+    var gpu: Boolean
+        get() = sp.getBoolean("v_gpu", true)
+        set(v) = putBool("v_gpu", v)
+
     /** Re-join one line that was cut into two pieces (flash, scene cut, false change). */
     var repairSplits: Boolean
         get() = sp.getBoolean("v_repair", true)

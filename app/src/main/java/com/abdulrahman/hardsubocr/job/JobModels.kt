@@ -8,6 +8,7 @@ import com.abdulrahman.hardsubocr.core.MergeMode
 import com.abdulrahman.hardsubocr.core.ScanParams
 import com.abdulrahman.hardsubocr.core.SubLang
 import com.abdulrahman.hardsubocr.data.VideoMode
+import com.abdulrahman.hardsubocr.video.VideoEngine
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.data.FolderRef
@@ -43,6 +44,8 @@ data class JobRequest(
     val scan: ScanParams,
     val analyzeEvery: Int,
     val videoMode: VideoMode,
+    val videoEngine: VideoEngine,
+    val gpu: Boolean,
     val saveClean: Boolean,
     val lang: SubLang,
     val profile: AiProfile?,

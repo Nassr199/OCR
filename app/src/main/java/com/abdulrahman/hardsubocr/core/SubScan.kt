@@ -82,6 +82,9 @@ data class ScanParams(
     /** Mean motion energy above which a text-like object is moving scenery, not a subtitle. */
     val motionLimit: Double = 0.12
 ) {
+    /** The 2.1 engine (one-frame persistence, no motion filter) — used by the ensemble. */
+    fun legacy21(): ScanParams = copy(stableWindow = 1, stableNeed = 1, motionLimit = 1.0)
+
     companion object {
         /** Tuned defaults per language. [sensitivity] 0..1 scales the change thresholds (0.5 = default). */
         fun preset(
@@ -131,12 +134,19 @@ data class ScanParams(
 object ScanMask {
 
     /** Hysteresis text mask of a luma grid (see class doc, point 1). */
-    fun compute(g: LumaGrid, p: ScanParams): TextMask {
+    fun compute(g: LumaGrid, p: ScanParams): TextMask = fromClasses(classify(g, p), g.width, g.height, p)
+
+    /**
+     * Per-pixel stage (the GPU computes exactly the same bytes, see video/GpuClassifier):
+     * 0 = not text, 1 = weak (bright enough + some contrast), 2 = strong (bright, high contrast,
+     * on a thin stroke).
+     */
+    fun classify(g: LumaGrid, p: ScanParams): ByteArray {
         val w = g.width
         val h = g.height
         val n = w * h
-        val bits = BooleanArray(n)
-        if (w < 3 || h < 3) return TextMask(w, h, bits, 0)
+        val cls = ByteArray(n)
+        if (w < 3 || h < 3) return cls
         val inv = p.style == SubStyle.DARK
         val v = IntArray(n)
         for (i in 0 until n) {
@@ -144,22 +154,30 @@ object ScanMask {
             v[i] = if (inv) 255 - raw else raw
         }
         val nmin = minFilter(v, w, h, p.radius.coerceAtLeast(1))
-        // 0 = none, 1 = weak, 2 = strong
-        val cls = ByteArray(n)
-        val queue = IntArray(n)
-        var qh = 0
-        var qt = 0
         for (i in 0 until n) {
             val c = v[i]
             if (c < p.brightLow) continue
             val d = c - nmin[i]
             if (c >= p.brightHigh && d >= p.contrastHigh && ridge(v, w, h, i, c - p.contrastHigh, p.ridgeRadius)) {
-                cls[i] = 2; bits[i] = true; queue[qt++] = i
+                cls[i] = 2
             } else if (d >= p.contrastLow) {
                 cls[i] = 1
             }
         }
-        // grow strong pixels into connected weak pixels (8-neighbourhood)
+        return cls
+    }
+
+    /** Hysteresis (strong pixels grow into 8-connected weak ones) + component filter. */
+    fun fromClasses(cls: ByteArray, w: Int, h: Int, p: ScanParams): TextMask {
+        val n = w * h
+        val bits = BooleanArray(n)
+        if (w < 3 || h < 3) return TextMask(w, h, bits, 0)
+        val queue = IntArray(n)
+        var qh = 0
+        var qt = 0
+        for (i in 0 until n) if (cls[i].toInt() == 2) {
+            bits[i] = true; queue[qt++] = i
+        }
         while (qh < qt) {
             val i = queue[qh++]
             val x = i % w
@@ -648,7 +666,15 @@ class SubtitleTracker(private val p: ScanParams) {
         return if (removed == 0) m else TextMask(w, h, out, m.count - removed)
     }
 
+    private var legacyPrevDil: BooleanArray? = null
+
     private fun stabilize(raw: TextMask): TextMask {
+        if (p.stableNeed <= 1) {
+            // 2.1 behaviour: one-frame persistence
+            val prev = legacyPrevDil
+            legacyPrevDil = TextMaskOps.dilate(raw, 1)
+            return if (prev != null && prev.size == raw.bits.size) TextMaskOps.intersect(raw, prev) else raw
+        }
         val n = raw.bits.size
         if (presence.size != n) {
             presence = ByteArray(n); history.clear()
@@ -815,10 +841,10 @@ class SubtitleTracker(private val p: ScanParams) {
         }
 
         // ---- accept the new state (start corrected for the stability delay)
-        var start = if (cc.isText) backDate(cc.startUs) else cc.prevUs
+        var start = if (cc.isText && p.stableNeed > 1) backDate(cc.startUs) else cc.prevUs
         if (cur != null) {
             var end = minOf(firstMismatchUs, cc.startUs)
-            if (lossRunUs in 0 until end && firstMismatchIdx - lossRunIdx <= p.stableNeed) end = lossRunUs
+            if (p.stableNeed > 1 && lossRunUs in 0 until end && firstMismatchIdx - lossRunIdx <= p.stableNeed) end = lossRunUs
             cur.endUs = end
             if (cur.isText) {
                 start = maxOf(start, end)

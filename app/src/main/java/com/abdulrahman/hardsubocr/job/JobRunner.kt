@@ -343,14 +343,15 @@ class JobRunner(
                 try {
                     withContext(Dispatchers.Default) {
                         val scanner = VideoScanner(
-                            context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean,
+                            context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean, req.videoEngine, req.gpu,
+                            onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f
                                 phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
                             },
-                            onSegment = { seg, img ->
-                                val startMs = seg.startUs / 1000
-                                val endMs = seg.endUs / 1000
+                            onSegment = { segStartUs, segEndUs, img ->
+                                val startMs = segStartUs / 1000
+                                val endMs = segEndUs / 1000
                                 val name = FrameComposite.vsfFileName(
                                     startMs, endMs, img.roiX, img.roiY, img.roiW, img.roiH, img.frameW, img.frameH, "jpeg"
                                 )
@@ -395,6 +396,12 @@ class JobRunner(
                         )
                         val r = scanner.run(isActive = { isActive })
                         addLog("🎬 تم تحليل ${r.analysed} إطار — ${r.segments} ترجمة")
+                        // per-engine report next to the SRT: shows where the detectors disagree
+                        if (req.output != null && r.report.isNotBlank()) {
+                            runCatching {
+                                Saf.writeFile(context, req.output, "${base}_engines.txt", "text/plain", r.report.toByteArray(Charsets.UTF_8), true)
+                            }
+                        }
                     }
                 } finally {
                     ch.close()

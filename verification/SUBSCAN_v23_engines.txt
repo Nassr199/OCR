@@ -1,0 +1,30 @@
+=== ar5
+2.0 classic                        found  39/39 (100.0%)  split 12  over-merged  0  other 13  boundary ±2f  26  mean err 5.12 f
+2.1                                found  35/39 (89.7%)  split  6  over-merged  0  other 20  boundary ±2f  32  mean err 1.21 f
+2.2                                found  39/39 (100.0%)  split  2  over-merged  0  other 16  boundary ±2f  30  mean err 1.63 f
+VOTING 2.2+2.1+2.0                 found  39/39 (100.0%)  split  5  over-merged  0  other 24  boundary ±2f  32  mean err 2.85 f
+=== ar4
+2.0 classic                        found  32/39 (82.1%)  split 17  over-merged  3  other  4  boundary ±2f  11  mean err 13.41 f
+2.1                                found  27/39 (69.2%)  split 14  over-merged  0  other 12  boundary ±2f  16  mean err 3.57 f
+2.2                                found  36/39 (92.3%)  split  9  over-merged  0  other  9  boundary ±2f  20  mean err 4.32 f
+VOTING 2.2+2.1+2.0                 found  35/39 (89.7%)  split 17  over-merged  0  other  9  boundary ±2f  16  mean err 6.47 f
+=== ar3
+2.0 classic                        found  37/39 (94.9%)  split 15  over-merged  2  other  0  boundary ±2f  16  mean err 9.41 f
+2.1                                found  37/39 (94.9%)  split  4  over-merged  0  other  7  boundary ±2f  30  mean err 3.11 f
+2.2                                found  37/39 (94.9%)  split  3  over-merged  0  other  3  boundary ±2f  26  mean err 2.93 f
+VOTING 2.2+2.1+2.0                 found  39/39 (100.0%)  split  7  over-merged  0  other  3  boundary ±2f  26  mean err 4.17 f
+=== ar
+2.0 classic                        found  43/56 (76.8%)  split 13  over-merged  5  other  0  boundary ±2f  22  mean err 13.38 f
+2.1                                found  56/56 (100.0%)  split  0  over-merged  0  other  0  boundary ±2f  56  mean err 0.21 f
+2.2                                found  56/56 (100.0%)  split  0  over-merged  0  other  0  boundary ±2f  55  mean err 0.23 f
+VOTING 2.2+2.1+2.0                 found  56/56 (100.0%)  split  0  over-merged  0  other  4  boundary ±2f  55  mean err 0.28 f
+=== en
+2.0 classic                        found  35/48 (72.9%)  split  6  over-merged  3  other  1  boundary ±2f  21  mean err 8.44 f
+2.1                                found  47/48 (97.9%)  split  1  over-merged  0  other  1  boundary ±2f  47  mean err 0.19 f
+2.2                                found  48/48 (100.0%)  split  1  over-merged  0  other  1  boundary ±2f  47  mean err 0.26 f
+VOTING 2.2+2.1+2.0                 found  48/48 (100.0%)  split  1  over-merged  0  other  4  boundary ±2f  47  mean err 0.58 f
+=== ar2
+2.0 classic                        found  36/56 (64.3%)  split 12  over-merged  6  other  3  boundary ±2f  19  mean err 17.81 f
+2.1                                found  53/56 (94.6%)  split  2  over-merged  2  other  1  boundary ±2f  49  mean err 3.40 f
+2.2                                found  53/56 (94.6%)  split  1  over-merged  0  other  0  boundary ±2f  48  mean err 0.32 f
+VOTING 2.2+2.1+2.0                 found  53/56 (94.6%)  split  1  over-merged  2  other  6  boundary ±2f  49  mean err 3.46 f

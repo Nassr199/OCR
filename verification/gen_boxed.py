@@ -11,9 +11,10 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 OUT = sys.argv[1]
 SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 JUNK = len(sys.argv) > 3 and sys.argv[3] == 'junk'
+FS = int(sys.argv[4]) if len(sys.argv) > 4 else 58
 random.seed(SEED); rng = np.random.default_rng(SEED)
 W, H, FPS, STEP = 1920, 324, 30, 3
-AR = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 58, layout_engine=ImageFont.Layout.RAQM)
+AR = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', int(sys.argv[4]) if len(sys.argv) > 4 else 58, layout_engine=ImageFont.Layout.RAQM)
 SERIF = '/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf'
 CR_BIG = ImageFont.truetype(SERIF, 52); CR_SMALL = ImageFont.truetype(SERIF, 30)
 
@@ -22,7 +23,7 @@ def boxed(lines):
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
     n = len(lines); ub = [W, H, 0, 0]
     for k, t in enumerate(lines):
-        y = H - 64 - (n - 1 - k) * 78
+        y = H - int(64 * FS / 58) - (n - 1 - k) * int(78 * FS / 58)
         bb = d.textbbox((W // 2, y), t, font=AR, anchor='mm', direction='rtl', language='ar')
         d.rectangle((bb[0] - 16, bb[1] - 14, bb[2] + 16, bb[3] + 14), fill=(0, 0, 0, 255))
         ub = [min(ub[0], bb[0]), min(ub[1], bb[1]), max(ub[2], bb[2]), max(ub[3], bb[3])]
