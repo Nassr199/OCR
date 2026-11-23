@@ -42,7 +42,14 @@ enum class EngineKind { LENS, GEMINI, OPENROUTER, VISION }
  */
 val EngineKind.isClassicOcr: Boolean get() = this == EngineKind.LENS || this == EngineKind.VISION
 
-class PreparedImage(val bytes: ByteArray, val mime: String, val width: Int, val height: Int)
+class PreparedImage(
+    val bytes: ByteArray,
+    val mime: String,
+    val width: Int,
+    val height: Int,
+    /** Image name, only for the diagnostic file. */
+    val name: String = ""
+)
 
 /** Decoding / scaling / re-encoding lives on the platform side (Bitmap on Android). */
 fun interface ImagePreparer {

@@ -32,8 +32,6 @@ import com.abdulrahman.hardsubocr.video.VideoScanner
 import com.abdulrahman.hardsubocr.video.VideoEngine
 import com.abdulrahman.hardsubocr.core.Arbiter
 import com.abdulrahman.hardsubocr.core.FrameComposite
-import com.abdulrahman.hardsubocr.core.OcrImage
-import com.abdulrahman.hardsubocr.core.PngGray
 import com.abdulrahman.hardsubocr.data.VideoMode
 import android.graphics.Bitmap
 import java.io.ByteArrayOutputStream
@@ -113,8 +111,6 @@ class JobRunner(
         append("العمليات المتوازية ").append(req.workers).append(" • إعادة ").append(req.retries)
             .append(" • تنظيف ").append(req.cleanMode).append(" • دمج ").append(req.mergeMode)
             .append(" • تحسين الصور ").append(req.enhance).append(" • استئناف ").append(req.resume)
-            .append(" • قراءة ثانية للفارغ ").append(req.rescueEmpty && req.engine.isClassicOcr)
-            .append(" • صورة نص نظيفة ").append(req.cleanOcr && req.engine.isClassicOcr)
         if (req.source is Source.Video) {
             append('\n').append("الفيديو: ").append(req.videoEngine).append(" • ").append(req.videoMode)
                 .append(" • كل ").append(req.analyzeEvery).append(" إطار • Vulkan ").append(req.gpu)
@@ -133,17 +129,6 @@ class JobRunner(
         EngineKind.VISION -> VisionEngine(Net.transport, req.visionKey, req.lang.code)
     }
 
-    /**
-     * Lens / Vision: the image for the second read of an empty result — v2.6 enhancement on the
-     * whole picture (no band crop, so text outside the usual band is not cut). None when that is
-     * already the first image, or when the option is off.
-     */
-    private fun rescueFor(first: AndroidImagePreparer): AndroidImagePreparer? = when {
-        !req.rescueEmpty || !req.engine.isClassicOcr -> null
-        first.enhance && !first.cropBand -> null
-        else -> AndroidImagePreparer(enhance = true, cropBand = false)
-    }
-
     private fun newPipeline(
         engine: OcrEngine,
         cache: FileOcrCache?,
@@ -156,7 +141,6 @@ class JobRunner(
         concurrency = req.workers,
         retry = RetryPolicy(maxRetries = req.retries),
         cache = cache,
-        rescuePreparer = rescueFor(preparer),
         listener = object : PipelineListener {
             override fun onItem(item: OcrItem, outcome: ItemOutcome) {
                 when (outcome) {
@@ -164,13 +148,6 @@ class JobRunner(
                     is ItemOutcome.Empty -> addLog("○ " + item.name.take(28) + "  —  لا توجد ترجمة")
                     is ItemOutcome.Failed -> addLog("✖ " + item.name.take(28) + "  —  " + outcome.message.take(80))
                 }
-            }
-
-            override fun onRescue(item: OcrItem, text: String) {
-                if (text.isNotEmpty()) addLog(
-                    "✦ " + item.name.take(28) + "  ←  " + (if (item.loadAlt != null) "من الصورة الأصلية: " else "قراءة ثانية بصورة محسّنة: ") +
-                        text.replace('\n', ' ').take(60)
-                )
             }
 
             override fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {
@@ -330,8 +307,7 @@ class JobRunner(
             "Job",
             "$how بعد ${Timestamps.human((System.currentTimeMillis() - startedAt) / 1000.0)} • " +
                 "${outputs.sumOf { it.entries.size }} سطر • ✓${st?.ok?.get() ?: 0} ○${st?.empty?.get() ?: 0} ✖${st?.failed?.get() ?: 0}" +
-                " • من الذاكرة ${st?.cached?.get() ?: 0} • إعادات ${st?.retries?.get() ?: 0}" +
-                " • قراءة ثانية ${st?.rescued?.get() ?: 0}/${st?.rescueTried?.get() ?: 0}"
+                " • من الذاكرة ${st?.cached?.get() ?: 0} • إعادات ${st?.retries?.get() ?: 0}"
         )
         for (o in outputs) {
             o.error?.let { DiagLog.w("Job", "${o.name}: $it") }
@@ -455,10 +431,6 @@ class JobRunner(
         val sourceId = "video5|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}"
         val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
         val maxCrop = if (req.engine.isClassicOcr) LensProtocol.MAX_DIMENSION else 3072
-        // Lens / Vision read the subtitle's letters alone, black on white (TXTImages); the original
-        // picture stays as the second read when that gives nothing
-        val cleanOcr = req.cleanOcr && req.engine.isClassicOcr && !imagesOnly
-        if (cleanOcr) addLog("🔤 ${if (req.engine == EngineKind.VISION) "Google Vision" else "Google Lens"} يقرأ حروف الترجمة وحدها (أسود على أبيض)، والصورة الأصلية عند الفراغ")
         var saved = 0
         var saveErrors = 0
         var scan: VideoScanner.Result? = null
@@ -481,7 +453,7 @@ class JobRunner(
                 try {
                     withContext(Dispatchers.Default) {
                         val sc = VideoScanner(
-                            context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean || cleanOcr, req.videoEngine, req.gpu,
+                            context, u.uri, info, roi, req.scan, req.analyzeEvery, req.saveClean, req.videoEngine, req.gpu,
                             readText = !imagesOnly,
                             onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
@@ -537,23 +509,9 @@ class JobRunner(
                                     val fileName = if (isAlt) "دليل_" + tag!!.substring(2).replace(':', '_') + "_" + name else name
                                     val file = File(frameDir, fileName)
                                     file.writeBytes(ocrBytes)
-                                    val textOnly = if (cleanOcr && img.clean != null) runCatching {
-                                        OcrImage.fromClean(img.clean, img.width, img.height)?.let { PngGray.encode(it) }
-                                    }.getOrNull() else null
-                                    val key0 = if (isAlt) "$tag|$startMs-$endMs" else "$startMs-$endMs"
+                                    val key = if (isAlt) "$tag|$startMs-$endMs" else "$startMs-$endMs"
                                     sent.incrementAndGet()
-                                    if (textOnly != null) {
-                                        val cleanFile = File(frameDir, fileName.substringBeforeLast('.') + "_txt.png")
-                                        cleanFile.writeBytes(textOnly)
-                                        ch.trySend(
-                                            OcrItem(
-                                                "$key0|txt", fileName, startMs, maxOf(startMs, endMs - 1), tag,
-                                                loadAlt = { file.readBytes() }
-                                            ) { cleanFile.readBytes() }
-                                        )
-                                    } else {
-                                        ch.trySend(OcrItem(key0, fileName, startMs, maxOf(startMs, endMs - 1), tag) { file.readBytes() })
-                                    }
+                                    ch.trySend(OcrItem(key, fileName, startMs, maxOf(startMs, endMs - 1), tag) { file.readBytes() })
                                 } else {
                                     addLog("🖼 ${Timestamps.srt(startMs)} → ${Timestamps.srt(endMs)}  (${img.framesUsed} إطار)")
                                 }

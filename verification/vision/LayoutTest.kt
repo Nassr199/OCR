@@ -70,6 +70,8 @@ fun main() {
     check("genuine words in neighbouring paragraphs with touching boxes stay", ocr(answer(listOf(W("في", 700, 100, 740, 158)), listOf(W("البيت", 560, 100, 705, 150)))), "في البيت")
 
     check("stray alef from a crew name beside the box dropped", ocr(answer(listOf(W("ا", 700, 100, 712, 150, 0.55), W("أبي", 560, 100, 690, 150, 0.98)))), "أبي")
+    check("bare alef at the edge dropped even when read sure", ocr(answer(listOf(W("ا", 700, 100, 712, 150, 0.95), W("أبي", 560, 100, 690, 150, 0.98)))), "أبي")
+    check("hamza alef read sure is kept", ocr(answer(listOf(W("أ", 700, 100, 712, 150, 0.95), W("أنا", 560, 100, 690, 150, 0.98)))), "أ أنا")
     check("confident lone و kept", ocr(answer(listOf(W("و", 700, 100, 720, 150, 0.6), W("أنا", 600, 100, 690, 150)))), "و أنا")
     check("a line of one letter is kept", ocr(answer(listOf(W("ا", 700, 100, 712, 150, 0.5)))), "ا")
 

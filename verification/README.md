@@ -9,10 +9,9 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `gen_video*.py` + `SegTest.kt` | Synthetic 720p/1080p hard-sub video (moving bright background, white flash, yellow text, fades, back-to-back changes); all 7 subtitles found, boundaries within 1 frame. |
 | `PipeTest.kt` | Parallel workers, 429 back-off, resume cache, fatal stop with partial results, cancellation, failure breaker. |
 | `ApiTest.kt` | Gemini / OpenRouter / Lens request bodies, response parsing and error classification. |
-| `vision/VisionTest.kt` | Google Cloud Vision request (key in header, TEXT_DETECTION, language hint), parsing and error classification. |
+| `vision/VisionTest.kt` | Google Cloud Vision request (key in header, TEXT_DETECTION, language hints ar + en, word confidence), parsing and error classification. |
+| `lens/LensOrderTest.kt` | Google Lens lines in reading order (rows top to bottom, right to left in Arabic) and the same place read twice. |
 | `vision/LayoutTest.kt` + `LayoutCommon.kt` + `LayoutFuzz.kt` | Vision text rebuilt from word boxes: same place read twice, blocks laid out left to right, punctuation, two lines, credits, Latin runs; 14,000 random lines (clean reads unchanged, copies removed). |
-| `ocrimage/OcrImageTest.kt` + `RealCropToOcrImage.kt` | The letters-only black-on-white image Lens/Vision read in video mode: crop, margin, enlarging small text, 1500 px limit; the harness turns a real crop into it. |
-| `rescue/RescueTest.kt` | Second read of empty Lens / Vision results (good reads untouched, failures keep "no subtitle", resume cache) and Lens lines read twice in the same place. |
 
 `kc.sh` compiles Kotlin with the compiler embedded in a Gradle distribution:
 `./kc.sh out ../app/src/main/java/com/abdulrahman/hardsubocr/core/*.kt CoreTest.kt`

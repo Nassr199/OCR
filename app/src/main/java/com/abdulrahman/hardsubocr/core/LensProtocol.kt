@@ -75,6 +75,15 @@ object LensProtocol {
         val fullText: String
             get() = paragraphs.joinToString("\n") { p -> p.lines.joinToString("\n") { it.text } }.trim()
 
+        /** Diagnostic file: every line with its box (centre x, y, width, height). */
+        fun describe(): String = paragraphs.withIndex().joinToString(" ") { (pi, p) ->
+            p.lines.joinToString(" ") { l ->
+                val b = l.box
+                if (b == null) "${l.text}[p$pi]"
+                else "${l.text}[" + listOf(b.cx, b.cy, b.w, b.h).joinToString(",") { "%.3f".format(java.util.Locale.US, it) } + " p$pi]"
+            }
+        }.take(1500)
+
         /** --ocr-single-line equivalent. */
         val singleLine: String get() = lines.joinToString(" ") { it.text }.trim()
 

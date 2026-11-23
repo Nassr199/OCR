@@ -389,11 +389,14 @@ object VisionLayout {
     }
 
     /**
-     * A lone alef or lam at the edge of a line, read with low confidence, is the stroke of a Latin
-     * letter beside the subtitle ("l" of a crew name), never an Arabic word.
+     * A lone alef or lam at the edge of a line is the stroke of a Latin letter beside the subtitle
+     * ("l" of a crew name), never an Arabic word; with hamza or madda only when read unsure.
      */
-    private fun stray(w: Word) =
-        w.letters == 1 && w.text.trim().length == 1 && w.text[0] in "اأإآل" && w.conf > 0f && w.conf < 0.9f
+    private fun stray(w: Word): Boolean {
+        val t = w.text.trim()
+        if (t.length != 1) return false
+        return t[0] == 'ا' || t[0] == 'ل' || (t[0] in "أإآ" && w.conf > 0f && w.conf < 0.9f)
+    }
 
     private fun dropStrays(line: List<Word>): List<Word> {
         if (line.count { it.letters >= 2 } == 0) return line

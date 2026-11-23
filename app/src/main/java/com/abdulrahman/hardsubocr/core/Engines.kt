@@ -65,7 +65,9 @@ class LensEngine(
                     throw OcrError.Retryable("رد Google Lens غير مفهوم: ${e.message}")
                 }
                 val text = result.readingText
-                if (text != result.fullText) DiagLog.i("lens", "reading order / read twice: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
+                // diagnostic file: exactly what Lens returned for every image
+                if (result.paragraphs.isNotEmpty()) DiagLog.i("lens", "${image.name} lines: " + result.describe())
+                if (text != result.fullText) DiagLog.i("lens", "${image.name} order: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
                 return text
             }
             resp.code == 429 -> throw OcrError.Retryable(
@@ -97,7 +99,7 @@ class VisionEngine(
     private val language: String = "ar"
 ) : OcrEngine {
     override val kind = EngineKind.VISION
-    override val cacheId = "vision:$language:layout"
+    override val cacheId = "vision:$language:v3"
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
@@ -108,7 +110,17 @@ class VisionEngine(
             addJsonObject {
                 putJsonObject("image") { put("content", Base64.getEncoder().encodeToString(image.bytes)) }
                 putJsonArray("features") { addJsonObject { put("type", "TEXT_DETECTION") } }
-                putJsonObject("imageContext") { putJsonArray("languageHints") { add(JsonPrimitive(language)) } }
+                putJsonObject("imageContext") {
+                    // like Subtitle Edit: the subtitle language plus English, so Latin crew names
+                    // beside the subtitle are read as Latin (and removed by cleaning) instead of
+                    // being forced into Arabic letters
+                    putJsonArray("languageHints") {
+                        add(JsonPrimitive(language))
+                        if (language != "en") add(JsonPrimitive("en"))
+                    }
+                    // TEXT_DETECTION gives word confidence only when asked; the layout uses it
+                    putJsonObject("textDetectionParams") { put("enableTextDetectionConfidenceScore", true) }
+                }
             }
         }
     }.toString()
@@ -123,7 +135,7 @@ class VisionEngine(
                 timeoutMs = 60_000
             )
         )
-        if (resp.code == 200) return parseText(resp.text)
+        if (resp.code == 200) return parseText(resp.text, image.name)
         val e = GoogleApiError.parse(resp.text)
         throw classify(resp.code, e.status, e.message.ifBlank { shortBody(resp.text) }, e.reason, parseRetryAfter(resp.header("Retry-After")))
     }
@@ -132,7 +144,7 @@ class VisionEngine(
         const val ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
 
         /** Full text of the first response; a per-image error is raised like an HTTP one. */
-        fun parseText(body: String): String {
+        fun parseText(body: String, name: String = ""): String {
             val root = parseJsonOrNull(body).obj() ?: throw OcrError.Retryable("رد Google Vision غير مفهوم")
             val r = root["responses"].arr()?.firstOrNull().obj() ?: return ""
             r["error"].obj()?.let { err ->
@@ -146,11 +158,10 @@ class VisionEngine(
             // Vision's own text repeats words read twice and lays blocks out left to right:
             // the text is rebuilt from the word boxes (VisionLayout), its own text is the fallback.
             val words = VisionLayout.wordsOf(r)
+            // diagnostic file: exactly what Vision returned for every image
+            if (words.isNotEmpty()) DiagLog.i("vision", "$name words: " + VisionLayout.describe(words))
             val rebuilt = VisionLayout.rebuild(words) ?: return full
-            if (rebuilt != full) {
-                DiagLog.i("vision", "layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
-                DiagLog.i("vision", "words: " + VisionLayout.describe(words))
-            }
+            if (rebuilt != full) DiagLog.i("vision", "$name layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
             return rebuilt
         }
 

@@ -24,9 +24,13 @@ fun main() = runBlocking {
     val r0 = body["requests"]!!.jsonArray[0].jsonObject
     check("base64 image", r0["image"]!!.jsonObject["content"]!!.jsonPrimitive.content == "AQIDBA==")
     check("TEXT_DETECTION", r0["features"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content == "TEXT_DETECTION")
-    check("language hint ar", r0["imageContext"]!!.jsonObject["languageHints"]!!.jsonArray[0].jsonPrimitive.content == "ar")
+    val ctx = r0["imageContext"]!!.jsonObject
+    check("language hints ar + en (as Subtitle Edit)", ctx["languageHints"]!!.jsonArray.map { it.jsonPrimitive.content } == listOf("ar", "en"))
+    check("word confidence requested", ctx["textDetectionParams"]!!.jsonObject["enableTextDetectionConfidenceScore"]!!.jsonPrimitive.content == "true")
+    val enBody = Json.parseToJsonElement(VisionEngine(ok, "k", "en").buildBody(img)).jsonObject["requests"]!!.jsonArray[0].jsonObject
+    check("English subtitles: hint en only", enBody["imageContext"]!!.jsonObject["languageHints"]!!.jsonArray.map { it.jsonPrimitive.content } == listOf("en"))
     check("full text, trailing newline trimmed", text == "مرحبا يا صديقي\nكيف حالك؟", text)
-    check("cacheId per language", e.cacheId == "vision:ar:layout" && VisionEngine(ok, "k", "en").cacheId == "vision:en:layout")
+    check("cacheId per language", e.cacheId == "vision:ar:v3" && VisionEngine(ok, "k", "en").cacheId == "vision:en:v3")
     // 2) fallback to textAnnotations, empty response
     check("textAnnotations fallback", VisionEngine.parseText("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}]}]}""") == "أبي")
     check("no text → empty", VisionEngine.parseText("""{"responses":[{}]}""") == "")
