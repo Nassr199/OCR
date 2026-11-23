@@ -9,10 +9,11 @@ import com.abdulrahman.hardsubocr.core.LensProtocol
 import com.abdulrahman.hardsubocr.core.OcrError
 import com.abdulrahman.hardsubocr.core.PngGray
 import com.abdulrahman.hardsubocr.core.PreparedImage
+import com.abdulrahman.hardsubocr.core.isClassicOcr
 import java.io.ByteArrayOutputStream
 
 /**
- * - enhance = false: Lens gets PNG ≤ 1500 px (like chrome-lens-py); Gemini/OpenRouter get the
+ * - enhance = false: Lens and Vision get PNG ≤ 1500 px (like chrome-lens-py); Gemini/OpenRouter get the
  *   original PNG/JPEG/WebP bytes untouched.
  * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
  *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
@@ -33,8 +34,9 @@ class AndroidImagePreparer(
 
         if (enhance) return enhanced(bytes, w, h, kind)
 
-        return when (kind) {
-            EngineKind.LENS -> {
+        return when {
+            // Lens and Vision: the same PNG ≤ 1500 px (classic OCR)
+            kind.isClassicOcr -> {
                 if (mime == "image/png" && longest <= LensProtocol.MAX_DIMENSION) {
                     PreparedImage(bytes, "image/png", w, h)
                 } else {
@@ -71,7 +73,7 @@ class AndroidImagePreparer(
             px, bw, bh,
             ImageV26.Options(
                 cropBand = cropBand,
-                maxDimension = if (kind == EngineKind.LENS) LensProtocol.MAX_DIMENSION else 0
+                maxDimension = if (kind.isClassicOcr) LensProtocol.MAX_DIMENSION else 0
             )
         )
         return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)

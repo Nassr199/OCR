@@ -10,12 +10,24 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.using
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,19 +43,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -51,16 +59,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -74,30 +78,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.SubLang
 import com.abdulrahman.hardsubocr.data.VideoMode
 import com.abdulrahman.hardsubocr.core.EngineKind
-import com.abdulrahman.hardsubocr.core.ThinkingLevel
 import com.abdulrahman.hardsubocr.core.Timestamps
 import com.abdulrahman.hardsubocr.data.SourceMode
 import com.abdulrahman.hardsubocr.job.JobOutput
 import com.abdulrahman.hardsubocr.job.JobState
-import com.abdulrahman.hardsubocr.job.Progress
 import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Bad
 import com.abdulrahman.hardsubocr.ui.theme.Good
@@ -112,6 +111,8 @@ fun shareSrt(context: Context, uri: Uri) {
     context.startActivity(Intent.createChooser(i, "مشاركة ملف الترجمة"))
 }
 
+private val cardPad = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
+
 @Composable
 fun HomeScreen(
     vm: MainViewModel,
@@ -123,6 +124,8 @@ fun HomeScreen(
     val state by vm.job.collectAsState()
     val running = state is JobState.Running
     val snackbar = remember { SnackbarHostState() }
+    val list = rememberLazyListState()
+    var logFilter by rememberSaveable { mutableStateOf(LogFilter.ALL) }
 
     LaunchedEffect(vm.message) {
         val m = vm.message
@@ -131,12 +134,15 @@ fun HomeScreen(
             vm.message = null
         }
     }
+    // a job starts: show its progress from the top
+    LaunchedEffect(running) { if (running) list.animateScrollToItem(0) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { vm.onImagePicked(it) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onFolderPicked(it) }
     val pickOutput = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onOutputPicked(it) }
     val pickParent = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onMultiParentPicked(it) }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { vm.onVideoPicked(it) }
+    val saveDiag = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { vm.saveDiagnostics(it) }
     var saveAsIndex by remember { mutableIntStateOf(-1) }
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) {
         vm.saveOutputAs(saveAsIndex, it)
@@ -158,9 +164,13 @@ fun HomeScreen(
             saveAsIndex = i; saveAs.launch("$name.srt")
         }
     }
+    val diag = DiagActions(
+        save = { saveDiag.launch(vm.diagFileName()) },
+        share = { vm.shareDiagnostics(context) }
+    )
 
     val (statusText, statusColor) = when (val st = state) {
-        is JobState.Running -> "يعمل الآن • ${(st.progress.fraction * 100).toInt()}%" to Amber
+        is JobState.Running -> String.format(Locale.US, "يعمل الآن • %.1f%%", st.progress.fraction * 100) to Amber
         is JobState.Done -> (if (st.stopped) "أُوقف" else "اكتمل") to (if (st.stopped) Amber else Good)
         is JobState.Error -> "حدث خطأ" to Bad
         JobState.Idle -> "جاهز" to Good
@@ -179,60 +189,86 @@ fun HomeScreen(
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState())
+                .imePadding(),
+            state = list,
+            contentPadding = PaddingValues(bottom = 12.dp)
         ) {
-            AppHeader(statusText, statusColor, onOpenSettings)
-            Column(
-                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                vm.lastErrorReport?.let { report ->
-                    CrashBanner(report, onDismiss = { vm.dismissErrorReport() })
+            item(key = "header") {
+                Column(Modifier.padding(bottom = 14.dp)) { AppHeader(statusText, statusColor, onOpenSettings, busy = running) }
+            }
+            item(key = "crash") {
+                AnimatedVisibility(
+                    visible = vm.lastErrorReport != null,
+                    enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
+                    exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
+                ) {
+                    CrashBanner(vm.lastErrorReport ?: "", diag, onDismiss = { vm.dismissErrorReport() }, modifier = cardPad)
                 }
-
-                when (val st = state) {
-                    is JobState.Running -> ProgressCard(st.progress)
-                    is JobState.Done -> ResultCard(
-                        title = st.summary,
-                        good = !st.stopped,
-                        elapsed = st.elapsedSec,
-                        details = null,
-                        outputs = st.outputs,
-                        onEdit = onOpenEditor,
-                        onShare = { uri -> shareSrt(context, uri) },
-                        onSave = onSave,
-                        onClose = { vm.dismissResult() }
-                    )
-                    is JobState.Error -> ResultCard(
-                        title = st.message,
-                        good = false,
-                        elapsed = null,
-                        details = st.details,
-                        outputs = st.outputs,
-                        onEdit = onOpenEditor,
-                        onShare = { uri -> shareSrt(context, uri) },
-                        onSave = onSave,
-                        onClose = { vm.dismissResult() }
-                    )
-                    JobState.Idle -> Unit
+            }
+            item(key = "state") {
+                AnimatedContent(
+                    targetState = state,
+                    contentKey = { it::class },
+                    transitionSpec = {
+                        (fadeIn(tween(Motion.NORMAL)) + scaleIn(tween(Motion.NORMAL), initialScale = 0.96f)) togetherWith
+                            fadeOut(tween(Motion.FAST)) using SizeTransform(clip = false)
+                    },
+                    label = "jobState"
+                ) { st ->
+                    when (st) {
+                        is JobState.Running -> ProgressCard(st.progress, cardPad)
+                        is JobState.Done -> ResultCard(
+                            title = st.summary,
+                            good = !st.stopped,
+                            elapsed = st.elapsedSec,
+                            details = null,
+                            outputs = st.outputs,
+                            onEdit = onOpenEditor,
+                            onShare = { uri -> shareSrt(context, uri) },
+                            onSave = onSave,
+                            onClose = { vm.dismissResult() },
+                            diag = null,
+                            modifier = cardPad
+                        )
+                        is JobState.Error -> ResultCard(
+                            title = st.message,
+                            good = false,
+                            elapsed = null,
+                            details = st.details,
+                            outputs = st.outputs,
+                            onEdit = onOpenEditor,
+                            onShare = { uri -> shareSrt(context, uri) },
+                            onSave = onSave,
+                            onClose = { vm.dismissResult() },
+                            diag = diag,
+                            modifier = cardPad
+                        )
+                        JobState.Idle -> Box(Modifier.fillMaxWidth())
+                    }
                 }
+            }
 
-                EngineCard(vm, enabled = !running)
-                SourceCard(
-                    vm, enabled = !running,
-                    onPickImage = { pickImage.launch(arrayOf("image/*")) },
-                    onPickFolder = { pickFolder.launch(null) },
-                    onPickParent = { pickParent.launch(null) },
-                    onPickVideo = { pickVideo.launch(arrayOf("video/*")) },
-                    onOpenRoi = onOpenRoi
-                )
-                OutputCard(vm, enabled = !running, onPick = { pickOutput.launch(null) })
-                Spacer(Modifier.height(8.dp))
+            val st = state
+            if (st is JobState.Running) {
+                logSection(st.progress.log, logFilter) { logFilter = it }
+            } else {
+                item(key = "engine") { EngineCard(vm, enabled = true, modifier = cardPad) }
+                item(key = "source") {
+                    SourceCard(
+                        vm, enabled = true,
+                        onPickImage = { pickImage.launch(arrayOf("image/*")) },
+                        onPickFolder = { pickFolder.launch(null) },
+                        onPickParent = { pickParent.launch(null) },
+                        onPickVideo = { pickVideo.launch(arrayOf("video/*")) },
+                        onOpenRoi = onOpenRoi,
+                        modifier = cardPad
+                    )
+                }
+                item(key = "output") { OutputCard(vm, enabled = true, onPick = { pickOutput.launch(null) }, modifier = cardPad) }
             }
         }
     }
@@ -250,13 +286,19 @@ fun HomeScreen(
     }
 }
 
-// ============================================================================ action bar
+/** «حفظ / مشاركة ملف التشخيص» from the crash banner and the error card. */
+class DiagActions(val save: () -> Unit, val share: () -> Unit)
 
-private fun engineName(e: EngineKind) = when (e) {
-    EngineKind.LENS -> "Google Lens"
-    EngineKind.GEMINI -> "Gemini"
-    EngineKind.OPENROUTER -> "OpenRouter"
+@Composable
+private fun DiagButtons(diag: DiagActions) {
+    Hint("ملف التشخيص يحتوي خطوات المعالجة والأخطاء ومعلومات الجهاز، بدون أي مفتاح API.", Modifier.padding(top = 4.dp))
+    RowSpaced {
+        OutlinedButton(onClick = diag.save, modifier = Modifier.weight(1f)) { Text("💾 حفظ ملف التشخيص") }
+        OutlinedButton(onClick = diag.share, modifier = Modifier.weight(1f)) { Text("↗ إرساله") }
+    }
 }
+
+// ============================================================================ action bar
 
 private fun sourceSummary(vm: MainViewModel): String = when (vm.sourceMode) {
     SourceMode.IMAGE -> vm.image?.let { "🖼 ${it.name}" } ?: "🖼 لم تُختر صورة"
@@ -284,7 +326,7 @@ private fun ActionBar(vm: MainViewModel, running: Boolean, onStart: () -> Unit, 
                 val model = when (vm.engine) {
                     EngineKind.GEMINI -> " • " + vm.geminiModel
                     EngineKind.OPENROUTER -> " • " + vm.openRouterModel.substringAfter('/')
-                    EngineKind.LENS -> ""
+                    EngineKind.LENS, EngineKind.VISION -> ""
                 }
                 Text(
                     engineName(vm.engine) + model,
@@ -298,30 +340,39 @@ private fun ActionBar(vm: MainViewModel, running: Boolean, onStart: () -> Unit, 
                 )
             }
             Spacer(Modifier.width(12.dp))
-            if (running) {
-                Button(
-                    onClick = onStop,
-                    modifier = Modifier.height(54.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Icon(Icons.Filled.Close, null); Spacer(Modifier.width(6.dp))
-                    Text("إيقاف", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Button(onClick = onStart, modifier = Modifier.height(54.dp), shape = RoundedCornerShape(18.dp)) {
-                    Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
-                    Text(
-                        when {
-                            vm.sourceMode == SourceMode.MULTI -> "استخراج الكل"
-                            vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY -> "حفظ الصور"
-                            else -> "استخراج"
-                        },
-                        fontSize = 16.sp, fontWeight = FontWeight.Bold
-                    )
+            AnimatedContent(
+                targetState = running,
+                transitionSpec = {
+                    (fadeIn(tween(Motion.NORMAL)) + scaleIn(tween(Motion.NORMAL), initialScale = 0.9f)) togetherWith
+                        fadeOut(tween(Motion.FAST)) using SizeTransform(clip = false)
+                },
+                label = "action"
+            ) { isRunning ->
+                if (isRunning) {
+                    Button(
+                        onClick = onStop,
+                        modifier = Modifier.height(54.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Icon(Icons.Filled.Close, null); Spacer(Modifier.width(6.dp))
+                        Text("إيقاف", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(onClick = onStart, modifier = Modifier.height(54.dp), shape = RoundedCornerShape(18.dp)) {
+                        Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
+                        Text(
+                            when {
+                                vm.sourceMode == SourceMode.MULTI -> "استخراج الكل"
+                                vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY -> "حفظ الصور"
+                                else -> "استخراج"
+                            },
+                            fontSize = 16.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -331,9 +382,9 @@ private fun ActionBar(vm: MainViewModel, running: Boolean, onStart: () -> Unit, 
 // ============================================================================ crash banner
 
 @Composable
-private fun CrashBanner(report: String, onDismiss: () -> Unit) {
+private fun CrashBanner(report: String, diag: DiagActions, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f), RoundedCornerShape(22.dp))
             .border(1.dp, Bad.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
@@ -345,192 +396,10 @@ private fun CrashBanner(report: String, onDismiss: () -> Unit) {
             Text("أُغلق التطبيق بشكل غير متوقع في المرة السابقة", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "إخفاء") }
         }
-        Hint("انسخ التقرير وأرسله للمطوّر ليُصلح السبب بدقة.")
+        Hint("أرسل ملف التشخيص أو انسخ التقرير للمطوّر ليُصلح السبب بدقة.")
         ErrorDetails(report)
+        DiagButtons(diag)
     }
-}
-
-// ============================================================================ engine
-
-@Composable
-private fun EngineCard(vm: MainViewModel, enabled: Boolean) {
-    SectionCard("محرك القراءة", "🔎") {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectTile(
-                "⚡", "Google Lens", "مجاني • بلا مفتاح", vm.engine == EngineKind.LENS, enabled,
-                Modifier.weight(1f).fillMaxHeight()
-            ) { vm.chooseEngine(EngineKind.LENS) }
-            SelectTile(
-                "✨", "Gemini", "الأدق • يحفظ التشكيل", vm.engine == EngineKind.GEMINI, enabled,
-                Modifier.weight(1f).fillMaxHeight(), badge = "Gemini 4"
-            ) { vm.chooseEngine(EngineKind.GEMINI) }
-            SelectTile(
-                "🌐", "OpenRouter", "موديلات متعددة", vm.engine == EngineKind.OPENROUTER, enabled,
-                Modifier.weight(1f).fillMaxHeight()
-            ) { vm.chooseEngine(EngineKind.OPENROUTER) }
-        }
-        Spacer(Modifier.height(14.dp))
-        when (vm.engine) {
-            EngineKind.LENS -> {
-                CheckLine("مجاني تمامًا — لا يحتاج مفتاح API")
-                CheckLine("اتصال مباشر بـ Google Lens بدون أي برامج إضافية")
-                CheckLine("عدة صور بالتوازي (من الإعدادات)")
-                Spacer(Modifier.height(6.dp))
-                EnhanceSwitch(vm, enabled, lens = true)
-            }
-            EngineKind.GEMINI -> ApiEngineFields(vm, enabled, gemini = true)
-            EngineKind.OPENROUTER -> ApiEngineFields(vm, enabled, gemini = false)
-        }
-    }
-}
-
-@Composable
-private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean, lens: Boolean) {
-    SwitchRow(
-        "تحسين الصور قبل القراءة",
-        if (lens) "قصّ منطقة الترجمة + تكبير + تباين وحدّة. جرّبه إن كانت النتائج ضعيفة."
-        else "قصّ منطقة الترجمة + تكبير Lanczos + تباين وحدّة (مطابق لـ Pillow بكسلًا بكسل).",
-        vm.enhanceEffective(),
-        enabled
-    ) { vm.setEnhance(it) }
-}
-
-private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.V26 -> "تحسين الصور + حماية التشكيل + تثبيت التشكيل بين الإطارات المتتالية. الأفضل مع Gemini 4."
-    AiProfile.V21 -> "تعليمات مفصّلة جدًا وتنظيف حرفي يحفظ الأسطر والتشكيل كما هي، ودمج الانقسام فقط."
-    AiProfile.PRO -> "تعليمات مختصرة: سطر واحد بدون تشكيل، ودمج التكرار الذكي. الأسرع والأرخص."
-}
-
-private val thinkingOptions = listOf(
-    ThinkingLevel.DEFAULT to "تلقائي",
-    ThinkingLevel.MINIMAL to "أدنى",
-    ThinkingLevel.LOW to "منخفض",
-    ThinkingLevel.MEDIUM to "متوسط",
-    ThinkingLevel.HIGH to "عالٍ"
-)
-
-@Composable
-private fun ApiEngineFields(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
-    val clipboard = LocalClipboardManager.current
-    var showKey by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
-    val key = if (gemini) vm.geminiKey else vm.openRouterKey
-
-    SectionLabel("مفتاح API")
-    OutlinedTextField(
-        value = key,
-        onValueChange = { if (gemini) vm.geminiKey = it else vm.openRouterKey = it },
-        placeholder = { Text(if (gemini) "AIza…" else "sk-or-…") },
-        singleLine = true,
-        enabled = enabled,
-        shape = RoundedCornerShape(16.dp),
-        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { showKey = !showKey }) { Icon(Icons.Filled.Lock, contentDescription = "إظهار") }
-        },
-        modifier = Modifier.fillMaxWidth()
-    )
-    Spacer(Modifier.height(8.dp))
-    RowSpaced {
-        OutlinedButton(
-            onClick = {
-                val t = clipboard.getText()?.text?.trim().orEmpty()
-                if (t.isEmpty()) vm.message = "الحافظة لا تحتوي على نص."
-                else if (gemini) vm.geminiKey = t else vm.openRouterKey = t
-            },
-            enabled = enabled,
-            modifier = Modifier.weight(1f)
-        ) { Text("📋 لصق") }
-        FilledTonalButton(onClick = { vm.saveKeys() }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("💾 حفظ") }
-    }
-    if (key.isBlank()) {
-        Hint(
-            if (gemini) "احصل على مفتاح مجاني من aistudio.google.com ← Get API key"
-            else "احصل على مفتاح من openrouter.ai/keys",
-            Modifier.padding(top = 4.dp)
-        )
-    }
-
-    Spacer(Modifier.height(12.dp))
-    SectionLabel("الموديل")
-    Box {
-        OutlinedTextField(
-            value = if (gemini) vm.geminiModel else vm.openRouterModel,
-            onValueChange = { if (gemini) vm.geminiModel = it else vm.openRouterModel = it },
-            singleLine = true,
-            enabled = enabled,
-            shape = RoundedCornerShape(16.dp),
-            trailingIcon = {
-                IconButton(onClick = { menu = true }, enabled = enabled) { Icon(Icons.Filled.KeyboardArrowDown, "اختيار") }
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.heightIn(max = 380.dp)) {
-            for (m in vm.modelSuggestions()) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(m, fontWeight = FontWeight.SemiBold)
-                            modelNote(m)?.let { Hint(it) }
-                        }
-                    },
-                    onClick = {
-                        if (gemini) vm.geminiModel = m else vm.openRouterModel = m
-                        menu = false
-                    }
-                )
-            }
-        }
-    }
-    val note = modelNote(if (gemini) vm.geminiModel else vm.openRouterModel)
-    if (note != null) Hint("ℹ️ $note", Modifier.padding(top = 4.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { vm.fetchModels() }, enabled = enabled && !vm.loadingModels) {
-            Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-            Text("جلب الموديلات المتاحة لحسابك")
-        }
-        if (vm.loadingModels) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-    }
-
-    Spacer(Modifier.height(6.dp))
-    SectionLabel("الأسلوب")
-    Segmented(
-        listOf(AiProfile.V26 to "ذكي + تشكيل", AiProfile.V21 to "حرفي دقيق", AiProfile.PRO to "سريع"),
-        vm.currentProfile(),
-        enabled
-    ) { vm.chooseProfile(it) }
-    Hint(profileHint(vm.currentProfile()), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
-
-    if (gemini) {
-        Spacer(Modifier.height(12.dp))
-        SectionLabel("مستوى التفكير")
-        Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
-        Hint(
-            "\"منخفض\" هو الأنسب للـ OCR. إن لم يدعم الموديل المستوى المختار يتراجع التطبيق تلقائيًا بدون أخطاء.",
-            Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
-        )
-        Spacer(Modifier.height(6.dp))
-        SwitchRow(
-            "دقة عالية للصور",
-            "media_resolution = HIGH: قراءة أدق للحروف الصغيرة والتشكيل (رموز أكثر قليلًا).",
-            vm.mediaHigh,
-            enabled
-        ) { vm.chooseMediaHigh(it) }
-    }
-    EnhanceSwitch(vm, enabled, lens = false)
-}
-
-/** One-line description for the well-known models in the dropdown. */
-private fun modelNote(m: String): String? = when (m.substringAfter("google/")) {
-    "gemini-4-hydrogen" -> "Gemini 4 Hydrogen — الأحدث (نوفمبر 2026)، سريع ومتاح مجانًا. موصى به"
-    "gemini-4-argon" -> "Gemini 4 Argon — أقوى في القراءة الصعبة، أبطأ وأغلى"
-    "gemini-4-carbon" -> "Gemini 4 Carbon — الأعلى دقة (مدفوع فقط)"
-    "gemini-3.8-flash" -> "Gemini 3.8 Flash — متوازن"
-    "gemini-3.6-flash" -> "Gemini 3.6 Flash — سريع"
-    "gemini-3.5-flash-lite" -> "Gemini 3.5 Flash-Lite — الأرخص للمجلدات الكبيرة"
-    "gemini-3-flash-preview" -> "Gemini 3 Flash (معاينة)"
-    "gemini-3.1-flash-lite" -> "Gemini 3.1 Flash-Lite — اقتصادي"
-    else -> null
 }
 
 // ============================================================================ source
@@ -543,9 +412,10 @@ private fun SourceCard(
     onPickFolder: () -> Unit,
     onPickParent: () -> Unit,
     onPickVideo: () -> Unit,
-    onOpenRoi: () -> Unit
+    onOpenRoi: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    SectionCard("المصدر", "🗂") {
+    SectionCard("المصدر", "🗂", modifier) {
         SectionLabel("لغة الترجمة في الفيديو/الصور")
         Segmented(
             listOf(SubLang.ARABIC to "العربية", SubLang.ENGLISH to "English"),
@@ -561,7 +431,7 @@ private fun SourceCard(
             SelectTile("🖼", "صورة", "صورة واحدة", vm.sourceMode == SourceMode.IMAGE, enabled, Modifier.weight(1f).fillMaxHeight()) {
                 vm.chooseSource(SourceMode.IMAGE)
             }
-            SelectTile("📁", "مجلد صور", "صور VideoSubFinder", vm.sourceMode == SourceMode.FOLDER, enabled, Modifier.weight(1f).fillMaxHeight()) {
+            SelectTile("📁", "مجلد صور", "صور بتوقيت في الاسم", vm.sourceMode == SourceMode.FOLDER, enabled, Modifier.weight(1f).fillMaxHeight()) {
                 vm.chooseSource(SourceMode.FOLDER)
             }
         }
@@ -580,7 +450,7 @@ private fun SourceCard(
                 PathChip(vm.image?.name ?: "لم يتم اختيار صورة", empty = vm.image == null)
                 Spacer(Modifier.height(8.dp))
                 FilledTonalButton(onClick = onPickImage, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("اختيار صورة") }
-                Hint("إذا كان اسم الصورة بتوقيت VideoSubFinder يُنشأ ملف SRT، وإلا يُعرض النص فقط.", Modifier.padding(top = 4.dp))
+                Hint("إذا كان اسم الصورة يحمل التوقيت (مثل 0_00_10_000__0_00_12_000.png، صيغة VideoSubFinder) يُنشأ ملف SRT، وإلا يُعرض النص فقط.", Modifier.padding(top = 4.dp))
             }
             SourceMode.FOLDER -> {
                 val f = vm.folder
@@ -590,6 +460,7 @@ private fun SourceCard(
                 )
                 Spacer(Modifier.height(8.dp))
                 FilledTonalButton(onClick = onPickFolder, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("📁 اختيار مجلد الصور") }
+                Hint("أسماء الصور تحمل التوقيت، مثل 0_00_10_000__0_00_12_000.png (الصيغة التي يستخدمها VideoSubFinder وهذا التطبيق).", Modifier.padding(top = 4.dp))
             }
             SourceMode.MULTI -> {
                 RowSpaced {
@@ -648,7 +519,7 @@ private fun SourceCard(
                 ) { vm.chooseVideoMode(it) }
                 Hint(
                     if (vm.videoMode == VideoMode.FRAMES_ONLY)
-                        "تُحفظ صورة لكل ترجمة في مجلد name_RGBImages بأسماء VideoSubFinder ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد — لا يحتاج مفتاح API الآن."
+                        "تُحفظ صورة لكل ترجمة في مجلد name_RGBImages بأسماء تحمل التوقيت (متوافقة مع VideoSubFinder) ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد — لا يحتاج مفتاح API الآن."
                     else
                         "تُحفظ صور الترجمات أولًا في name_RGBImages، وتُقرأ بالتوازي أثناء التحليل، ثم يُكتب ملف SRT.",
                     Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
@@ -659,8 +530,8 @@ private fun SourceCard(
 }
 
 @Composable
-private fun OutputCard(vm: MainViewModel, enabled: Boolean, onPick: () -> Unit) {
-    SectionCard("مكان حفظ الترجمات", "💾") {
+private fun OutputCard(vm: MainViewModel, enabled: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
+    SectionCard("مكان حفظ الترجمات", "💾", modifier) {
         val o = vm.output
         PathChip(
             o?.let { "📁 ${it.name}" } ?: if (vm.sourceMode == SourceMode.VIDEO) "مطلوب لوضع الفيديو" else "تلقائي — داخل مجلد الصور نفسه",
@@ -674,56 +545,7 @@ private fun OutputCard(vm: MainViewModel, enabled: Boolean, onPick: () -> Unit) 
     }
 }
 
-// ============================================================================ progress & results
-
-@Composable
-private fun ProgressCard(p: Progress) {
-    SectionCard(
-        title = if (p.unitCount > 1) "${p.title}  (${p.unitIndex + 1}/${p.unitCount})" else p.title.ifEmpty { "جاري الاستخراج" },
-        emoji = "⚙️"
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ProgressRing(p.fraction, "مكتمل")
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (p.phase.isNotEmpty()) Text(p.phase, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                Text("${p.done} من ${p.total}", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    String.format(Locale.US, "⚡ %.2f صورة/ث", p.speed),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "⏳ المتبقي: " + Timestamps.human(p.etaSec),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        p.decodeFraction?.let { d ->
-            Spacer(Modifier.height(10.dp))
-            Hint("تحليل الفيديو ${(d * 100).toInt()}%")
-            LinearProgressIndicator(
-                progress = { d.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = Amber,
-                strokeCap = StrokeCap.Round
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        RowSpaced {
-            StatTile("ناجحة", "${p.ok}", Good, Modifier.weight(1f))
-            StatTile("فارغة", "${p.empty}", Amber, Modifier.weight(1f))
-            StatTile("فاشلة", "${p.failed}", if (p.failed > 0) Bad else MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-        }
-        if (p.cached > 0 || p.retries > 0) {
-            Spacer(Modifier.height(6.dp))
-            Hint("♻ من ذاكرة الاستئناف: ${p.cached}   •   ↻ إعادات: ${p.retries}")
-        }
-        if (p.log.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            TerminalLog(p.log.take(10))
-        }
-    }
-}
+// ============================================================================ results
 
 @Composable
 private fun ResultCard(
@@ -735,12 +557,15 @@ private fun ResultCard(
     onEdit: (Int) -> Unit,
     onShare: (Uri) -> Unit,
     onSave: (Int, String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    diag: DiagActions?,
+    modifier: Modifier = Modifier
 ) {
     val clipboard = LocalClipboardManager.current
     SectionCard(
         title = if (good) "تم الاستخراج" else "النتيجة",
         emoji = if (good) "✅" else "⚠️",
+        modifier = modifier,
         trailing = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "إغلاق") } }
     ) {
         Text(title, fontWeight = FontWeight.Bold, color = if (good) Good else MaterialTheme.colorScheme.error)
@@ -749,6 +574,7 @@ private fun ResultCard(
             Spacer(Modifier.height(4.dp))
             ErrorDetails(details)
         }
+        if (diag != null) DiagButtons(diag)
         for ((i, o) in outputs.withIndex()) {
             Spacer(Modifier.height(10.dp))
             Column(

@@ -23,6 +23,10 @@ import com.abdulrahman.hardsubocr.core.OpenRouterEngine
 import com.abdulrahman.hardsubocr.core.Srt
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
+import com.abdulrahman.hardsubocr.core.DiagLog
+import com.abdulrahman.hardsubocr.core.PreparedImage
+import com.abdulrahman.hardsubocr.core.VisionEngine
+import com.abdulrahman.hardsubocr.core.isClassicOcr
 import com.abdulrahman.hardsubocr.data.Choice
 import com.abdulrahman.hardsubocr.data.CleanChoice
 import com.abdulrahman.hardsubocr.data.EnhanceChoice
@@ -62,6 +66,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var geminiKey by mutableStateOf(s.geminiKey)
     var openRouterKey by mutableStateOf(s.openRouterKey)
+    var visionKey by mutableStateOf(s.visionKey)
     var geminiModel by mutableStateOf(s.geminiModel)
     var openRouterModel by mutableStateOf(s.openRouterModel)
     var thinking by mutableStateOf(s.thinking)
@@ -187,9 +192,114 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun saveKeys() {
         s.geminiKey = geminiKey
         s.openRouterKey = openRouterKey
+        s.visionKey = visionKey
         s.geminiModel = geminiModel
         s.openRouterModel = openRouterModel
-        message = "✓ تم حفظ المفتاح والموديل على هذا الجهاز (مشفّر)"
+        keyVersion++
+        message = "✓ تم حفظ المفتاح على هذا الجهاز (مشفّر)"
+    }
+
+    /** Bumped when a key is saved or deleted (the key panels show the saved state). */
+    var keyVersion by mutableStateOf(0)
+        private set
+
+    fun keyOf(e: EngineKind): String = when (e) {
+        EngineKind.GEMINI -> geminiKey
+        EngineKind.OPENROUTER -> openRouterKey
+        EngineKind.VISION -> visionKey
+        EngineKind.LENS -> ""
+    }
+
+    fun setKey(e: EngineKind, v: String) {
+        when (e) {
+            EngineKind.GEMINI -> geminiKey = v
+            EngineKind.OPENROUTER -> openRouterKey = v
+            EngineKind.VISION -> visionKey = v
+            EngineKind.LENS -> Unit
+        }
+        if (keyTest?.engine == e) keyTest = null
+    }
+
+    fun savedKey(e: EngineKind): String = when (e) {
+        EngineKind.GEMINI -> s.geminiKey
+        EngineKind.OPENROUTER -> s.openRouterKey
+        EngineKind.VISION -> s.visionKey
+        EngineKind.LENS -> ""
+    }
+
+    fun deleteKey(e: EngineKind) {
+        setKey(e, "")
+        when (e) {
+            EngineKind.GEMINI -> { s.geminiKey = ""; fetchedGemini = emptyList() }
+            EngineKind.OPENROUTER -> s.openRouterKey = ""
+            EngineKind.VISION -> s.visionKey = ""
+            EngineKind.LENS -> Unit
+        }
+        keyTest = null
+        keyVersion++
+        message = "تم حذف المفتاح من هذا الجهاز"
+    }
+
+    class KeyTest(val engine: EngineKind, val ok: Boolean, val text: String)
+
+    /** Result of «اختبار المفتاح» for the selected engine (null = not tested). */
+    var keyTest by mutableStateOf<KeyTest?>(null)
+        private set
+    var keyTesting by mutableStateOf(false)
+        private set
+
+    /** One real request with the key: Gemini lists its models, Vision reads a tiny blank image. */
+    fun testKey() {
+        val e = engine
+        val key = keyOf(e).trim()
+        if (keyTesting || key.isEmpty()) return
+        keyTesting = true
+        keyTest = null
+        viewModelScope.launch {
+            keyTest = try {
+                when (e) {
+                    EngineKind.GEMINI -> {
+                        val models = GeminiEngine.listModels(Net.transport, key)
+                        fetchedGemini = models
+                        val missing = GeminiEngine.SUGGESTED_MODELS.filter { it !in models }
+                        KeyTest(
+                            e, true, "✓ المفتاح يعمل — ${models.size} نموذج يقرأ الصور متاح لحسابك" +
+                                (if (models.isNotEmpty() && geminiModel !in models) "\n⚠️ النموذج المختار «$geminiModel» غير متاح لهذا المفتاح" else "") +
+                                (if (models.isNotEmpty() && missing.isNotEmpty() && missing.size < GeminiEngine.SUGGESTED_MODELS.size)
+                                    "\nغير متاح لحسابك الآن: " + missing.joinToString("، ") else "")
+                        )
+                    }
+                    EngineKind.VISION -> {
+                        val png = withContext(Dispatchers.Default) {
+                            val b = Bitmap.createBitmap(64, 32, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
+                            try { com.abdulrahman.hardsubocr.img.AndroidImagePreparer.toPng(b) } finally { b.recycle() }
+                        }
+                        VisionEngine(Net.transport, key, subLang.code).recognize(PreparedImage(png, "image/png", 64, 32))
+                        KeyTest(e, true, "✓ المفتاح يعمل — Cloud Vision API مفعّلة لهذا المشروع")
+                    }
+                    else -> KeyTest(e, false, "")
+                }
+            } catch (x: Exception) {
+                KeyTest(e, false, "✖ " + (x.message ?: x.javaClass.simpleName))
+            } finally {
+                keyTesting = false
+            }
+        }
+    }
+
+    fun chooseModel(id: String) {
+        if (engine == EngineKind.OPENROUTER) {
+            openRouterModel = id; s.openRouterModel = id
+        } else {
+            geminiModel = id; s.geminiModel = id
+        }
+    }
+
+    /** Models the account offers beyond the curated list (after «جلب»/«اختبار»). */
+    fun extraModels(): List<String> = when (engine) {
+        EngineKind.GEMINI -> fetchedGemini.filter { it !in GeminiEngine.SUGGESTED_MODELS }
+        EngineKind.OPENROUTER -> fetchedOpenRouter.filter { it !in OpenRouterEngine.SUGGESTED_MODELS }
+        else -> emptyList()
     }
 
     fun chooseThinking(t: ThinkingLevel) {
@@ -199,7 +309,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun modelSuggestions(): List<String> = when (engine) {
         EngineKind.GEMINI -> (GeminiEngine.SUGGESTED_MODELS + fetchedGemini).distinct()
         EngineKind.OPENROUTER -> (OpenRouterEngine.SUGGESTED_MODELS + fetchedOpenRouter).distinct()
-        EngineKind.LENS -> emptyList()
+        EngineKind.LENS, EngineKind.VISION -> emptyList()
     }
 
     fun chooseProfile(p: AiProfile) {
@@ -216,7 +326,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun enhanceEffective(): Boolean = when (enhanceChoice) {
         EnhanceChoice.ON -> true
         EnhanceChoice.OFF -> false
-        EnhanceChoice.AUTO -> engine != EngineKind.LENS && currentProfile().enhanceImages
+        EnhanceChoice.AUTO -> !engine.isClassicOcr && currentProfile().enhanceImages
     }
 
     fun setEnhance(on: Boolean) {
@@ -253,7 +363,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         fetchedOpenRouter = OpenRouterEngine.listModels(Net.transport)
                         message = "✓ تم جلب ${fetchedOpenRouter.size} موديل يدعم الصور"
                     }
-                    EngineKind.LENS -> Unit
+                    EngineKind.LENS, EngineKind.VISION -> Unit
                 }
             } catch (e: Exception) {
                 message = "تعذر جلب الموديلات: ${e.message}"
@@ -475,6 +585,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!imagesOnly) when (engine) {
             EngineKind.GEMINI -> if (geminiKey.isBlank()) return "أدخل Gemini API Key أولاً"
             EngineKind.OPENROUTER -> if (openRouterKey.isBlank()) return "أدخل OpenRouter API Key أولاً"
+            EngineKind.VISION -> if (visionKey.isBlank()) return "أدخل مفتاح Google Cloud Vision أولاً"
             EngineKind.LENS -> Unit
         }
         return when (sourceMode) {
@@ -495,6 +606,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         s.geminiModel = geminiModel; s.openRouterModel = openRouterModel
         if (geminiKey.isNotBlank()) s.geminiKey = geminiKey
         if (openRouterKey.isNotBlank()) s.openRouterKey = openRouterKey
+        if (visionKey.isNotBlank()) s.visionKey = visionKey
 
         val src: Source = when (sourceMode) {
             SourceMode.IMAGE -> image!!.let { Source.Image(it.uri, it.name) }
@@ -509,6 +621,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             engine = e,
             geminiKey = geminiKey.trim(),
             openRouterKey = openRouterKey.trim(),
+            visionKey = visionKey.trim(),
             geminiModel = geminiModel.trim(),
             openRouterModel = openRouterModel.trim(),
             thinking = thinking,
@@ -614,8 +727,68 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cacheSizeLabel(): String {
-        val b = FileOcrCache.sizeBytes(ctx)
-        return if (b < 1024 * 1024) "${b / 1024} KB" else "%.1f MB".format(java.util.Locale.US, b / 1048576.0)
+        val n = FileOcrCache.fileCount(ctx)
+        return sizeLabel(FileOcrCache.sizeBytes(ctx)) + if (n > 0) " • $n مهمة" else ""
+    }
+
+    private fun sizeLabel(b: Long): String =
+        if (b < 1024 * 1024) "${(b + 1023) / 1024} KB" else "%.1f MB".format(java.util.Locale.US, b / 1048576.0)
+
+    // ================================================================== diagnostic log
+    var diagnostics by mutableStateOf(s.diagnostics)
+        private set
+
+    fun setDiagnosticsOn(on: Boolean) {
+        diagnostics = on; s.diagnostics = on
+        DiagLog.enabled = on
+        if (on) DiagLog.section("تفعيل السجل")
+    }
+
+    fun diagSizeLabel(): String = sizeLabel(DiagLog.sizeBytes())
+
+    fun diagFileName(): String =
+        "HardSubOCR_diagnostics_" + java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm", java.util.Locale.US).format(java.util.Date()) + ".txt"
+
+    private fun diagBytes(): ByteArray = DiagLog.export(ctx.deviceInfo())
+
+    /** «حفظ»: writes the log where the user chose (Storage Access Framework). */
+    fun saveDiagnostics(target: Uri?) {
+        target ?: return
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { Saf.overwrite(ctx, target, diagBytes()) }.getOrDefault(false) }
+            message = if (ok) "✓ تم حفظ ملف التشخيص" else "تعذر حفظ ملف التشخيص"
+        }
+    }
+
+    /** «مشاركة»: a copy in the app's cache, shared through a content:// link. */
+    fun shareDiagnostics(context: android.content.Context) {
+        viewModelScope.launch {
+            val uri = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = java.io.File(ctx.cacheDir, "export").apply { mkdirs() }
+                    val f = java.io.File(dir, diagFileName())
+                    f.writeBytes(diagBytes())
+                    androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+                }.getOrNull()
+            }
+            if (uri == null) {
+                message = "تعذر تجهيز ملف التشخيص"; return@launch
+            }
+            val i = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "HardSub OCR — ملف التشخيص")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runCatching { context.startActivity(android.content.Intent.createChooser(i, "إرسال ملف التشخيص")) }
+                .onFailure { message = "لا يوجد تطبيق للمشاركة" }
+        }
+    }
+
+    fun clearDiagnostics() {
+        DiagLog.clear()
+        message = "تم مسح سجل التشخيص"
+        bumpSettings()
     }
 
     fun mergeLabel(c: Choice): String = when (c) {

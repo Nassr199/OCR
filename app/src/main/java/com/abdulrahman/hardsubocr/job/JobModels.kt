@@ -27,6 +27,7 @@ data class JobRequest(
     val engine: EngineKind,
     val geminiKey: String,
     val openRouterKey: String,
+    val visionKey: String,
     val geminiModel: String,
     val openRouterModel: String,
     val thinking: ThinkingLevel,
@@ -54,6 +55,9 @@ data class JobRequest(
     val stabilize: Boolean
 )
 
+/** One line of the live log; [id] keeps the list smooth when new lines arrive. */
+data class LogLine(val id: Long, val text: String)
+
 data class Progress(
     val title: String,
     val phase: String,
@@ -70,7 +74,13 @@ data class Progress(
     val unitIndex: Int,
     val unitCount: Int,
     val decodeFraction: Float?,
-    val log: List<String>
+    val log: List<LogLine>,
+    /** Seconds since the job started. */
+    val elapsedSec: Double = 0.0,
+    /** Video: frames analysed so far and analysis speed (frames per second), subtitles found. */
+    val frames: Int = 0,
+    val framesPerSec: Double = 0.0,
+    val subtitlesFound: Int = 0
 ) {
     companion object {
         fun starting() = Progress(

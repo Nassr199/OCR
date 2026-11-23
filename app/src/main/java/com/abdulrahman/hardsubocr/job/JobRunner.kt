@@ -11,12 +11,16 @@ import com.abdulrahman.hardsubocr.core.OcrError
 import com.abdulrahman.hardsubocr.core.OcrItem
 import com.abdulrahman.hardsubocr.core.OcrPipeline
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
+import com.abdulrahman.hardsubocr.core.VisionEngine
+import com.abdulrahman.hardsubocr.core.LensProtocol
+import com.abdulrahman.hardsubocr.core.isClassicOcr
 import com.abdulrahman.hardsubocr.core.PipelineListener
 import com.abdulrahman.hardsubocr.core.RetryPolicy
 import com.abdulrahman.hardsubocr.core.Srt
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.core.Timestamps
 import com.abdulrahman.hardsubocr.core.describeError
+import com.abdulrahman.hardsubocr.core.DiagLog
 import com.abdulrahman.hardsubocr.core.stackTraceOf
 import com.abdulrahman.hardsubocr.data.FileOcrCache
 import com.abdulrahman.hardsubocr.data.FolderRef
@@ -43,13 +47,16 @@ import java.io.File
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
 
+private const val LOG_KEEP = 400
+
 class JobRunner(
     private val context: Context,
     private val req: JobRequest,
     private val publish: (JobState) -> Unit
 ) {
     private val startedAt = System.currentTimeMillis()
-    private val log = ConcurrentLinkedDeque<String>()
+    private val log = ConcurrentLinkedDeque<LogLine>()
+    private val logIds = java.util.concurrent.atomic.AtomicLong(0)
     private val imagePreparer = AndroidImagePreparer(enhance = req.enhance, cropBand = true)
     private val videoPreparer = AndroidImagePreparer(enhance = req.enhance, cropBand = false)
 
@@ -61,12 +68,54 @@ class JobRunner(
     @Volatile private var unitTotal = 0
     @Volatile private var unitStartedAt = System.currentTimeMillis()
     @Volatile private var decodeFraction: Float? = null
+    @Volatile private var videoFrames = 0
+    @Volatile private var videoStartedAt = 0L
+    @Volatile private var lastPhaseKind = ""
     @Volatile private var phase = ""
+        set(v) {
+            field = v
+            // logged when the kind of work changes, not on every percentage update
+            val kind = v.filter { !it.isDigit() && it != '%' && it != '.' }.substringBefore('•').trim()
+            if (kind != lastPhaseKind) {
+                lastPhaseKind = kind
+                DiagLog.i("Job", "المرحلة: $v")
+            }
+        }
     private val discoveredSegments = AtomicInteger(0)
 
     private fun addLog(line: String) {
-        log.addFirst(line)
-        while (log.size > 80) log.pollLast()
+        log.addFirst(LogLine(logIds.incrementAndGet(), line))
+        while (log.size > LOG_KEEP) log.pollLast()
+        DiagLog.i("Job", line)
+    }
+
+    /** What this job does, without the keys (first block of the job in the diagnostic log). */
+    private fun describeRequest(): String = buildString {
+        append("المحرك: ").append(req.engine)
+        when (req.engine) {
+            EngineKind.GEMINI -> append(" • ").append(req.geminiModel).append(" • تفكير ").append(req.thinking)
+                .append(" • دقة عالية ").append(req.mediaHigh)
+            EngineKind.OPENROUTER -> append(" • ").append(req.openRouterModel)
+            EngineKind.LENS -> append(" • منطقة ").append(req.lensRegion)
+            EngineKind.VISION -> append(" • TEXT_DETECTION")
+        }
+        append(" • لغة ").append(req.lang).append(" • أسلوب ").append(req.profile ?: "—").append('\n')
+        append("المصدر: ").append(
+            when (val s = req.source) {
+                is Source.Image -> "صورة ${s.name}"
+                is Source.Folder -> "مجلد ${s.folder.name}"
+                is Source.Multi -> "${s.folders.size} مجلدات"
+                is Source.Video -> "فيديو ${s.name} • منطقة ${s.roi.normalized()}"
+            }
+        ).append('\n')
+        append("العمليات المتوازية ").append(req.workers).append(" • إعادة ").append(req.retries)
+            .append(" • تنظيف ").append(req.cleanMode).append(" • دمج ").append(req.mergeMode)
+            .append(" • تحسين الصور ").append(req.enhance).append(" • استئناف ").append(req.resume)
+        if (req.source is Source.Video) {
+            append('\n').append("الفيديو: ").append(req.videoEngine).append(" • ").append(req.videoMode)
+                .append(" • كل ").append(req.analyzeEvery).append(" إطار • Vulkan ").append(req.gpu)
+                .append(" • ").append(req.scan)
+        }
     }
 
     private fun buildEngine(): OcrEngine = when (req.engine) {
@@ -77,6 +126,7 @@ class JobRunner(
         EngineKind.OPENROUTER -> OpenRouterEngine(
             Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO, req.lang
         )
+        EngineKind.VISION -> VisionEngine(Net.transport, req.visionKey, req.lang.code)
     }
 
     private fun newPipeline(
@@ -118,13 +168,22 @@ class JobRunner(
         val unitFraction = if (dec != null) (dec * 0.6f + (if (dec >= 1f) ocrFraction else ocrFraction * dec) * 0.4f) else ocrFraction
         val overall = ((unitIndex + unitFraction.coerceIn(0f, 1f)) / unitCount.coerceAtLeast(1))
         val remaining = total - done
-        val eta = if (dec != null && dec < 1f) Double.NaN else if (speed > 0) remaining / speed else Double.NaN
+        val eta = if (dec != null && dec < 1f) {
+            // still analysing: the remaining frames at the current analysis speed
+            val vEl = (System.currentTimeMillis() - videoStartedAt) / 1000.0
+            if (dec > 0.02f && vEl > 3) vEl * (1 - dec) / dec else Double.NaN
+        } else if (speed > 0) remaining / speed else Double.NaN
+        val vSec = (System.currentTimeMillis() - videoStartedAt) / 1000.0
         return Progress(
             title = unitTitle, phase = phase, fraction = overall, done = done, total = total,
             ok = st?.ok?.get() ?: 0, empty = st?.empty?.get() ?: 0, failed = st?.failed?.get() ?: 0,
             cached = st?.cached?.get() ?: 0, retries = st?.retries?.get() ?: 0,
             speed = speed, etaSec = eta, unitIndex = unitIndex, unitCount = unitCount,
-            decodeFraction = dec, log = log.take(40)
+            decodeFraction = dec, log = log.take(LOG_KEEP),
+            elapsedSec = (System.currentTimeMillis() - startedAt) / 1000.0,
+            frames = videoFrames,
+            framesPerSec = if (dec != null && videoStartedAt > 0 && vSec > 0.5) videoFrames / vSec else 0.0,
+            subtitlesFound = discoveredSegments.get()
         )
     }
 
@@ -141,9 +200,12 @@ class JobRunner(
     }
 
     suspend fun run() {
+        DiagLog.section("بدء مهمة")
+        DiagLog.i("Job", describeRequest())
         val engine = try {
             buildEngine()
         } catch (e: OcrError.Fatal) {
+            DiagLog.w("Job", "لم تبدأ: ${e.message}")
             publish(JobState.Error(e.message ?: "إعدادات غير مكتملة", emptyList()))
             return
         }
@@ -156,8 +218,22 @@ class JobRunner(
 
         coroutineScope {
             val ticker = launch {
+                var lastHealth = System.currentTimeMillis()
                 while (isActive) {
-                    publish(JobState.Running(snapshot()))
+                    val snap = snapshot()
+                    publish(JobState.Running(snap))
+                    val now = System.currentTimeMillis()
+                    if (now - lastHealth >= 30_000) {
+                        // every 30 s: where the job is and how much memory it uses (finds hangs and OOMs)
+                        lastHealth = now
+                        val rt = Runtime.getRuntime()
+                        DiagLog.i(
+                            "Health",
+                            "${(snap.fraction * 100).toInt()}% • ${snap.done}/${snap.total} • ✓${snap.ok} ○${snap.empty} ✖${snap.failed} ↻${snap.retries}" +
+                                (if (snap.decodeFraction != null) " • إطارات ${snap.frames} (${"%.1f".format(java.util.Locale.US, snap.framesPerSec)}/ث)" else "") +
+                                " • ذاكرة ${(rt.totalMemory() - rt.freeMemory()) / 1048576}/${rt.maxMemory() / 1048576} MB"
+                        )
+                    }
                     delay(300)
                 }
             }
@@ -176,6 +252,7 @@ class JobRunner(
                         val name = unitName(unit)
                         val why = if (e is IllegalStateException || e is java.io.IOException) (e.message ?: describeError(e)) else describeError(e)
                         addLog("✖ $name — $why")
+                        DiagLog.e("Job", "فشل «$name»", e)
                         val out = partialOutput(name, outputFolderFor(unit), why)
                             ?: JobOutput(name, null, emptyList(), null, outputFolderFor(unit), error = why)
                         outputs.add(out)
@@ -189,6 +266,7 @@ class JobRunner(
                 ticker.cancel()
                 val n = outputs.count { it.uri != null }
                 val totalEntries = outputs.sumOf { it.entries.size }
+                endLog("اكتملت", outputs)
                 publish(
                     JobState.Done(
                         outputs, stopped = false, elapsedSec = (System.currentTimeMillis() - startedAt) / 1000.0,
@@ -204,6 +282,7 @@ class JobRunner(
                 ticker.cancel()
                 val unit = units.getOrNull(unitIndex)
                 if (unit != null) partialOutput(unitName(unit), outputFolderFor(unit), null)?.let { outputs.add(it) }
+                endLog("أوقفها المستخدم", outputs)
                 publish(
                     JobState.Done(
                         outputs, stopped = true, elapsedSec = (System.currentTimeMillis() - startedAt) / 1000.0,
@@ -215,9 +294,26 @@ class JobRunner(
                 ticker.cancel()
                 val unit = units.getOrNull(unitIndex)
                 if (unit != null) partialOutput(unitName(unit), outputFolderFor(unit), e.message)?.let { outputs.add(it) }
+                DiagLog.e("Job", "توقفت بخطأ دائم: ${e.message}")
+                endLog("توقفت بخطأ", outputs)
                 publish(JobState.Error(e.message ?: "خطأ", outputs))
             }
         }
+    }
+
+    private fun endLog(how: String, outputs: List<JobOutput>) {
+        val st = pipeline?.stats
+        DiagLog.i(
+            "Job",
+            "$how بعد ${Timestamps.human((System.currentTimeMillis() - startedAt) / 1000.0)} • " +
+                "${outputs.sumOf { it.entries.size }} سطر • ✓${st?.ok?.get() ?: 0} ○${st?.empty?.get() ?: 0} ✖${st?.failed?.get() ?: 0}" +
+                " • من الذاكرة ${st?.cached?.get() ?: 0} • إعادات ${st?.retries?.get() ?: 0}"
+        )
+        for (o in outputs) {
+            o.error?.let { DiagLog.w("Job", "${o.name}: $it") }
+            for ((n, err) in o.failures.take(50)) DiagLog.w("Job", "صورة فشلت: $n — $err")
+        }
+        DiagLog.flush()
     }
 
     private fun unitName(u: Source): String = when (u) {
@@ -291,7 +387,7 @@ class JobRunner(
         }
         if (items.isEmpty()) {
             throw IllegalStateException(
-                "صور «${folder.name}» بلا توقيت في الاسم. يجب أن تكون بصيغة VideoSubFinder مثل 0_00_10_000__0_00_12_000.png"
+                "صور «${folder.name}» بلا توقيت في الاسم. يجب أن تحمل الأسماء التوقيت مثل 0_00_10_000__0_00_12_000.png (صيغة VideoSubFinder)"
             )
         }
         if (noTs > 0) addLog("○ تم تجاهل $noTs صورة بدون توقيت في الاسم")
@@ -334,7 +430,7 @@ class JobRunner(
         val roi = u.roi.normalized()
         val sourceId = "video5|${u.uri}|${roi}|${req.scan}|${req.analyzeEvery}|${req.videoEngine}"
         val cache = if (req.resume && !imagesOnly) withContext(Dispatchers.IO) { FileOcrCache.open(context, sourceId) } else null
-        val maxCrop = if (req.engine == EngineKind.LENS) 1500 else 3072
+        val maxCrop = if (req.engine.isClassicOcr) LensProtocol.MAX_DIMENSION else 3072
         var saved = 0
         var saveErrors = 0
         var scan: VideoScanner.Result? = null
@@ -348,6 +444,9 @@ class JobRunner(
             val p = newPipeline(engine, cache, videoPreparer)
             beginUnit(u.name, 0, p)
             decodeFraction = 0f
+            videoFrames = 0
+            videoStartedAt = System.currentTimeMillis()
+            DiagLog.i("Video", "${info.label} • ${info.mime} • ${info.width}x${info.height} • ${info.frameRate} fps • دوران ${info.rotation}")
             val ch = Channel<OcrItem>(Channel.UNLIMITED)
             coroutineScope {
                 val ocr = if (imagesOnly) null else launch { p.run(ch) }
@@ -359,6 +458,7 @@ class JobRunner(
                             onLog = { line -> addLog(line) },
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f
+                                videoFrames = frames
                                 phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
                             },
                             onSegment = { segStartUs, segEndUs, img, tag ->
@@ -396,7 +496,7 @@ class JobRunner(
                                 }
                                 discoveredSegments.incrementAndGet()
                                 if (!imagesOnly) {
-                                    // OCR input: Lens only accepts <= 1500 px
+                                    // OCR input: Lens / Vision get <= 1500 px
                                     val ocrBytes = if (img.width > maxCrop) {
                                         val b = Bitmap.createBitmap(img.argb, img.width, img.height, Bitmap.Config.ARGB_8888)
                                         val sc = AndroidImagePreparer.scaleToFit(b, maxCrop)

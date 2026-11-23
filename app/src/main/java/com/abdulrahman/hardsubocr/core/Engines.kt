@@ -77,6 +77,114 @@ class LensEngine(
     }
 }
 
+/** One entry of the model picker. */
+data class ModelInfo(val id: String, val name: String, val family: String, val note: String)
+
+// =====================================================================================  Google Cloud Vision
+
+/**
+ * Google Cloud Vision OCR (images:annotate, TEXT_DETECTION — text in pictures, not documents), with
+ * the user's own Google Cloud API key. Handled like Google Lens: same image (PNG ≤ 1500 px), same
+ * cleaning and merging, raw text exactly as recognised.
+ */
+class VisionEngine(
+    private val http: HttpTransport,
+    private val apiKey: String,
+    private val language: String = "ar"
+) : OcrEngine {
+    override val kind = EngineKind.VISION
+    override val cacheId = "vision:$language:text"
+
+    init {
+        if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
+    }
+
+    fun buildBody(image: PreparedImage): String = buildJsonObject {
+        putJsonArray("requests") {
+            addJsonObject {
+                putJsonObject("image") { put("content", Base64.getEncoder().encodeToString(image.bytes)) }
+                putJsonArray("features") { addJsonObject { put("type", "TEXT_DETECTION") } }
+                putJsonObject("imageContext") { putJsonArray("languageHints") { add(JsonPrimitive(language)) } }
+            }
+        }
+    }.toString()
+
+    override suspend fun recognize(image: PreparedImage): String {
+        val resp = http.execute(
+            HttpRequest(
+                url = ENDPOINT,
+                headers = mapOf("x-goog-api-key" to apiKey),
+                body = buildBody(image).toByteArray(Charsets.UTF_8),
+                contentType = "application/json; charset=utf-8",
+                timeoutMs = 60_000
+            )
+        )
+        if (resp.code == 200) return parseText(resp.text)
+        val e = GoogleApiError.parse(resp.text)
+        throw classify(resp.code, e.status, e.message.ifBlank { shortBody(resp.text) }, e.reason, parseRetryAfter(resp.header("Retry-After")))
+    }
+
+    companion object {
+        const val ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
+
+        /** Full text of the first response; a per-image error is raised like an HTTP one. */
+        fun parseText(body: String): String {
+            val root = parseJsonOrNull(body).obj() ?: throw OcrError.Retryable("رد Google Vision غير مفهوم")
+            val r = root["responses"].arr()?.firstOrNull().obj() ?: return ""
+            r["error"].obj()?.let { err ->
+                val code = (err["code"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+                val msg = err["message"].str() ?: ""
+                throw classify(rpcToHttp(code), "", msg, null, null)
+            }
+            val full = r["fullTextAnnotation"].obj()?.get("text").str()
+                ?: r["textAnnotations"].arr()?.firstOrNull().obj()?.get("description").str()
+                ?: return ""
+            return full.trimEnd('\n', ' ')
+        }
+
+        /** google.rpc.Code of a per-image error → the HTTP code the same problem gets. */
+        private fun rpcToHttp(code: Int): Int = when (code) {
+            3 -> 400; 7 -> 403; 16 -> 401; 8 -> 429; 4 -> 504; 14 -> 503; 13 -> 500; 5 -> 404
+            else -> 500
+        }
+
+        fun classify(code: Int, status: String, msg: String, reason: String?, retryAfterMs: Long?): OcrError {
+            val m = msg.lowercase()
+            val r = reason.orEmpty()
+            return when {
+                r == "API_KEY_INVALID" || m.contains("api key not valid") || m.contains("api_key_invalid") ->
+                    OcrError.Fatal("مفتاح Google Cloud Vision غير صالح")
+                r == "BILLING_DISABLED" || m.contains("billing") ->
+                    OcrError.Fatal("Cloud Vision يتطلب تفعيل الفوترة (Billing) في مشروع Google Cloud: $msg")
+                r == "SERVICE_DISABLED" || m.contains("has not been used") || m.contains("is disabled") ->
+                    OcrError.Fatal("فعّل Cloud Vision API في مشروع Google Cloud الخاص بالمفتاح: $msg")
+                r == "API_KEY_SERVICE_BLOCKED" || r == "API_KEY_ANDROID_APP_BLOCKED" || m.contains("are blocked") ->
+                    OcrError.Fatal("المفتاح مقيّد ولا يسمح بـ Cloud Vision API: $msg")
+                code == 401 || code == 403 || status == "PERMISSION_DENIED" ->
+                    OcrError.Fatal("Google Vision رفض المفتاح أو الصلاحية: $msg")
+                code == 429 && (m.contains("per day") || m.contains("perday")) ->
+                    OcrError.Fatal("انتهت الحصة اليومية لـ Google Vision: $msg")
+                code == 429 -> OcrError.Retryable("Google Vision: طلبات كثيرة (429)", retryAfterMs ?: 8_000, true)
+                code in 500..599 -> OcrError.Retryable("خطأ مؤقت في Google Vision ($code)")
+                code == 400 || code == 413 -> OcrError.Failed("Google Vision رفض هذه الصورة: $msg")
+                else -> OcrError.Retryable("Google Vision أعاد $code: $msg")
+            }
+        }
+    }
+}
+
+/** The error object every Google API returns: {"error": {code, message, status, details: [{reason}]}}. */
+internal object GoogleApiError {
+    class Parsed(val message: String, val status: String, val reason: String?)
+
+    fun parse(body: String): Parsed {
+        val e = parseJsonOrNull(body).obj()?.get("error").obj() ?: return Parsed("", "", null)
+        var reason: String? = null
+        e["details"].arr()?.forEach { d -> d.obj()?.get("reason").str()?.let { if (reason == null) reason = it } }
+        return Parsed(e["message"].str() ?: "", e["status"].str() ?: "", reason)
+    }
+}
+
 // =====================================================================================  Gemini (direct)
 
 enum class ThinkingLevel(val api: String?) { DEFAULT(null), MINIMAL("minimal"), LOW("low"), MEDIUM("medium"), HIGH("high") }
@@ -196,13 +304,35 @@ class GeminiEngine(
     }
 
     companion object {
-        /** Newest first (verified Nov 2026). "Fetch models" adds whatever the key can really use. */
-        val SUGGESTED_MODELS = listOf(
-            "gemini-4-hydrogen", "gemini-4-argon", "gemini-4-carbon",
-            "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite",
-            "gemini-3-flash-preview", "gemini-3.1-flash-lite"
+        /**
+         * Current Gemini models that read images (Gemini API, checked 23 Nov 2026), in the order shown.
+         * Older ones (3.6 Flash, 3 Flash Preview, 3.1 Flash-Lite, 2.x) are no longer offered here.
+         */
+        val MODELS = listOf(
+            ModelInfo("gemini-4-hydrogen", "Gemini 4 Hydrogen", "Gemini 4", "الأسرع في Gemini 4 — مناسب للاستخراج اليومي"),
+            ModelInfo("gemini-4-neon", "Gemini 4 Neon", "Gemini 4", "بين Hydrogen وCarbon: قراءة أعمق بسرعة معتدلة"),
+            ModelInfo("gemini-4-carbon", "Gemini 4 Carbon", "Gemini 4", "أقوى استدلال في Gemini 4 — الأبطأ"),
+            ModelInfo("gemini-4-argon", "Gemini 4 Argon", "Gemini 4", "أول نماذج Gemini 4"),
+            ModelInfo("gemini-3.8-flash", "Gemini 3.8 Flash", "Gemini 3", "أحدث Flash في Gemini 3"),
+            ModelInfo("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Gemini 3", "الأخف — للمجلدات الكبيرة")
         )
+        val SUGGESTED_MODELS = MODELS.map { it.id }
         const val DEFAULT_MODEL = "gemini-4-hydrogen"
+
+        /** Models that were offered before and are gone from the list (kept working if typed by hand). */
+        val RETIRED = setOf("gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite")
+
+        fun info(id: String): ModelInfo? = MODELS.firstOrNull { it.id == id.removePrefix("models/") }
+
+        /** From a model list: only current Gemini text models that can read an image. */
+        fun keepForOcr(id: String): Boolean {
+            if (!id.startsWith("gemini-")) return false
+            val skip = listOf(
+                "embedding", "tts", "image", "live", "banana", "lyria", "transcribe", "robotics", "omni",
+                "translate", "computer-use", "native-audio", "aqa", "learnlm", "-exp", "gemini-1.", "gemini-2.0"
+            )
+            return skip.none { id.contains(it) }
+        }
 
         fun parseText(body: String): String {
             val root = parseJsonOrNull(body).obj() ?: throw OcrError.Retryable("رد Gemini غير مفهوم")
@@ -241,10 +371,7 @@ class GeminiEngine(
                 val methods = o["supportedGenerationMethods"].arr()?.mapNotNull { it.str() } ?: emptyList()
                 if ("generateContent" !in methods) return@mapNotNull null
                 o["name"].str()?.removePrefix("models/")
-            }.filter {
-                !it.contains("embedding") && !it.contains("tts") && !it.contains("image") &&
-                    !it.contains("live") && !it.contains("banana") && !it.contains("lyria")
-            }.sortedDescending()
+            }.filter { keepForOcr(it) }.sortedDescending()
         }
     }
 }
@@ -350,11 +477,11 @@ class OpenRouterEngine(
     }
 
     companion object {
-        const val DEFAULT_MODEL = "google/gemini-3.1-flash-lite"
-        val SUGGESTED_MODELS = listOf(
-            DEFAULT_MODEL, "google/gemini-4-hydrogen", "google/gemini-4-argon",
-            "google/gemini-3.8-flash", "google/gemini-3.5-flash-lite", "google/gemini-3-flash-preview"
-        )
+        const val DEFAULT_MODEL = "google/gemini-3.5-flash-lite"
+
+        /** OpenRouter ids of the same current Gemini models (checked on openrouter.ai, 23 Nov 2026). */
+        val MODELS = GeminiEngine.MODELS.map { it.copy(id = "google/" + it.id) }
+        val SUGGESTED_MODELS = MODELS.map { it.id }
 
         fun parseText(root: JsonObject?): String {
             val choices = root?.get("choices").arr() ?: throw OcrError.Retryable("رد OpenRouter غير مفهوم")

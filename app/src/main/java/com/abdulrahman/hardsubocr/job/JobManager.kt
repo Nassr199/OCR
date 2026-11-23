@@ -75,6 +75,7 @@ object JobManager {
             } catch (e: CancellationException) {
                 // the runner already published the partial result
             } catch (e: Throwable) {
+                com.abdulrahman.hardsubocr.core.DiagLog.e("Job", "خطأ غير متوقع أوقف المهمة", e)
                 _state.value = JobState.Error("خطأ غير متوقع: ${describeError(e)}", emptyList(), stackTraceOf(e))
             } finally {
                 pending = null

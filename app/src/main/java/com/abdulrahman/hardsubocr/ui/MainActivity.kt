@@ -5,6 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,19 +50,30 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     }
     BackHandler(enabled = screen != Screen.HOME) { goHome() }
 
-    when (screen) {
-        Screen.HOME -> HomeScreen(
-            vm,
-            onOpenSettings = { screen = Screen.SETTINGS },
-            onOpenRoi = { vm.openRoiEditor(); screen = Screen.ROI },
-            onOpenEditor = { i -> vm.openEditor(i); screen = Screen.EDITOR }
-        )
-        Screen.SETTINGS -> SettingsScreen(vm, onBack = goHome)
-        Screen.ROI -> RoiScreen(vm, onBack = goHome)
-        Screen.EDITOR -> if (vm.editIndex == null) {
-            LaunchedEffect(Unit) { screen = Screen.HOME }
-        } else {
-            ResultScreen(vm, onBack = goHome)
+    // Screens fade and settle in (direction-neutral: right for the Arabic layout, left for English)
+    AnimatedContent(
+        targetState = screen,
+        transitionSpec = {
+            val forward = targetState != Screen.HOME
+            (fadeIn(tween(260, delayMillis = 40)) + scaleIn(tween(260), initialScale = if (forward) 0.96f else 1.03f)) togetherWith
+                (fadeOut(tween(160)) + scaleOut(tween(200), targetScale = if (forward) 1.02f else 0.97f))
+        },
+        label = "screen"
+    ) { s ->
+        when (s) {
+            Screen.HOME -> HomeScreen(
+                vm,
+                onOpenSettings = { screen = Screen.SETTINGS },
+                onOpenRoi = { vm.openRoiEditor(); screen = Screen.ROI },
+                onOpenEditor = { i -> vm.openEditor(i); screen = Screen.EDITOR }
+            )
+            Screen.SETTINGS -> SettingsScreen(vm, onBack = goHome)
+            Screen.ROI -> RoiScreen(vm, onBack = goHome)
+            Screen.EDITOR -> if (vm.editIndex == null) {
+                LaunchedEffect(Unit) { screen = Screen.HOME }
+            } else {
+                ResultScreen(vm, onBack = goHome)
+            }
         }
     }
 }

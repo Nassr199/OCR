@@ -11,6 +11,7 @@ import com.abdulrahman.hardsubocr.core.ScanParams
 import com.abdulrahman.hardsubocr.core.SubLang
 import com.abdulrahman.hardsubocr.core.SubStyle
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
+import com.abdulrahman.hardsubocr.core.isClassicOcr
 
 enum class SourceMode { IMAGE, FOLDER, MULTI, VIDEO }
 
@@ -64,8 +65,13 @@ class Settings(context: Context) {
         get() = SecureStore.decrypt(sp.getString("openrouter_key", null))
         set(v) = put("openrouter_key", SecureStore.encrypt(v.trim()))
 
+    /** Google Cloud API key with Cloud Vision API enabled. */
+    var visionKey: String
+        get() = SecureStore.decrypt(sp.getString("vision_key", null))
+        set(v) = put("vision_key", SecureStore.encrypt(v.trim()))
+
     var geminiModel: String
-        get() = str("gemini_model", GeminiEngine.DEFAULT_MODEL)
+        get() = str("gemini_model", GeminiEngine.DEFAULT_MODEL).ifBlank { GeminiEngine.DEFAULT_MODEL }
         set(v) = put("gemini_model", v.trim())
 
     var openRouterModel: String
@@ -220,7 +226,7 @@ class Settings(context: Context) {
         }
         set(v) = put("v_engine", v.name)
 
-    /** OpenGL ES 3.1 compute acceleration (Adreno…), auto-verified against the CPU. */
+    /** Vulkan compute acceleration (Adreno…), auto-verified against the CPU. */
     var gpu: Boolean
         get() = sp.getBoolean("v_gpu", true)
         set(v) = putBool("v_gpu", v)
@@ -245,7 +251,7 @@ class Settings(context: Context) {
     fun profileFor(kind: EngineKind): AiProfile? = when (kind) {
         EngineKind.GEMINI -> profileGemini
         EngineKind.OPENROUTER -> profileOpenRouter
-        EngineKind.LENS -> null
+        EngineKind.LENS, EngineKind.VISION -> null
     }
 
     fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH else when (cleanChoice) {
@@ -271,5 +277,11 @@ class Settings(context: Context) {
     fun stabilizeFor(kind: EngineKind): Boolean = subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
         ((profileFor(kind)?.stabilize ?: false) || cleanChoice == CleanChoice.V26)
 
-    fun workersFor(kind: EngineKind): Int = if (kind == EngineKind.LENS) workersLens else workersAi
+    /** Lens and Vision share the "classic OCR" setting. */
+    fun workersFor(kind: EngineKind): Int = if (kind.isClassicOcr) workersLens else workersAi
+
+    /** Detailed on-device diagnostic log (sent by the user when something goes wrong). */
+    var diagnostics: Boolean
+        get() = sp.getBoolean("diag_log", true)
+        set(v) = putBool("diag_log", v)
 }

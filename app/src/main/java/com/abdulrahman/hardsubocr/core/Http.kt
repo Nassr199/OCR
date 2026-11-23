@@ -34,7 +34,13 @@ sealed class OcrError(message: String) : Exception(message) {
     class Failed(message: String) : OcrError(message)
 }
 
-enum class EngineKind { LENS, GEMINI, OPENROUTER }
+enum class EngineKind { LENS, GEMINI, OPENROUTER, VISION }
+
+/**
+ * Classic OCR (Google Lens, Google Cloud Vision): no prompt, the text exactly as recognised. Both get
+ * the same treatment everywhere: cleaning, merging, image preparation, parallelism and image sizes.
+ */
+val EngineKind.isClassicOcr: Boolean get() = this == EngineKind.LENS || this == EngineKind.VISION
 
 class PreparedImage(val bytes: ByteArray, val mime: String, val width: Int, val height: Int)
 
