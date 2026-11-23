@@ -26,7 +26,7 @@ fun main() = runBlocking {
     check("TEXT_DETECTION", r0["features"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content == "TEXT_DETECTION")
     check("language hint ar", r0["imageContext"]!!.jsonObject["languageHints"]!!.jsonArray[0].jsonPrimitive.content == "ar")
     check("full text, trailing newline trimmed", text == "مرحبا يا صديقي\nكيف حالك؟", text)
-    check("cacheId per language", e.cacheId == "vision:ar:text" && VisionEngine(ok, "k", "en").cacheId == "vision:en:text")
+    check("cacheId per language", e.cacheId == "vision:ar:layout" && VisionEngine(ok, "k", "en").cacheId == "vision:en:layout")
     // 2) fallback to textAnnotations, empty response
     check("textAnnotations fallback", VisionEngine.parseText("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}]}]}""") == "أبي")
     check("no text → empty", VisionEngine.parseText("""{"responses":[{}]}""") == "")

@@ -6,12 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,6 +16,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abdulrahman.hardsubocr.ui.theme.AppTheme
 
@@ -50,14 +47,13 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     }
     BackHandler(enabled = screen != Screen.HOME) { goHome() }
 
-    // Screens fade and settle in (direction-neutral: right for the Arabic layout, left for English)
+    // Pages move along the reading direction (Material shared axis X): a page opened from the
+    // home screen comes in from the left in Arabic, and goes back the same way it came.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val distance = with(LocalDensity.current) { Motion.AXIS_DISTANCE.roundToPx() }
     AnimatedContent(
         targetState = screen,
-        transitionSpec = {
-            val forward = targetState != Screen.HOME
-            (fadeIn(tween(260, delayMillis = 40)) + scaleIn(tween(260), initialScale = if (forward) 0.96f else 1.03f)) togetherWith
-                (fadeOut(tween(160)) + scaleOut(tween(200), targetScale = if (forward) 1.02f else 0.97f))
-        },
+        transitionSpec = { Motion.sharedAxisX(forward = targetState != Screen.HOME, rtl = rtl, distancePx = distance) },
         label = "screen"
     ) { s ->
         when (s) {

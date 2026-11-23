@@ -1,0 +1,295 @@
+package com.abdulrahman.hardsubocr.core
+
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+
+/**
+ * Rebuilds the text of a Google Cloud Vision answer from the position of every word, instead of
+ * taking Vision's ready-made text.
+ *
+ * Vision's own text has two faults with Arabic subtitles (seen on real frames):
+ * - the same words read twice (the letters and their outline / shadow, as two blocks):
+ *   «بخير بخير أجل أنا بخير» came back as «بخير أجل أنا بخير بخير بخير أجل أنا بخير»;
+ * - blocks of one line laid out left to right: «حبيبي، هل أنت بخير؟» came back «هل أنت بخير؟ حبيبي،».
+ *
+ * So: a second reading of the same place is dropped (a whole paragraph, or single words), the rest
+ * is grouped into lines by height, each line is read right to left when it is Arabic, and blocks far
+ * apart on one row become separate lines (credits beside the subtitle are then removed by the
+ * Arabic line filter, as with Lens). Nothing is added: every output word is a word Vision read.
+ */
+object VisionLayout {
+
+    class Word(
+        val text: String,
+        val x0: Int, val y0: Int, val x1: Int, val y1: Int,
+        val conf: Float = 0f,
+        /** Paragraph of the answer the word came from (-1: none known). */
+        val par: Int = -1
+    ) {
+        val w get() = (x1 - x0).coerceAtLeast(1)
+        val h get() = (y1 - y0).coerceAtLeast(1)
+        val area get() = w.toLong() * h
+        val cx get() = (x0 + x1) / 2.0
+        val cy get() = (y0 + y1) / 2.0
+        val letters: Int by lazy { text.count { it.isLetterOrDigit() } }
+        val punct get() = letters == 0
+        override fun toString() = "$text[$x0,$y0,$x1,$y1]"
+    }
+
+    // ------------------------------------------------------------------ reading the answer
+
+    private fun JsonElement?.o() = this as? JsonObject
+    private fun JsonElement?.a() = this as? JsonArray
+    private fun JsonElement?.s() = (this as? JsonPrimitive)?.content
+    private fun JsonElement?.i() = (this as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt()
+    private fun JsonElement?.f() = (this as? JsonPrimitive)?.content?.toFloatOrNull()
+
+    /** Box from {vertices: [{x, y}…]} — Vision leaves out a coordinate that is 0. */
+    private fun box(poly: JsonElement?): IntArray? {
+        val vs = poly.o()?.get("vertices").a() ?: return null
+        if (vs.isEmpty()) return null
+        var x0 = Int.MAX_VALUE; var y0 = Int.MAX_VALUE; var x1 = Int.MIN_VALUE; var y1 = Int.MIN_VALUE
+        for (v in vs) {
+            val x = v.o()?.get("x").i() ?: 0
+            val y = v.o()?.get("y").i() ?: 0
+            x0 = minOf(x0, x); y0 = minOf(y0, y); x1 = maxOf(x1, x); y1 = maxOf(y1, y)
+        }
+        return if (x1 > x0 && y1 > y0) intArrayOf(x0, y0, x1, y1) else null
+    }
+
+    /** Every word with its box: from fullTextAnnotation, else from textAnnotations[1…]. */
+    fun wordsOf(response: JsonObject): List<Word> {
+        val out = ArrayList<Word>()
+        var parId = 0
+        response["fullTextAnnotation"].o()?.get("pages").a()?.forEach { page ->
+            page.o()?.get("blocks").a()?.forEach { block ->
+                block.o()?.get("paragraphs").a()?.forEach { par ->
+                    val id = parId++
+                    par.o()?.get("words").a()?.forEach { wd ->
+                        val w = wd.o() ?: return@forEach
+                        val text = w["symbols"].a()?.joinToString("") { it.o()?.get("text").s() ?: "" }.orEmpty().trim()
+                        val b = box(w["boundingBox"])
+                        if (text.isNotEmpty() && b != null) out.add(Word(text, b[0], b[1], b[2], b[3], w["confidence"].f() ?: 0f, id))
+                    }
+                }
+            }
+        }
+        if (out.isNotEmpty()) return out
+        response["textAnnotations"].a()?.drop(1)?.forEach { t ->
+            val o = t.o() ?: return@forEach
+            val text = o["description"].s().orEmpty().trim()
+            val b = box(o["boundingPoly"])
+            if (text.isNotEmpty() && b != null) out.add(Word(text, b[0], b[1], b[2], b[3]))
+        }
+        return out
+    }
+
+    // ------------------------------------------------------------------ geometry
+
+    private fun inter(ax0: Int, ay0: Int, ax1: Int, ay1: Int, bx0: Int, by0: Int, bx1: Int, by1: Int): Long {
+        val w = minOf(ax1, bx1) - maxOf(ax0, bx0)
+        val h = minOf(ay1, by1) - maxOf(ay0, by0)
+        return if (w <= 0 || h <= 0) 0L else w.toLong() * h
+    }
+
+    private fun inter(a: Word, b: Word) = inter(a.x0, a.y0, a.x1, a.y1, b.x0, b.y0, b.x1, b.y1)
+
+    /** Letters (and digits) of [a] also found in [b], counted with repeats — order free. */
+    private fun shared(a: String, b: String): Int {
+        val m = HashMap<Char, Int>()
+        for (c in b) if (c.isLetterOrDigit()) m[c] = (m[c] ?: 0) + 1
+        var n = 0
+        for (c in a) if (c.isLetterOrDigit()) {
+            val k = m[c] ?: 0
+            if (k > 0) { n++; m[c] = k - 1 }
+        }
+        return n
+    }
+
+    /** [b] is a second reading of the place of [a] (outline, shadow, overlapping block). */
+    private fun sameSpot(a: Word, b: Word): Boolean {
+        val i = inter(a, b)
+        if (i == 0L) return false
+        if (a.punct || b.punct) {
+            // a mark is a copy only of the same mark, or of a word that already carries it
+            val p = if (a.punct) a else b
+            val o = if (a.punct) b else a
+            if (o.punct) return i.toDouble() / (a.area + b.area - i) >= 0.3
+            return i.toDouble() / p.area >= 0.6 && p.text.all { it in o.text }
+        }
+        if (i.toDouble() / (a.area + b.area - i) >= 0.4) return true
+        // a short word read twice a few pixels apart: the boxes overlap little but sit on one spot
+        val hMin = minOf(a.h, b.h)
+        if (Math.abs(a.cx - b.cx) <= hMin * 0.35 && Math.abs(a.cy - b.cy) <= hMin * 0.35 &&
+            shared(a.text, b.text) >= maxOf(a.letters, b.letters) * 0.8
+        ) return true
+        val small = if (a.area <= b.area) a else b
+        val big = if (small === a) b else a
+        return i.toDouble() / small.area >= 0.75 && shared(small.text, big.text) >= small.letters * 0.6
+    }
+
+    /** [w] lies on [o] (a reading of the same letters there), whatever the word split. */
+    private fun onTop(w: Word, o: Word): Boolean {
+        val i = inter(w, o)
+        if (i == 0L) return false
+        if (w.punct) return i.toDouble() / w.area >= 0.5 && w.text.all { it in o.text }
+        if (o.punct) return false
+        return (i.toDouble() / (w.area + o.area - i) >= 0.3 || i.toDouble() / minOf(w.area, o.area) >= 0.6) &&
+            shared(w.text, o.text) >= minOf(w.letters, o.letters) * 0.5
+    }
+
+    /**
+     * Drops second readings, keeping the better one:
+     * 1) a paragraph whose words lie on the words of a fuller paragraph (a partial copy), or a weaker
+ *    paragraph read with the same words;
+     * 2) a word whose box holds two or more words with its letters — the same text read without the
+     *    space: the separate words stay when they are spaced like words, else the joined one stays;
+     * 3) of words on the same spot, the best one (higher confidence, more letters, larger).
+     */
+    fun dedupe(input: List<Word>): List<Word> {
+        var words = input
+        // 1) paragraphs
+        val pars = words.filter { it.par >= 0 }.groupBy { it.par }
+        if (pars.size > 1) {
+            class P(val id: Int, val ws: List<Word>) {
+                val letters = ws.sumOf { it.letters }
+                val conf = ws.map { it.conf }.average()
+            }
+            val ps = pars.map { (id, ws) -> P(id, ws) }
+                .sortedWith(compareByDescending<P> { it.letters }.thenByDescending { it.conf })
+            val kept = ArrayList<P>()
+            val dropped = HashSet<Int>()
+            for (p in ps) {
+                // every word of it lies on a word of a fuller reading (or of the same reading with the
+                // same words), so nothing is lost; other overlaps are decided word by word
+                val copy = p.letters > 0 && kept.any { q ->
+                    (p.letters < q.letters || p.ws.size == q.ws.size) &&
+                        p.ws.all { w -> q.ws.any { o -> onTop(w, o) } }
+                }
+                if (copy) dropped.add(p.id) else kept.add(p)
+            }
+            if (dropped.isNotEmpty()) words = words.filter { it.par !in dropped }
+        }
+        // 2) joined readings
+        val drop = HashSet<Word>()
+        for (big in words) {
+            if (big.punct || big in drop) continue
+            val parts = words.filter { s ->
+                s !== big && !s.punct && s.area < big.area * 0.9 && inter(big, s).toDouble() / s.area >= 0.8
+            }
+            if (parts.size < 2 || shared(parts.joinToString("") { it.text }, big.text) < big.letters * 0.7) continue
+            val sorted = parts.sortedBy { it.x0 }
+            val hMed = sorted.map { it.h }.sorted()[sorted.size / 2]
+            val spaced = sorted.zipWithNext().all { (l, r) -> r.x0 - l.x1 >= hMed * 0.1 }
+            if (spaced) drop.add(big) else drop.addAll(parts)
+        }
+        if (drop.isNotEmpty()) words = words.filter { it !in drop }
+        // 3) single words
+        val kept = ArrayList<Word>()
+        val order = words.sortedWith(
+            compareBy<Word> { it.punct }.thenByDescending { it.conf }.thenByDescending { it.letters }.thenByDescending { it.area }
+        )
+        for (w in order) if (kept.none { sameSpot(it, w) }) kept.add(w)
+        return kept
+    }
+
+    private fun isArabicChar(c: Char) =
+        c in '؀'..'ۿ' || c in 'ݐ'..'ݿ' || c in 'ࢠ'..'ࣿ' || c in 'ﭐ'..'﷿' || c in 'ﹰ'..'﻿'
+
+    private fun hasArabic(s: String) = s.any { isArabicChar(it) }
+    private fun hasLatin(s: String) = s.any { it.isLetter() && !isArabicChar(it) }
+
+    private fun arabicLine(ws: List<Word>): Boolean {
+        var ar = 0; var lat = 0
+        for (w in ws) for (c in w.text) if (isArabicChar(c)) ar++ else if (c.isLetter()) lat++
+        // an Arabic subtitle with a Latin name in it is still an Arabic line
+        return ar > 0 && ar * 10 >= (ar + lat) * 3
+    }
+
+    /**
+     * Visual order → reading order. Arabic line: right to left, except that a run of Latin words
+     * inside it is still read left to right. Latin line: left to right, Arabic runs right to left.
+     */
+    private fun readingOrder(piece: List<Word>, rtl: Boolean): List<Word> {
+        val v = if (rtl) piece.sortedByDescending { it.cx } else piece.sortedBy { it.cx }
+        val out = ArrayList<Word>(v.size)
+        var i = 0
+        while (i < v.size) {
+            val foreign: (Word) -> Boolean =
+                if (rtl) { w -> !hasArabic(w.text) && (hasLatin(w.text) || w.text.any { it.isDigit() }) }
+                else { w -> hasArabic(w.text) }
+            if (!foreign(v[i])) { out.add(v[i]); i++; continue }
+            var j = i
+            while (j < v.size && (foreign(v[j]) || (v[j].punct && j + 1 < v.size && foreign(v[j + 1])))) j++
+            val run = v.subList(i, j)
+            // digits alone keep the line's direction; a run with letters of the other script flips
+            val flip = if (rtl) run.any { hasLatin(it.text) } else true
+            out.addAll(if (flip && run.size > 1) run.reversed() else run)
+            i = j
+        }
+        return out
+    }
+
+    /** Words → rows (by vertical overlap) → pieces split at wide gaps; each piece is one output line. */
+    fun lines(words: List<Word>): List<List<Word>> {
+        val rows = ArrayList<MutableList<Word>>()
+        val spans = ArrayList<IntArray>() // y0, y1 of each row
+        for (w in words.sortedBy { it.cy }) {
+            var best = -1
+            var bestOv = 0.0
+            for ((k, s) in spans.withIndex()) {
+                val ov = (minOf(s[1], w.y1) - maxOf(s[0], w.y0)).toDouble() / minOf(s[1] - s[0], w.h).coerceAtLeast(1)
+                if (ov > bestOv) { bestOv = ov; best = k }
+            }
+            if (best >= 0 && bestOv >= 0.5) {
+                rows[best].add(w)
+                spans[best][0] = minOf(spans[best][0], w.y0); spans[best][1] = maxOf(spans[best][1], w.y1)
+            } else {
+                rows.add(mutableListOf(w)); spans.add(intArrayOf(w.y0, w.y1))
+            }
+        }
+        val out = ArrayList<List<Word>>()
+        for (k in rows.indices.sortedBy { spans[it][0] }) {
+            val row = rows[k].sortedBy { it.x0 }
+            val letterH = row.filter { !it.punct }.ifEmpty { row }.map { it.h }.sorted()
+            val hMed = letterH[letterH.size / 2]
+            // a gap much wider than a word space: a separate block on the same row
+            val pieces = ArrayList<MutableList<Word>>()
+            var right = Int.MIN_VALUE
+            for (w in row) {
+                val last = pieces.lastOrNull()
+                if (last != null && w.x0 - right <= hMed * 2.5) {
+                    last.add(w); right = maxOf(right, w.x1)
+                } else {
+                    pieces.add(mutableListOf(w)); right = w.x1
+                }
+            }
+            val rtl = arabicLine(row)
+            for (p in if (rtl) pieces.reversed() else pieces) out.add(readingOrder(p, rtl))
+        }
+        return out
+    }
+
+    private const val CLOSING = ".,،؛;:!?؟…»)]}"
+    private const val OPENING = "«([{"
+
+    private fun join(line: List<Word>): String {
+        val sb = StringBuilder()
+        var glueNext = false
+        for (w in line) {
+            val closing = w.punct && w.text.all { it in CLOSING }
+            if (sb.isNotEmpty() && !closing && !glueNext) sb.append(' ')
+            sb.append(w.text)
+            glueNext = w.punct && w.text.all { it in OPENING }
+        }
+        return sb.toString()
+    }
+
+    /** Text from the word boxes; null when the answer has no usable boxes. */
+    fun rebuild(words: List<Word>): String? {
+        if (words.isEmpty()) return null
+        return lines(dedupe(words)).joinToString("\n") { join(it) }.trim().ifEmpty { null }
+    }
+}

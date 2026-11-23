@@ -79,6 +79,8 @@ sealed class ItemOutcome {
 interface PipelineListener {
     fun onItem(item: OcrItem, outcome: ItemOutcome) {}
     fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {}
+    /** An empty read was read again from an enhanced image; [text] is "" when that read nothing too. */
+    fun onRescue(item: OcrItem, text: String) {}
 }
 
 interface OcrCache {
@@ -93,7 +95,12 @@ class PipelineStats {
     val failed = AtomicInteger()
     val cached = AtomicInteger()
     val retries = AtomicInteger()
+    /** Empty reads read again from an enhanced image / of those, the ones that found the text. */
+    val rescueTried = AtomicInteger()
+    val rescued = AtomicInteger()
 }
+
+private const val RESCUE_MARK = "|second-read"
 
 class OcrPipeline(
     private val engine: OcrEngine,
@@ -106,8 +113,14 @@ class OcrPipeline(
     private val listener: PipelineListener = object : PipelineListener {},
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** After this many images in a row fail for good, the job stops (service is refusing us). */
-    private val breakerThreshold: Int = 12
+    private val breakerThreshold: Int = 12,
+    /**
+     * Lens / Vision: an image that gave no subtitle is read once more from this preparer (v2.6
+     * enhanced image, whole picture). Good reads are never touched; null = off.
+     */
+    private val rescuePreparer: ImagePreparer? = null
 ) {
+    private val rescue = rescuePreparer != null && engine.kind.isClassicOcr
     private val workers = concurrency.coerceIn(1, 16)
     val results = ConcurrentLinkedQueue<SubEntry>()
     /** Texts of tagged items ("" = read nothing); failed items are absent. */
@@ -141,7 +154,9 @@ class OcrPipeline(
 
     private suspend fun process(item: OcrItem) {
         val ck = cacheKey(item)
-        cache?.get(ck)?.let { cachedText ->
+        // an empty result cached before the second reading existed (or with it off) gets it now
+        val cachedHit = cache?.get(ck)?.takeUnless { it.isEmpty() && rescue && cache.get(ck + RESCUE_MARK) == null }
+        cachedHit?.let { cachedText ->
             stats.processed.incrementAndGet(); stats.cached.incrementAndGet()
             item.tag?.let {
                 tagged[it] = cachedText
@@ -159,11 +174,33 @@ class OcrPipeline(
         }
 
         val outcome: ItemOutcome = try {
-            val prepared = withContext(Dispatchers.IO) { item.load() }.let { bytes ->
-                preparer.prepare(bytes, item.name, engine.kind)
+            val bytes = withContext(Dispatchers.IO) { item.load() }
+            val known = cache?.get(ck)
+            var text = if (known != null) known else {
+                val raw = recognizeWithRetry(item, preparer.prepare(bytes, item.name, engine.kind))
+                Cleaner.clean(raw, cleanMode, stripDiacritics).also { logDropped(item, raw, it) }
             }
-            val raw = recognizeWithRetry(item, prepared)
-            val text = Cleaner.clean(raw, cleanMode, stripDiacritics)
+            if (text.isEmpty() && rescue) {
+                stats.rescueTried.incrementAndGet()
+                val raw2 = try {
+                    recognizeWithRetry(item, rescuePreparer!!.prepare(bytes, item.name, engine.kind))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: OcrError.Fatal) {
+                    throw e
+                } catch (e: Throwable) {
+                    // the first read stands (no subtitle); tried again on the next resume
+                    DiagLog.w("ocr", "second read ${item.name} failed: ${describeError(e)}")
+                    null
+                }
+                if (raw2 != null) {
+                    text = Cleaner.clean(raw2, cleanMode, stripDiacritics)
+                    if (text.isNotEmpty()) stats.rescued.incrementAndGet()
+                    DiagLog.i("ocr", "second read ${item.name}: «${oneLine(raw2)}» → «${oneLine(text)}»")
+                    listener.onRescue(item, text)
+                    cache?.put(ck + RESCUE_MARK, "1")
+                }
+            }
             cache?.put(ck, text)
             consecutiveFailures.set(0)
             if (text.isNotEmpty()) ItemOutcome.Text(text, false) else ItemOutcome.Empty(false)
@@ -204,6 +241,17 @@ class OcrPipeline(
         }
         listener.onItem(item, outcome)
     }
+
+    /** Diagnostics: what the engine read when cleaning kept nothing or much less of it. */
+    private fun logDropped(item: OcrItem, raw: String, text: String) {
+        val r = raw.count { it.isLetter() }
+        if (r == 0) return
+        if (text.isEmpty() || text.count { it.isLetter() } * 10 < r * 7) {
+            DiagLog.i("ocr", "cleaning ${item.name}: «${oneLine(raw)}» → «${oneLine(text)}»")
+        }
+    }
+
+    private fun oneLine(s: String) = s.replace("\n", " ⏎ ").let { if (it.length > 200) it.take(200) + "…" else it }
 
     private suspend fun recognizeWithRetry(item: OcrItem, img: PreparedImage): String {
         var attempt = 0

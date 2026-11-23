@@ -77,6 +77,31 @@ object LensProtocol {
 
         /** --ocr-single-line equivalent. */
         val singleLine: String get() = lines.joinToString(" ") { it.text }.trim()
+
+        /**
+         * [fullText] without a second reading of the same place: a line lying on a fuller line with
+         * the same letters (outlined subtitles can be read twice) is dropped. Lens's own order and
+         * line text are kept; without boxes on every line it is [fullText] unchanged.
+         */
+        val dedupedText: String
+            get() {
+                val ls = lines
+                if (ls.size < 2) return fullText
+                val words = ls.mapIndexed { i, l ->
+                    val b = l.box ?: return fullText
+                    if (b.w <= 0f || b.h <= 0f) return fullText
+                    // normalised centre box → integer box (same scale for every line)
+                    VisionLayout.Word(
+                        l.text,
+                        ((b.cx - b.w / 2) * 10_000).toInt(), ((b.cy - b.h / 2) * 10_000).toInt(),
+                        ((b.cx + b.w / 2) * 10_000).toInt(), ((b.cy + b.h / 2) * 10_000).toInt(),
+                        par = i
+                    )
+                }
+                val kept = VisionLayout.dedupe(words).toHashSet()
+                if (kept.size == words.size) return fullText
+                return words.filter { it in kept }.joinToString("\n") { it.text }.trim()
+            }
     }
 
     private fun parseBox(geometry: ProtoField?): Box? {

@@ -3,6 +3,15 @@
 package com.abdulrahman.hardsubocr.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clip
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -101,8 +110,25 @@ import com.abdulrahman.hardsubocr.ui.theme.Good
 object Motion {
     const val FAST = 160
     const val NORMAL = 240
+    /** Page to page (Material shared axis): 300 ms, 30 dp. */
+    const val PAGE = 300
+    val AXIS_DISTANCE = 30.dp
     fun <T> soft() = spring<T>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
     fun <T> quick() = tween<T>(NORMAL, easing = FastOutSlowInEasing)
+
+    /**
+     * Material shared-axis X between a page and the page it opens. Forward moves along the reading
+     * direction: the new page comes from the end side (from the left in Arabic) while the old one
+     * fades out in the first 90 ms; back is the mirror image.
+     */
+    fun sharedAxisX(forward: Boolean, rtl: Boolean, distancePx: Int): ContentTransform {
+        val sign = (if (forward) 1 else -1) * (if (rtl) -1 else 1)
+        val enter = slideInHorizontally(tween(PAGE, easing = FastOutSlowInEasing)) { sign * distancePx } +
+            fadeIn(tween(PAGE - 90, delayMillis = 90, easing = LinearOutSlowInEasing))
+        val exit = slideOutHorizontally(tween(PAGE, easing = FastOutSlowInEasing)) { -sign * distancePx } +
+            fadeOut(tween(90, easing = FastOutLinearInEasing))
+        return enter togetherWith exit
+    }
 }
 
 /** Slight press-in feedback for big tappable surfaces. */
@@ -176,6 +202,89 @@ fun SectionCard(
     }
 }
 
+// ============================================================================ settings list
+
+/** Title above a group of settings rows or cards (Material list subheader, 16 dp inset). */
+@Composable
+fun GroupTitle(text: String) {
+    Text(
+        text,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold
+    )
+}
+
+/** Rows of one settings group on one rounded surface; rows are separated by inset dividers. */
+@Composable
+fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        if (title != null) GroupTitle(title)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer),
+            content = content
+        )
+    }
+}
+
+/** Controls of a settings page on one rounded surface with 16 dp padding. */
+@Composable
+fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        if (title != null) GroupTitle(title)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            content = content
+        )
+    }
+}
+
+/**
+ * Two-line list item (72 dp): 40 dp icon tile, title, what it is set to now, and a chevron that
+ * points the way the page opens (left in Arabic).
+ */
+@Composable
+fun SettingsRow(emoji: String, title: String, summary: String, divider: Boolean = true, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .background(
+                    Brush.linearGradient(listOf(scheme.primaryContainer, scheme.secondaryContainer)),
+                    RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) { Text(emoji, fontSize = 18.sp) }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Text(summary, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(24.dp), tint = scheme.onSurfaceVariant)
+    }
+    if (divider) {
+        HorizontalDivider(Modifier.padding(start = 72.dp), thickness = 1.dp, color = scheme.outlineVariant.copy(alpha = 0.5f))
+    }
+}
+
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -221,7 +330,9 @@ fun AppHeader(statusText: String, statusColor: Color, onSettings: () -> Unit, bu
                 Spacer(Modifier.height(6.dp))
                 StatusPill(statusText, statusColor, busy)
             }
-            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "الإعدادات") }
+            FilledTonalIconButton(onClick = onSettings, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Filled.Settings, contentDescription = "الإعدادات")
+            }
         }
     }
 }

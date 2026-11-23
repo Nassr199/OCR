@@ -62,7 +62,9 @@ class LensEngine(
                 } catch (e: Exception) {
                     throw OcrError.Retryable("رد Google Lens غير مفهوم: ${e.message}")
                 }
-                return result.fullText
+                val text = result.dedupedText
+                if (text != result.fullText) DiagLog.i("lens", "same place read twice: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
+                return text
             }
             resp.code == 429 -> throw OcrError.Retryable(
                 "Google Lens: طلبات كثيرة (429)", parseRetryAfter(resp.header("Retry-After")) ?: 8_000, true
@@ -93,7 +95,7 @@ class VisionEngine(
     private val language: String = "ar"
 ) : OcrEngine {
     override val kind = EngineKind.VISION
-    override val cacheId = "vision:$language:text"
+    override val cacheId = "vision:$language:layout"
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
@@ -136,11 +138,17 @@ class VisionEngine(
                 val msg = err["message"].str() ?: ""
                 throw classify(rpcToHttp(code), "", msg, null, null)
             }
-            val full = r["fullTextAnnotation"].obj()?.get("text").str()
+            val full = (r["fullTextAnnotation"].obj()?.get("text").str()
                 ?: r["textAnnotations"].arr()?.firstOrNull().obj()?.get("description").str()
-                ?: return ""
-            return full.trimEnd('\n', ' ')
+                ?: return "").trimEnd('\n', ' ')
+            // Vision's own text repeats words read twice and lays blocks out left to right:
+            // the text is rebuilt from the word boxes (VisionLayout), its own text is the fallback.
+            val rebuilt = VisionLayout.rebuild(VisionLayout.wordsOf(r)) ?: return full
+            if (rebuilt != full) DiagLog.i("vision", "layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
+            return rebuilt
         }
+
+        private fun oneLine(s: String) = s.replace("\n", " ⏎ ").let { if (it.length > 160) it.take(160) + "…" else it }
 
         /** google.rpc.Code of a per-image error → the HTTP code the same problem gets. */
         private fun rpcToHttp(code: Int): Int = when (code) {

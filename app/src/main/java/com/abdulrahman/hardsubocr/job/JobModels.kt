@@ -52,7 +52,9 @@ data class JobRequest(
     val profile: AiProfile?,
     val enhance: Boolean,
     val mediaHigh: Boolean,
-    val stabilize: Boolean
+    val stabilize: Boolean,
+    /** Lens / Vision: read an empty result once more from an enhanced image. */
+    val rescueEmpty: Boolean = true
 )
 
 /** One line of the live log; [id] keeps the list smooth when new lines arrive. */

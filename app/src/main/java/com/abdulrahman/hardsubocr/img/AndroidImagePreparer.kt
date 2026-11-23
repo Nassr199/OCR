@@ -16,11 +16,12 @@ import java.io.ByteArrayOutputStream
  * - enhance = false: Lens and Vision get PNG ≤ 1500 px (like chrome-lens-py); Gemini/OpenRouter get the
  *   original PNG/JPEG/WebP bytes untouched.
  * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
- *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
+ *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI)
+ *   and for the second read of an empty Lens / Vision result.
  */
 class AndroidImagePreparer(
-    private val enhance: Boolean = false,
-    private val cropBand: Boolean = true
+    val enhance: Boolean = false,
+    val cropBand: Boolean = true
 ) : ImagePreparer {
 
     override fun prepare(bytes: ByteArray, nameHint: String, kind: EngineKind): PreparedImage {
