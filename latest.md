@@ -1,4 +1,4 @@
-# OCR bench — commit 0137681d661d4dca9dc80d42b0dc4733cd83f6e7 — 2026-11-23T22:30:25.535659217Z
+# OCR bench — commit a29151124b32b6d1c8daddbf82fe9d4b1d67dce2 — 2026-11-23T22:39:58.045639496Z
 
 Vision: no VISION_API_KEY secret — Lens only
 
