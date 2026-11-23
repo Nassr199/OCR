@@ -61,6 +61,14 @@ private fun toPng(jpeg: ByteArray): Png {
     return Png(out.toByteArray(), img.width, img.height)
 }
 
+/** The app's ImageResampler, on the JVM (bilinear, like Android's createScaledBitmap(filter = true)). */
+object JvmResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
+    override fun view(image: com.abdulrahman.hardsubocr.core.PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int, scale: Float): com.abdulrahman.hardsubocr.core.PreparedImage? {
+        val p = transform(image.bytes, x0, y0, x1, y1, scale.toDouble())
+        return com.abdulrahman.hardsubocr.core.PreparedImage(p.bytes, "image/png", p.w, p.h, image.name)
+    }
+}
+
 private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale: Double): Png {
     val img = ImageIO.read(src.inputStream())
     val l = x0.coerceIn(0, img.width - 1); val t = y0.coerceIn(0, img.height - 1)
@@ -69,7 +77,7 @@ private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale:
     val w = (part.width * scale).toInt(); val h = (part.height * scale).toInt()
     val out = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
     val g = out.createGraphics()
-    g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+    g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
     g.drawImage(part, 0, 0, w, h, null); g.dispose()
     val bos = ByteArrayOutputStream(); ImageIO.write(out, "png", bos)
     return Png(bos.toByteArray(), w, h)
@@ -165,57 +173,26 @@ fun main(args: Array<String>) = runBlocking {
         sb.append("## ").append(file).append(" — ").append(o["note"]!!.jsonPrimitive.content).append('\n')
         sb.append("truth: «").append(one(truth)).append("»\n\n")
 
-        // ---------------------------------------------------------------- Google Lens (twice)
-        for (attempt in 1..2) {
-            val body = LensProtocol.buildRequest(png.bytes, png.w, png.h, "ar", "US", "America/New_York")
-            val resp = runCatching {
-                http.execute(
-                    HttpRequest(
-                        LensProtocol.ENDPOINT,
-                        headers = mapOf(
-                            "X-Goog-Api-Key" to LensProtocol.API_KEY, "User-Agent" to LensProtocol.USER_AGENT,
-                            "Accept" to "*/*", "Accept-Language" to "ar,en;q=0.9"
-                        ),
-                        body = body, contentType = "application/x-protobuf", timeoutMs = 60_000
-                    )
-                )
-            }
-            val r = resp.getOrNull()
-            if (r == null || r.code != 200) {
-                sb.append("- Lens #").append(attempt).append(": HTTP ").append(r?.code ?: -1).append(' ')
-                    .append(resp.exceptionOrNull()?.message ?: r?.text?.take(200) ?: "").append('\n')
-                continue
-            }
-            val res = LensProtocol.parseResponse(r.body)
-            val reading = res.readingText
-            sb.append("- Lens #").append(attempt).append(" ").append(score("lens", reading, truth))
-                .append(" app text «").append(one(norm(reading))).append("»\n")
+        // ---------------------------------------------------------------- Google Lens: one look (raw)
+        val res = lens(http, png)
+        if (res == null) sb.append("- Lens one look: failed\n") else {
+            val reading = res.readingText(png.w, png.h)
+            sb.append("- Lens one look ").append(score("lens one look", reading, truth))
+                .append(" «").append(one(norm(reading))).append("» strays ").append(res.strays).append('\n')
             sb.append("    full «").append(one(res.fullText)).append("»\n")
-            sb.append("    reading «").append(one(reading)).append("»\n")
             sb.append("    lines ").append(res.describe()).append('\n')
-            if (attempt == 1) sb.append(lensRaw(r.body))
-            kotlinx.coroutines.delay(700)
         }
-
-        // ---------------------------------------------------------------- Lens: what helps a missed subtitle
-        val box = o["box"]?.jsonArray?.map { it.jsonPrimitive.content.toInt() }
-        if (box != null && box.size == 4 && box[2] > box[0]) {
-            val bh = box[3] - box[1]
-            val raw = File(dir, file).readBytes()
-            val strategies = listOf(
-                "lens:center50" to transform(raw, (png.w * 0.25).toInt(), 0, (png.w * 0.75).toInt(), png.h, 1.0),
-                "lens:center30" to transform(raw, (png.w * 0.35).toInt(), 0, (png.w * 0.65).toInt(), png.h, 1.0),
-                "lens:up2" to transform(raw, 0, 0, png.w, png.h, 2.0),
-                "lens:box" to transform(raw, box[0] - bh * 6 / 10, box[1] - bh / 4, box[2] + bh * 6 / 10, box[3] + bh / 4, 1.0),
-                "lens:box-wide" to transform(raw, box[0] - bh * 2, 0, box[2] + bh * 2, png.h, 1.0),
-                "lens:band" to transform(raw, 0, box[1] - bh / 4, png.w, box[3] + bh / 4, 1.0)
-            )
-            for ((name, img) in strategies) {
-                val res = lens(http, img)
-                if (res == null) { sb.append("- ").append(name).append(": failed\n"); continue }
-                val t = res.readingText
-                sb.append("- ").append(name).append(' ').append(score(name, t, truth)).append(" «").append(one(norm(t)))
-                    .append("» full «").append(one(res.fullText).take(160)).append("»\n")
+        // ---------------------------------------------------------------- Google Lens: the app (multi-view)
+        run {
+            var looks = ""
+            val engine = com.abdulrahman.hardsubocr.core.LensEngine(http, "ar", "US", views = JvmResampler, looks = { looks = it })
+            val img = com.abdulrahman.hardsubocr.core.PreparedImage(png.bytes, "image/png", png.w, png.h, file)
+            val t = runCatching { engine.recognize(img) }
+            val text = t.getOrNull()
+            if (text == null) sb.append("- Lens app: ").append(t.exceptionOrNull()?.message).append('\n')
+            else {
+                sb.append("- Lens app ").append(score("lens app (multi-view)", text, truth)).append(" «").append(one(norm(text))).append("»\n")
+                if (looks.isNotEmpty()) sb.append("    looks: ").append(looks).append('\n')
             }
         }
 
