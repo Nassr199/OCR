@@ -79,6 +79,7 @@ class SettingsUi(s: Settings) {
     var workersAi by mutableIntStateOf(s.workersAi)
     var retries by mutableIntStateOf(s.retries)
     var rescue by mutableStateOf(s.rescueEmpty)
+    var cleanOcr by mutableStateOf(s.cleanOcr)
     var clean by mutableStateOf(s.cleanChoice)
     var merge by mutableStateOf(s.mergeChoice)
     var strip by mutableStateOf(s.stripDiacritics)
@@ -130,7 +131,7 @@ private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: () -> Unit, on
         SettingsGroup("المعالجة") {
             Entry(SettingsPage.READING, onOpen,
                 "Lens وVision ${u.workersLens} • الذكاء الاصطناعي ${u.workersAi} • إعادة ${u.retries}" +
-                    if (u.rescue) " • قراءة ثانية" else "")
+                    (if (u.cleanOcr) " • نص نظيف" else "") + (if (u.rescue) " • قراءة ثانية" else ""))
             Entry(SettingsPage.VIDEO, onOpen, listOf(
                 videoEngineLabel(u.vEngine),
                 if (u.every == 1) "كل إطار" else "كل ${u.every} إطارات",
@@ -219,8 +220,14 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             }
             SettingsCard("Google Lens وVision") {
                 SwitchRow(
+                    "صورة نص نظيفة (الفيديو)",
+                    "تُرسل حروف الترجمة وحدها أسود على أبيض، كصور TXTImages في VideoSubFinder: بلا صندوق ولا حدود ولا خلفية ولا أسماء طاقم، مع هامش أبيض وتكبير الخط الصغير. هكذا يقرأ OCR التقليدي أفضل ولا يقرأ النص مرتين. إن لم يُقرأ منها شيء تُقرأ الصورة الأصلية.",
+                    u.cleanOcr
+                ) { u.cleanOcr = it; s.cleanOcr = it }
+                Spacer(Modifier.height(4.dp))
+                SwitchRow(
                     "قراءة ثانية للصور الفارغة",
-                    "إذا لم يُقرأ نص في صورة، تُقرأ مرة ثانية بعد تحسينها (تكبير وتباين وحدّة) دون قصّها. الصور المقروءة لا تُمسّ. مع Vision تُحتسب القراءة الثانية من حصتك.",
+                    "إذا لم يُقرأ نص في صورة، تُقرأ مرة ثانية بعد تحسينها (تكبير وتباين وحدّة) دون قصّها. الصور المقروءة لا تُمسّ. مع Vision تُحتسب القراءة الثانية من حصتك. (صور الفيديو مع «صورة نص نظيفة» تُقرأ ثانيةً من الصورة الأصلية دائمًا.)",
                     u.rescue
                 ) { u.rescue = it; s.rescueEmpty = it }
             }

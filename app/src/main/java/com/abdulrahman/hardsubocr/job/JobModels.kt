@@ -54,7 +54,9 @@ data class JobRequest(
     val mediaHigh: Boolean,
     val stabilize: Boolean,
     /** Lens / Vision: read an empty result once more from an enhanced image. */
-    val rescueEmpty: Boolean = true
+    val rescueEmpty: Boolean = true,
+    /** Lens / Vision in video mode: read the letters alone, black on white (TXTImages). */
+    val cleanOcr: Boolean = true
 )
 
 /** One line of the live log; [id] keeps the list smooth when new lines arrive. */

@@ -67,6 +67,11 @@ class OcrItem(
     val endMs: Long,
     /** Set for video-engine evidence: the text goes to [OcrPipeline.tagged], not to the results. */
     val tag: String? = null,
+    /**
+     * The original picture when [load] gives a prepared one (Lens / Vision in video mode read the
+     * letters alone first): read with the normal preparer when the first read finds nothing.
+     */
+    val loadAlt: (suspend () -> ByteArray)? = null,
     val load: suspend () -> ByteArray
 )
 
@@ -79,7 +84,7 @@ sealed class ItemOutcome {
 interface PipelineListener {
     fun onItem(item: OcrItem, outcome: ItemOutcome) {}
     fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {}
-    /** An empty read was read again from an enhanced image; [text] is "" when that read nothing too. */
+    /** An empty read was read again (original or enhanced picture); [text] is "" when that read nothing too. */
     fun onRescue(item: OcrItem, text: String) {}
 }
 
@@ -155,7 +160,8 @@ class OcrPipeline(
     private suspend fun process(item: OcrItem) {
         val ck = cacheKey(item)
         // an empty result cached before the second reading existed (or with it off) gets it now
-        val cachedHit = cache?.get(ck)?.takeUnless { it.isEmpty() && rescue && cache.get(ck + RESCUE_MARK) == null }
+        val second = rescue || (item.loadAlt != null && engine.kind.isClassicOcr)
+        val cachedHit = cache?.get(ck)?.takeUnless { it.isEmpty() && second && cache.get(ck + RESCUE_MARK) == null }
         cachedHit?.let { cachedText ->
             stats.processed.incrementAndGet(); stats.cached.incrementAndGet()
             item.tag?.let {
@@ -180,10 +186,17 @@ class OcrPipeline(
                 val raw = recognizeWithRetry(item, preparer.prepare(bytes, item.name, engine.kind))
                 Cleaner.clean(raw, cleanMode, stripDiacritics).also { logDropped(item, raw, it) }
             }
-            if (text.isEmpty() && rescue) {
+            if (text.isEmpty() && second) {
                 stats.rescueTried.incrementAndGet()
+                val alt = item.loadAlt
                 val raw2 = try {
-                    recognizeWithRetry(item, rescuePreparer!!.prepare(bytes, item.name, engine.kind))
+                    if (alt != null) {
+                        // the original picture, prepared exactly as before
+                        val original = withContext(Dispatchers.IO) { alt() }
+                        recognizeWithRetry(item, preparer.prepare(original, item.name, engine.kind))
+                    } else {
+                        recognizeWithRetry(item, rescuePreparer!!.prepare(bytes, item.name, engine.kind))
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: OcrError.Fatal) {
@@ -196,7 +209,7 @@ class OcrPipeline(
                 if (raw2 != null) {
                     text = Cleaner.clean(raw2, cleanMode, stripDiacritics)
                     if (text.isNotEmpty()) stats.rescued.incrementAndGet()
-                    DiagLog.i("ocr", "second read ${item.name}: «${oneLine(raw2)}» → «${oneLine(text)}»")
+                    DiagLog.i("ocr", "second read (${if (alt != null) "original picture" else "enhanced"}) ${item.name}: «${oneLine(raw2)}» → «${oneLine(text)}»")
                     listener.onRescue(item, text)
                     cache?.put(ck + RESCUE_MARK, "1")
                 }

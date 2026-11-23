@@ -647,7 +647,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             enhance = s.enhanceFor(e),
             mediaHigh = s.mediaHigh,
             stabilize = s.stabilizeFor(e),
-            rescueEmpty = s.rescueEmpty
+            rescueEmpty = s.rescueEmpty,
+            cleanOcr = s.cleanOcr
         )
         JobManager.start(ctx, req)
     }

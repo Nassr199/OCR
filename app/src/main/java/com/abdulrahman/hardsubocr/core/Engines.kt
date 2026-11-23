@@ -48,7 +48,9 @@ class LensEngine(
                 headers = mapOf(
                     "X-Goog-Api-Key" to apiKey,
                     "User-Agent" to LensProtocol.USER_AGENT,
-                    "Accept" to "*/*"
+                    "Accept" to "*/*",
+                    // like Subtitle Edit: the reading language also in the HTTP header
+                    "Accept-Language" to "$language,en;q=0.9"
                 ),
                 body = body,
                 contentType = "application/x-protobuf",
@@ -62,8 +64,8 @@ class LensEngine(
                 } catch (e: Exception) {
                     throw OcrError.Retryable("رد Google Lens غير مفهوم: ${e.message}")
                 }
-                val text = result.dedupedText
-                if (text != result.fullText) DiagLog.i("lens", "same place read twice: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
+                val text = result.readingText
+                if (text != result.fullText) DiagLog.i("lens", "reading order / read twice: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
                 return text
             }
             resp.code == 429 -> throw OcrError.Retryable(
@@ -143,8 +145,12 @@ class VisionEngine(
                 ?: return "").trimEnd('\n', ' ')
             // Vision's own text repeats words read twice and lays blocks out left to right:
             // the text is rebuilt from the word boxes (VisionLayout), its own text is the fallback.
-            val rebuilt = VisionLayout.rebuild(VisionLayout.wordsOf(r)) ?: return full
-            if (rebuilt != full) DiagLog.i("vision", "layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
+            val words = VisionLayout.wordsOf(r)
+            val rebuilt = VisionLayout.rebuild(words) ?: return full
+            if (rebuilt != full) {
+                DiagLog.i("vision", "layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
+                DiagLog.i("vision", "words: " + VisionLayout.describe(words))
+            }
             return rebuilt
         }
 

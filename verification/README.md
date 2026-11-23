@@ -11,6 +11,7 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `ApiTest.kt` | Gemini / OpenRouter / Lens request bodies, response parsing and error classification. |
 | `vision/VisionTest.kt` | Google Cloud Vision request (key in header, TEXT_DETECTION, language hint), parsing and error classification. |
 | `vision/LayoutTest.kt` + `LayoutCommon.kt` + `LayoutFuzz.kt` | Vision text rebuilt from word boxes: same place read twice, blocks laid out left to right, punctuation, two lines, credits, Latin runs; 14,000 random lines (clean reads unchanged, copies removed). |
+| `ocrimage/OcrImageTest.kt` + `RealCropToOcrImage.kt` | The letters-only black-on-white image Lens/Vision read in video mode: crop, margin, enlarging small text, 1500 px limit; the harness turns a real crop into it. |
 | `rescue/RescueTest.kt` | Second read of empty Lens / Vision results (good reads untouched, failures keep "no subtitle", resume cache) and Lens lines read twice in the same place. |
 
 `kc.sh` compiles Kotlin with the compiler embedded in a Gradle distribution:

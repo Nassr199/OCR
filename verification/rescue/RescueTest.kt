@@ -71,23 +71,50 @@ fun main() {
     val e10 = FakeEngine(EngineKind.LENS, first, second); run(e10, listOf("a"), c10)
     check("cached text never re-read", e10.calls.isEmpty())
 
+    // 7) video: the letters alone first, the original picture (normal preparer) when that reads nothing
+    fun runAlt(engine: FakeEngine, rescue: ImagePreparer?, cache: OcrCache? = null): OcrPipeline = runBlocking {
+        val p = OcrPipeline(engine, plain, CleanMode.PRO, false, 1, RetryPolicy(0), cache, rescuePreparer = rescue)
+        val ch = Channel<OcrItem>(Channel.UNLIMITED)
+        ch.send(OcrItem("k:txt", "seg", 0, 900, null, loadAlt = { "orig".toByteArray() }) { "txt".toByteArray() })
+        ch.send(OcrItem("k2:txt", "seg2", 1000, 1900, null, loadAlt = { "orig2".toByteArray() }) { "txt2".toByteArray() })
+        ch.close(); p.run(ch); p
+    }
+    val e11 = FakeEngine(EngineKind.VISION, mapOf("txt" to "", "orig" to "ماذا حدث؟", "txt2" to "بخير بخير", "orig2" to "خطأ"), emptyMap())
+    val p11 = runAlt(e11, null)
+    check("empty letters-only read → original picture (even with the option off)", p11.results.sortedBy { it.startMs }.map { it.text } == listOf("ماذا حدث؟", "بخير بخير"), p11.results.map { it.text }.toString())
+    check("original picture read with the normal preparer, good read untouched", e11.calls.sorted() == listOf("1:orig", "1:txt", "1:txt2"), e11.calls.toString())
+    val e12 = FakeEngine(EngineKind.GEMINI, mapOf("txt" to ""), emptyMap()); runAlt(e12, null)
+    check("AI engines: no second read", "1:orig" !in e12.calls)
+
     // Lens: same place read twice
     fun line(t: String, cx: Float, cy: Float, w: Float, h: Float) = LensProtocol.Line(t, LensProtocol.Box(cx, cy, w, h, 0f))
     val dup = LensProtocol.Result(listOf(
         LensProtocol.Paragraph(listOf(line("بخير أجل أنا بخير", 0.45f, 0.8f, 0.4f, 0.06f)), null),
         LensProtocol.Paragraph(listOf(line("بخير بخير أجل أنا بخير", 0.5f, 0.8f, 0.5f, 0.06f)), null)
     ), "ar", null)
-    check("Lens partial copy dropped", dup.dedupedText == "بخير بخير أجل أنا بخير", dup.dedupedText)
+    check("Lens partial copy dropped", dup.readingText == "بخير بخير أجل أنا بخير", dup.readingText)
     val two = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(
         line("أين كنت؟", 0.5f, 0.75f, 0.3f, 0.06f), line("كنت أبحث عنك", 0.5f, 0.82f, 0.4f, 0.06f)), null)), "ar", null)
-    check("Lens two lines unchanged", two.dedupedText == two.fullText && two.fullText == "أين كنت؟\nكنت أبحث عنك")
+    check("Lens two lines unchanged", two.readingText == two.fullText && two.fullText == "أين كنت؟\nكنت أبحث عنك")
     val same = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(
         line("لا", 0.5f, 0.75f, 0.05f, 0.06f), line("لا", 0.5f, 0.815f, 0.05f, 0.06f)), null)), "ar", null)
-    check("Lens same text on two rows kept", same.dedupedText == "لا\nلا", same.dedupedText)
+    check("Lens same text on two rows kept", same.readingText == "لا\nلا", same.readingText)
     val nobox = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(LensProtocol.Line("أ", null), LensProtocol.Line("أ", null)), null)), "ar", null)
-    check("Lens without boxes unchanged", nobox.dedupedText == nobox.fullText)
+    check("Lens without boxes unchanged", nobox.readingText == nobox.fullText)
     val credits = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(
         line("Netflix", 0.1f, 0.8f, 0.12f, 0.05f), line("حبيبي، هل أنت بخير؟", 0.55f, 0.8f, 0.45f, 0.06f)), null)), "ar", null)
-    check("Lens lines side by side kept", credits.dedupedText == credits.fullText)
+    check("Lens far chunks on one row stay separate lines (right one first)", credits.readingText == "حبيبي، هل أنت بخير؟\nNetflix", credits.readingText)
+    check("…and the crew name is removed by cleaning", Cleaner.clean(credits.readingText, CleanMode.PRO) == "حبيبي، هل أنت بخير؟")
+    // Lens chunks of a two-line subtitle handed out interleaved / left to right (Subtitle Edit #12149)
+    val inter = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(
+        line("كنت", 0.62f, 0.75f, 0.1f, 0.06f), line("أبحث عنك", 0.45f, 0.82f, 0.2f, 0.06f),
+        line("أين", 0.75f, 0.75f, 0.08f, 0.06f), line("كنت", 0.62f, 0.82f, 0.08f, 0.06f)), null)), "ar", null)
+    check("Lens interleaved chunks → rows, right to left", inter.readingText == "أين كنت\nكنت أبحث عنك", inter.readingText)
+    val lr = LensProtocol.Result(listOf(
+        LensProtocol.Paragraph(listOf(line("هل أنت بخير؟", 0.45f, 0.8f, 0.3f, 0.06f)), null),
+        LensProtocol.Paragraph(listOf(line("حبيبي،", 0.66f, 0.8f, 0.1f, 0.06f)), null)), "ar", null)
+    check("Lens blocks of one line left to right → one line right to left", lr.readingText == "حبيبي، هل أنت بخير؟", lr.readingText)
+    val en = LensProtocol.Result(listOf(LensProtocol.Paragraph(listOf(line("World", 0.6f, 0.8f, 0.1f, 0.06f), line("Hello", 0.45f, 0.8f, 0.1f, 0.06f)), null)), "en", null)
+    check("Lens English row left to right", en.readingText == "Hello World", en.readingText)
     println(if (fails == 0) "ALL PASSED" else "$fails FAILED")
 }

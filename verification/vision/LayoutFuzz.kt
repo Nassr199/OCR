@@ -56,5 +56,25 @@ fun main() {
         jn++; if (gj != want) { jnBad++; if (jnBad <= 4) println("joined ✖\n  got  «$gj»\n  want «$want»") }
     }
     println("misread copy: ${mis - misBad}/$mis exact · joined copy: ${jn - jnBad}/$jn exact")
+    // a contradicting reading: one word missing, the rest spread evenly over the whole line, more confident
+    var ph = 0; var phBad = 0
+    val rnd3 = Random(23)
+    repeat(3000) {
+        val h = 30 + rnd3.nextInt(40)
+        val ws = List(3 + rnd3.nextInt(5)) { vocab[rnd3.nextInt(vocab.size)] }
+        val words = ArrayList<W>(); var x = 1400
+        for (t in ws) { val wpx = (t.length * h * (0.35 + rnd3.nextDouble() * 0.25)).toInt().coerceAtLeast(8); words.add(W(t, x - wpx, 50, x, 50 + h, 0.6 + rnd3.nextDouble() * 0.39)); x -= wpx + (h * (0.15 + rnd3.nextDouble() * 0.4)).toInt() }
+        val want = ws.joinToString(" ")
+        val left = words.minOf { it.x0 }; val right = words.maxOf { it.x1 }
+        val keep = words.filterIndexed { i, _ -> i != rnd3.nextInt(words.size) }.ifEmpty { words.take(1) }
+        val step = (right - left) / keep.size
+        val phantom = keep.mapIndexed { i, w -> W(w.t, right - (i + 1) * step + 4, 48, right - i * step, 50 + h, 0.9 + rnd3.nextDouble() * 0.1) }
+        // the real line arrives in 1–3 paragraphs
+        val cut = 1 + rnd3.nextInt(words.size - 1)
+        val blocks = listOf(words.subList(0, cut), words.subList(cut, words.size), phantom).shuffled(rnd3)
+        val g = VisionEngine.parseText(answer(*blocks.toTypedArray()))
+        ph++; if (g != want) { phBad++; if (phBad <= 2) { println("phantom ✖\n  got  «$g»\n  want «$want»"); blocks.forEachIndexed { bi, b -> println("   p$bi: " + b.joinToString(" ") { "${it.t}[${it.x0}-${it.x1} ${"%.2f".format(it.c)}]" }) } } }
+    }
+    println("contradicting laid-out reading: ${ph - phBad}/$ph exact")
     println("clean readings: ${clean - cleanBad}/$clean exact · with an outline copy: ${dup - dupBad}/$dup exact")
 }

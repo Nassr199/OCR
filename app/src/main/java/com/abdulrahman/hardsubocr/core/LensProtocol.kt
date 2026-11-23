@@ -79,18 +79,21 @@ object LensProtocol {
         val singleLine: String get() = lines.joinToString(" ") { it.text }.trim()
 
         /**
-         * [fullText] without a second reading of the same place: a line lying on a fuller line with
-         * the same letters (outlined subtitles can be read twice) is dropped. Lens's own order and
-         * line text are kept; without boxes on every line it is [fullText] unchanged.
+         * [fullText] in reading order, without a second reading of the same place:
+         * - a line lying on a fuller line with the same letters (text read twice) is dropped;
+         * - lines are put in rows by their height on the image, top to bottom, and the pieces of one
+         *   row are joined right to left when Arabic. Lens can hand the chunks of a two-line
+         *   subtitle out interleaved between the rows (Subtitle Edit fixes the same, #12149).
+         * Line text itself is Lens's own. Without a box on every line it is [fullText] unchanged.
          */
-        val dedupedText: String
+        val readingText: String
             get() {
                 val ls = lines
                 if (ls.size < 2) return fullText
                 val words = ls.mapIndexed { i, l ->
                     val b = l.box ?: return fullText
                     if (b.w <= 0f || b.h <= 0f) return fullText
-                    // normalised centre box → integer box (same scale for every line)
+                    // centre box → integer box (same scale for every line)
                     VisionLayout.Word(
                         l.text,
                         ((b.cx - b.w / 2) * 10_000).toInt(), ((b.cy - b.h / 2) * 10_000).toInt(),
@@ -99,8 +102,33 @@ object LensProtocol {
                     )
                 }
                 val kept = VisionLayout.dedupe(words).toHashSet()
-                if (kept.size == words.size) return fullText
-                return words.filter { it in kept }.joinToString("\n") { it.text }.trim()
+                val rows = ArrayList<MutableList<VisionLayout.Word>>()
+                for (w in words.filter { it in kept }.sortedBy { it.cy }) {
+                    val row = rows.firstOrNull { r -> Math.abs(r[0].cy - w.cy) <= minOf(r[0].h, w.h) * 0.5 }
+                    if (row != null) row.add(w) else rows.add(mutableListOf(w))
+                }
+                val out = ArrayList<String>()
+                for (r in rows) {
+                    val text = r.joinToString("") { it.text }
+                    val ar = text.count { it in '\u0600'..'\u06FF' || it in '\u0750'..'\u077F' || it in '\uFB50'..'\uFDFF' || it in '\uFE70'..'\uFEFF' }
+                    val lat = text.count { it.isLetter() } - ar
+                    val rtl = ar > 0 && ar * 10 >= (ar + lat) * 3
+                    // chunks close together are one line; a far one (crew names beside the subtitle) stays apart
+                    val pieces = ArrayList<MutableList<VisionLayout.Word>>()
+                    var right = Int.MIN_VALUE
+                    for (w in r.sortedBy { it.x0 }) {
+                        val last = pieces.lastOrNull()
+                        if (last != null && w.x0 - right <= minOf(w.h, last.last().h) * 2.5) {
+                            last.add(w); right = maxOf(right, w.x1)
+                        } else {
+                            pieces.add(mutableListOf(w)); right = w.x1
+                        }
+                    }
+                    for (p in if (rtl) pieces.reversed() else pieces) {
+                        out.add((if (rtl) p.reversed() else p).joinToString(" ") { it.text })
+                    }
+                }
+                return out.joinToString("\n").trim()
             }
     }
 

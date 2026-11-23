@@ -137,19 +137,21 @@ object VisionLayout {
         if (w.punct) return i.toDouble() / w.area >= 0.5 && w.text.all { it in o.text }
         if (o.punct) return false
         return (i.toDouble() / (w.area + o.area - i) >= 0.3 || i.toDouble() / minOf(w.area, o.area) >= 0.6) &&
-            shared(w.text, o.text) >= minOf(w.letters, o.letters) * 0.5
+            shared(w.text, o.text) >= minOf(w.letters, o.letters) * 0.8
     }
 
     /**
      * Drops second readings, keeping the better one:
+     * 0) of paragraphs that contradict each other on the same place, the consistent set reading most;
      * 1) a paragraph whose words lie on the words of a fuller paragraph (a partial copy), or a weaker
- *    paragraph read with the same words;
+     *    paragraph read with the same words;
      * 2) a word whose box holds two or more words with its letters — the same text read without the
      *    space: the separate words stay when they are spaced like words, else the joined one stays;
      * 3) of words on the same spot, the best one (higher confidence, more letters, larger).
      */
     fun dedupe(input: List<Word>): List<Word> {
-        var words = input
+        // 0) of contradicting readings of the same place, one consistent set of paragraphs
+        var words = keepConsistentReadings(input)
         // 1) paragraphs
         val pars = words.filter { it.par >= 0 }.groupBy { it.par }
         if (pars.size > 1) {
@@ -165,7 +167,7 @@ object VisionLayout {
                 // every word of it lies on a word of a fuller reading (or of the same reading with the
                 // same words), so nothing is lost; other overlaps are decided word by word
                 val copy = p.letters > 0 && kept.any { q ->
-                    (p.letters < q.letters || p.ws.size == q.ws.size) &&
+                    (p.letters < q.letters || p.ws.size == q.ws.size) && p.conf <= q.conf + 0.2 &&
                         p.ws.all { w -> q.ws.any { o -> onTop(w, o) } }
                 }
                 if (copy) dropped.add(p.id) else kept.add(p)
@@ -191,9 +193,108 @@ object VisionLayout {
         val order = words.sortedWith(
             compareBy<Word> { it.punct }.thenByDescending { it.conf }.thenByDescending { it.letters }.thenByDescending { it.area }
         )
-        for (w in order) if (kept.none { sameSpot(it, w) }) kept.add(w)
+        for (w in order) {
+            val k = kept.indexOfFirst { sameSpot(it, w) }
+            if (k < 0) { kept.add(w); continue }
+            // a partial reading kept first (higher confidence) gives way to the full one:
+            // «بيبي» read inside «حبيبي،» must not replace it
+            val o = kept[k]
+            if (fuller(w, o) && kept.withIndex().none { (j, x) -> j != k && sameSpot(x, w) }) kept[k] = w
+        }
         return kept
     }
+
+    private fun iou(a: Word, b: Word): Double {
+        val i = inter(a, b)
+        return if (i == 0L) 0.0 else i.toDouble() / (a.area + b.area - i)
+    }
+
+    /** Same letters (one reading contains the other): a copy, joined or split — not a contradiction. */
+    private fun subset(a: Word, b: Word) =
+        shared(a.text, b.text) >= a.letters * 0.9 || shared(b.text, a.text) >= b.letters * 0.9
+
+    /**
+     * Two paragraphs that put DIFFERENT words on the same place are two contradicting readings
+     * of it (one of them with its words laid out wrongly); taking words from both makes a line in
+     * the wrong order. Of each group of overlapping paragraphs, the combination without
+     * contradictions that reads the most letters (each place counted once) is kept, better
+     * confidence first; copies with the same letters stay and are decided word by word.
+     */
+    private fun keepConsistentReadings(words: List<Word>): List<Word> {
+        val byPar = words.filter { it.par >= 0 }.groupBy { it.par }
+        if (byPar.size < 2) return words
+        val ids = byPar.keys.toList()
+        val n = ids.size
+        val conflict = Array(n) { BooleanArray(n) }
+        val dupLetters = Array(n) { DoubleArray(n) }
+        val touch = Array(n) { BooleanArray(n) }
+        var anyConflict = false
+        for (i in 0 until n) for (j in i + 1 until n) {
+            var c = false
+            var dup = 0.0
+            for (a in byPar.getValue(ids[i])) for (b in byPar.getValue(ids[j])) {
+                if (a.punct || b.punct) continue
+                val i0 = inter(a, b)
+                if (i0 == 0L) continue
+                val o = i0.toDouble() / (a.area + b.area - i0)
+                if (subset(a, b)) {
+                    // the same word on (nearly) the same place: counted once
+                    if (o >= 0.3 || i0.toDouble() / minOf(a.area, b.area) >= 0.5) {
+                        touch[i][j] = true; touch[j][i] = true
+                        dup += minOf(a.letters, b.letters) * (0.6 + minOf(a.conf, b.conf))
+                    }
+                } else if (o >= 0.3) {
+                    // different words on the same place
+                    touch[i][j] = true; touch[j][i] = true
+                    c = true
+                }
+            }
+            conflict[i][j] = c; conflict[j][i] = c
+            dupLetters[i][j] = dup; dupLetters[j][i] = dup
+            if (c) anyConflict = true
+        }
+        if (!anyConflict) return words
+        val weight = DoubleArray(n) { k -> byPar.getValue(ids[k]).sumOf { it.letters * (0.6 + it.conf) } }
+        // groups of touching paragraphs
+        val group = IntArray(n) { -1 }
+        var groups = 0
+        for (k in 0 until n) if (group[k] < 0) {
+            val stack = ArrayDeque<Int>().apply { add(k) }
+            group[k] = groups
+            while (stack.isNotEmpty()) {
+                val x = stack.removeLast()
+                for (y in 0 until n) if (touch[x][y] && group[y] < 0) { group[y] = groups; stack.add(y) }
+            }
+            groups++
+        }
+        val drop = HashSet<Int>()
+        for (g in 0 until groups) {
+            val members = (0 until n).filter { group[it] == g }
+            if (members.size < 2 || members.size > 12) continue
+            if (members.none { a -> members.any { b -> conflict[a][b] } }) continue
+            var best = -1.0
+            var bestMask = 0
+            for (mask in 1 until (1 shl members.size)) {
+                val chosen = members.filterIndexed { i, _ -> (mask shr i) and 1 == 1 }
+                if (chosen.any { a -> chosen.any { b -> conflict[a][b] } }) continue
+                var score = chosen.sumOf { weight[it] }
+                for (x in chosen.indices) for (y in x + 1 until chosen.size) score -= dupLetters[chosen[x]][chosen[y]]
+                if (score > best + 1e-9) { best = score; bestMask = mask }
+            }
+            members.forEachIndexed { i, m -> if ((bestMask shr i) and 1 == 0) drop.add(ids[m]) }
+        }
+        return if (drop.isEmpty()) words else words.filter { it.par !in drop }
+    }
+
+    /** [w] reads all of [o] and more, on the same place, with confidence not much lower. */
+    private fun fuller(w: Word, o: Word): Boolean =
+        !w.punct && w.letters > o.letters && shared(o.text, w.text) >= o.letters * 0.9 &&
+            inter(w, o).toDouble() / o.area >= 0.8 && w.conf >= o.conf - 0.2f
+
+    /** Compact list of the words for the diagnostic file: text[x0,y0,x1,y1 confidence paragraph]. */
+    fun describe(words: List<Word>, limit: Int = 60): String =
+        words.take(limit).joinToString(" ") { "${it.text}[${it.x0},${it.y0},${it.x1},${it.y1} ${"%.2f".format(java.util.Locale.US, it.conf)} p${it.par}]" } +
+            if (words.size > limit) " …(${words.size})" else ""
 
     private fun isArabicChar(c: Char) =
         c in '؀'..'ۿ' || c in 'ݐ'..'ݿ' || c in 'ࢠ'..'ࣿ' || c in 'ﭐ'..'﷿' || c in 'ﹰ'..'﻿'
@@ -287,9 +388,26 @@ object VisionLayout {
         return sb.toString()
     }
 
+    /**
+     * A lone alef or lam at the edge of a line, read with low confidence, is the stroke of a Latin
+     * letter beside the subtitle ("l" of a crew name), never an Arabic word.
+     */
+    private fun stray(w: Word) =
+        w.letters == 1 && w.text.trim().length == 1 && w.text[0] in "اأإآل" && w.conf > 0f && w.conf < 0.9f
+
+    private fun dropStrays(line: List<Word>): List<Word> {
+        if (line.count { it.letters >= 2 } == 0) return line
+        var a = 0
+        var b = line.size
+        while (a < b && stray(line[a])) a++
+        while (b > a && stray(line[b - 1])) b--
+        return line.subList(a, b)
+    }
+
     /** Text from the word boxes; null when the answer has no usable boxes. */
     fun rebuild(words: List<Word>): String? {
         if (words.isEmpty()) return null
-        return lines(dedupe(words)).joinToString("\n") { join(it) }.trim().ifEmpty { null }
+        return lines(dedupe(words)).map { dropStrays(it) }.filter { it.isNotEmpty() }
+            .joinToString("\n") { join(it) }.trim().ifEmpty { null }
     }
 }

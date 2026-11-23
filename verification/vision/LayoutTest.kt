@@ -59,6 +59,20 @@ fun main() {
     check("big shadow offset (6 px) copy dropped", ocr(answer(line.map { it.shift(6, 5, c = 0.5) }, line)), want)
     check("opening quote glued", ocr(answer(listOf(W("قال", 900, 100, 980, 150), W("«", 880, 100, 895, 150), W("مرحبا", 760, 100, 875, 150), W("»", 740, 100, 755, 150)))), "قال «مرحبا»")
 
+    check("partial reading with higher confidence loses to the full word", ocr(answer(listOf(h2, h3, h4), listOf(W("بيبي", 852, 101, 960, 150, 0.95)), listOf(h1.shift(1, 0, c = 0.85)))), "حبيبي، هل أنت بخير؟")
+    check("full word kept when the partial comes second", ocr(answer(listOf(h1, h2, h3, h4), listOf(W("بيبي", 852, 101, 960, 150, 0.6)))), "حبيبي، هل أنت بخير؟")
+    check("much weaker longer reading does not replace", ocr(answer(listOf(W("بخير", 600, 100, 700, 150, 0.95)), listOf(W("بخيرا", 598, 100, 712, 150, 0.4)))), "بخير")
+
+    // a contradicting reading with its words laid out wrongly (4 words spread over the 5-word line)
+    val phantom = listOf(W("بخير", 870, 98, 1000, 150, 0.97), W("أجل", 740, 98, 860, 150, 0.97), W("أنا", 610, 98, 730, 150, 0.97), W("بخير", 480, 98, 600, 150, 0.97))
+    check("wrongly laid-out second reading is dropped, the consistent pair stays", ocr(answer(line.drop(1), listOf(w1), phantom)), want)
+    check("…in any block order", ocr(answer(phantom, listOf(w1), line.drop(1))), want)
+    check("genuine words in neighbouring paragraphs with touching boxes stay", ocr(answer(listOf(W("في", 700, 100, 740, 158)), listOf(W("البيت", 560, 100, 705, 150)))), "في البيت")
+
+    check("stray alef from a crew name beside the box dropped", ocr(answer(listOf(W("ا", 700, 100, 712, 150, 0.55), W("أبي", 560, 100, 690, 150, 0.98)))), "أبي")
+    check("confident lone و kept", ocr(answer(listOf(W("و", 700, 100, 720, 150, 0.6), W("أنا", 600, 100, 690, 150)))), "و أنا")
+    check("a line of one letter is kept", ocr(answer(listOf(W("ا", 700, 100, 712, 150, 0.5)))), "ا")
+
     // no boxes → Vision's own text
     check("no geometry → own text", ocr("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}],"fullTextAnnotation":{"text":"أبي\n"}}]}"""), "أبي")
     check("only textAnnotations words", ocr("""{"responses":[{"textAnnotations":[{"description":"هل أنت بخير؟ حبيبي،"},

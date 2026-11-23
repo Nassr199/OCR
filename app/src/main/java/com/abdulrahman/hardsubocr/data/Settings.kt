@@ -289,4 +289,9 @@ class Settings(context: Context) {
     var rescueEmpty: Boolean
         get() = sp.getBoolean("rescue_empty", true)
         set(v) = putBool("rescue_empty", v)
+
+    /** Lens / Vision in video mode: send the subtitle's letters alone, black on white. */
+    var cleanOcr: Boolean
+        get() = sp.getBoolean("clean_ocr", true)
+        set(v) = putBool("clean_ocr", v)
 }
