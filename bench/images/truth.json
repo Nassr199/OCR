@@ -1,0 +1,47 @@
+[
+ {
+  "file": "01_habibi_credits_bg0.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 0"
+ },
+ {
+  "file": "01_habibi_credits_bg1.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 1"
+ },
+ {
+  "file": "01_habibi_credits_bg2.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 2"
+ },
+ {
+  "file": "02_habibi_alone.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "no credits"
+ },
+ {
+  "file": "03_abi_over_credit_a255.jpg",
+  "truth": "أبي",
+  "note": "box covers the middle of a credit name, credit alpha 255"
+ },
+ {
+  "file": "03_abi_over_credit_a150.jpg",
+  "truth": "أبي",
+  "note": "box covers the middle of a credit name, credit alpha 150"
+ },
+ {
+  "file": "04_two_lines.jpg",
+  "truth": "أجل، أنا بخير.\nلا تقلق عليّ.",
+  "note": "two lines"
+ },
+ {
+  "file": "05_long_line_credits.jpg",
+  "truth": "لا أعرف ماذا سأفعل الآن، كل شيء تغيّر",
+  "note": "long line, short credits at the edges"
+ },
+ {
+  "file": "06_short_words.jpg",
+  "truth": "لا، لم يحدث شيء",
+  "note": "short words, one credit"
+ }
+]

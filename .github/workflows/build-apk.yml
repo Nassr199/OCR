@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ "**" ]
-    paths-ignore: [ "**.md", "verification/**" ]
+    paths-ignore: [ "**.md", "verification/**", "bench/**", ".github/workflows/ocr-bench.yml" ]
   workflow_dispatch:
 
 permissions:
