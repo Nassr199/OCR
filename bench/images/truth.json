@@ -2,46 +2,210 @@
  {
   "file": "01_habibi_credits_bg0.jpg",
   "truth": "حبيبي، هل أنت بخير؟",
-  "note": "credits both sides, background variant 0"
+  "note": "credits both sides, background variant 0",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ]
  },
  {
   "file": "01_habibi_credits_bg1.jpg",
   "truth": "حبيبي، هل أنت بخير؟",
-  "note": "credits both sides, background variant 1"
+  "note": "credits both sides, background variant 1",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ]
  },
  {
   "file": "01_habibi_credits_bg2.jpg",
   "truth": "حبيبي، هل أنت بخير؟",
-  "note": "credits both sides, background variant 2"
+  "note": "credits both sides, background variant 2",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ]
  },
  {
   "file": "02_habibi_alone.jpg",
   "truth": "حبيبي، هل أنت بخير؟",
-  "note": "no credits"
+  "note": "no credits",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ]
  },
  {
   "file": "03_abi_over_credit_a255.jpg",
   "truth": "أبي",
-  "note": "box covers the middle of a credit name, credit alpha 255"
+  "note": "box covers the middle of a credit name, credit alpha 255",
+  "box": [
+   562,
+   92,
+   662,
+   176
+  ]
  },
  {
   "file": "03_abi_over_credit_a150.jpg",
   "truth": "أبي",
-  "note": "box covers the middle of a credit name, credit alpha 150"
+  "note": "box covers the middle of a credit name, credit alpha 150",
+  "box": [
+   562,
+   92,
+   662,
+   176
+  ]
  },
  {
   "file": "04_two_lines.jpg",
   "truth": "أجل، أنا بخير.\nلا تقلق عليّ.",
-  "note": "two lines"
+  "note": "two lines",
+  "box": [
+   486,
+   51,
+   744,
+   187
+  ]
  },
  {
   "file": "05_long_line_credits.jpg",
   "truth": "لا أعرف ماذا سأفعل الآن، كل شيء تغيّر",
-  "note": "long line, short credits at the edges"
+  "note": "long line, short credits at the edges",
+  "box": [
+   265,
+   92,
+   965,
+   170
+  ]
  },
  {
   "file": "06_short_words.jpg",
   "truth": "لا، لم يحدث شيء",
-  "note": "short words, one credit"
+  "note": "short words, one credit",
+  "box": [
+   429,
+   92,
+   801,
+   167
+  ]
+ },
+ {
+  "file": "07_short_0_a255.jpg",
+  "truth": "نعم",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   568,
+   92,
+   668,
+   155
+  ]
+ },
+ {
+  "file": "07_short_0_a170.jpg",
+  "truth": "نعم",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   568,
+   92,
+   668,
+   155
+  ]
+ },
+ {
+  "file": "07_short_1_a255.jpg",
+  "truth": "أمي",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   563,
+   92,
+   673,
+   176
+  ]
+ },
+ {
+  "file": "07_short_1_a170.jpg",
+  "truth": "أمي",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   563,
+   92,
+   673,
+   176
+  ]
+ },
+ {
+  "file": "07_short_2_a255.jpg",
+  "truth": "ماذا؟",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   554,
+   92,
+   682,
+   159
+  ]
+ },
+ {
+  "file": "07_short_2_a170.jpg",
+  "truth": "ماذا؟",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   554,
+   92,
+   682,
+   159
+  ]
+ },
+ {
+  "file": "07_short_3_a255.jpg",
+  "truth": "حسنًا",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   552,
+   92,
+   684,
+   159
+  ]
+ },
+ {
+  "file": "07_short_3_a170.jpg",
+  "truth": "حسنًا",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   552,
+   92,
+   684,
+   159
+  ]
+ },
+ {
+  "file": "07_short_4_a255.jpg",
+  "truth": "لماذا؟",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   545,
+   92,
+   691,
+   159
+  ]
+ },
+ {
+  "file": "07_short_4_a170.jpg",
+  "truth": "لماذا؟",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   545,
+   92,
+   691,
+   159
+  ]
  }
 ]

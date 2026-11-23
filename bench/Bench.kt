@@ -61,6 +61,20 @@ private fun toPng(jpeg: ByteArray): Png {
     return Png(out.toByteArray(), img.width, img.height)
 }
 
+private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale: Double): Png {
+    val img = ImageIO.read(src.inputStream())
+    val l = x0.coerceIn(0, img.width - 1); val t = y0.coerceIn(0, img.height - 1)
+    val r = x1.coerceIn(l + 1, img.width); val b = y1.coerceIn(t + 1, img.height)
+    val part = img.getSubimage(l, t, r - l, b - t)
+    val w = (part.width * scale).toInt(); val h = (part.height * scale).toInt()
+    val out = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    val g = out.createGraphics()
+    g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+    g.drawImage(part, 0, 0, w, h, null); g.dispose()
+    val bos = ByteArrayOutputStream(); ImageIO.write(out, "png", bos)
+    return Png(bos.toByteArray(), w, h)
+}
+
 private fun one(s: String) = s.replace("\n", " ⏎ ")
 
 /** One-line, no tashkeel — the comparison form (the app's classic cleaning). */
@@ -104,6 +118,25 @@ private fun lensRaw(body: ByteArray): String {
         }
     }
     return sb.toString()
+}
+
+private suspend fun lens(http: HttpTransport, png: Png): LensProtocol.Result? {
+    val body = LensProtocol.buildRequest(png.bytes, png.w, png.h, "ar", "US", "America/New_York")
+    val r = runCatching {
+        http.execute(
+            HttpRequest(
+                LensProtocol.ENDPOINT,
+                headers = mapOf(
+                    "X-Goog-Api-Key" to LensProtocol.API_KEY, "User-Agent" to LensProtocol.USER_AGENT,
+                    "Accept" to "*/*", "Accept-Language" to "ar,en;q=0.9"
+                ),
+                body = body, contentType = "application/x-protobuf", timeoutMs = 60_000
+            )
+        )
+    }.getOrNull() ?: return null
+    if (r.code != 200) return null
+    kotlinx.coroutines.delay(400)
+    return LensProtocol.parseResponse(r.body)
 }
 
 fun main(args: Array<String>) = runBlocking {
@@ -162,6 +195,28 @@ fun main(args: Array<String>) = runBlocking {
             sb.append("    lines ").append(res.describe()).append('\n')
             if (attempt == 1) sb.append(lensRaw(r.body))
             kotlinx.coroutines.delay(700)
+        }
+
+        // ---------------------------------------------------------------- Lens: what helps a missed subtitle
+        val box = o["box"]?.jsonArray?.map { it.jsonPrimitive.content.toInt() }
+        if (box != null && box.size == 4 && box[2] > box[0]) {
+            val bh = box[3] - box[1]
+            val raw = File(dir, file).readBytes()
+            val strategies = listOf(
+                "lens:center50" to transform(raw, (png.w * 0.25).toInt(), 0, (png.w * 0.75).toInt(), png.h, 1.0),
+                "lens:center30" to transform(raw, (png.w * 0.35).toInt(), 0, (png.w * 0.65).toInt(), png.h, 1.0),
+                "lens:up2" to transform(raw, 0, 0, png.w, png.h, 2.0),
+                "lens:box" to transform(raw, box[0] - bh * 6 / 10, box[1] - bh / 4, box[2] + bh * 6 / 10, box[3] + bh / 4, 1.0),
+                "lens:box-wide" to transform(raw, box[0] - bh * 2, 0, box[2] + bh * 2, png.h, 1.0),
+                "lens:band" to transform(raw, 0, box[1] - bh / 4, png.w, box[3] + bh / 4, 1.0)
+            )
+            for ((name, img) in strategies) {
+                val res = lens(http, img)
+                if (res == null) { sb.append("- ").append(name).append(": failed\n"); continue }
+                val t = res.readingText
+                sb.append("- ").append(name).append(' ').append(score(name, t, truth)).append(" «").append(one(norm(t)))
+                    .append("» full «").append(one(res.fullText).take(160)).append("»\n")
+            }
         }
 
         // ---------------------------------------------------------------- Google Cloud Vision

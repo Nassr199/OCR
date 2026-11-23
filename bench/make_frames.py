@@ -47,17 +47,19 @@ def subtitle(img, lines, cx=615, font=AR, pad=(16, 10)):
     bh = lh * len(lines) + pad[1] * 2
     top = H - bh - 14 if len(lines) > 1 else 92
     d.rectangle([cx - bw // 2, top, cx + bw // 2, top + bh], fill=(0, 0, 0))
+    LAST_BOX[:] = [cx - bw // 2, top, cx + bw // 2, top + bh]
     for i, l in enumerate(lines):
         d.text((cx, top + pad[1] + lh * i + lh // 2), l, font=font, fill=(255, 255, 255), anchor='mm', direction='rtl', language='ar')
 
 
 cases = []
+LAST_BOX = [0, 0, 0, 0]
 
 
 def save(name, img, truth, note):
     p = os.path.join(OUT, name + '.jpg')
     img.save(p, quality=95)
-    cases.append({'file': name + '.jpg', 'truth': truth, 'note': note})
+    cases.append({'file': name + '.jpg', 'truth': truth, 'note': note, 'box': list(LAST_BOX)})
 
 
 # 1: like the «حبيبي» frame: box in the middle, credits left and right on the same rows
@@ -103,6 +105,19 @@ d = ImageDraw.Draw(img)
 credit(d, 232, 'Styling', 'Aslı Çolak')
 subtitle(img, ['لا، لم يحدث شيء'])
 save('06_short_words', img, 'لا، لم يحدث شيء', 'short words, one credit')
+
+# 7: short subtitles in small boxes over/near a credit name (what Lens tends to miss)
+SHORT = [('نعم', 'Görüntü Yönetmeni', 'Selin Aydın'), ('أمي', 'Sanat Yönetmeni', 'İsmail Durmaz'),
+         ('ماذا؟', 'Kostüm', 'Hilcen Can'), ('حسنًا', 'Yapımcı', 'Kerem Çatay'), ('لماذا؟', 'Senaryo', 'Ece Yörenç')]
+for i, (word, role, name) in enumerate(SHORT):
+    for alpha in (255, 170):
+        img = background(80 + i)
+        d = ImageDraw.Draw(img)
+        credit(d, 236, 'Sanat Yönetmeni', 'İsmail Durmaz', alpha)
+        credit(d, 615, role, name, alpha)
+        credit(d, 997, 'Kostüm Sorumlusu', 'Hilcen Can', alpha)
+        subtitle(img, [word], cx=618)
+        save(f'07_short_{i}_a{alpha}', img, word, 'short word in a small box over a credit name, alpha %d' % alpha)
 
 with open(os.path.join(OUT, 'truth.json'), 'w', encoding='utf-8') as f:
     json.dump(cases, f, ensure_ascii=False, indent=1)
