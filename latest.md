@@ -1,4 +1,4 @@
-# OCR bench — commit c7fba4c3fe38cb4b2aec395b970d5c67ab46cd59 — 2026-11-23T23:02:44.313393054Z
+# OCR bench — commit 3748c5ca6504ef9b7a009356de9b97e692779b8d — 2026-11-23T23:12:40.539400797Z
 
 Vision: no VISION_API_KEY secret — Lens only
 
@@ -50,7 +50,7 @@ truth: «أبي»
     full «Yardımcı Yönetmen ⏎ Gökhan Yılmaz ⏎ Yapım Koordinatörü ⏎ بي ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Tuğberk Süel»
     lines Yardımcı Yönetmen[0.190,0.401,0.139,0.075 p0] Gökhan Yılmaz[0.191,0.584,0.233,0.139 p1] Yapım Koordinatörü[0.498,0.411,0.142,0.095 p2] بي[0.492,0.732,0.037,0.114 p3] 2. Ekip Görüntü Yönetmeni[0.810,0.410,0.189,0.095 p4] Tuğberk Süel[0.809,0.591,0.202,0.169 p5]
 - Lens app ✓ shape ✓ «أبي»
-    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | حول الترجمة «Yapım Koordinat ⏎ أبي ⏎ n -» | شريط الترجمة «3:» → حول الترجمة
+    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | حول الترجمة «Yapım Koordinat ⏎ أبي ⏎ n» | شريط الترجمة «3:» → حول الترجمة
 
 ## 04_two_lines.jpg — two lines
 truth: «أجل، أنا بخير. ⏎ لا تقلق عليّ.»
@@ -159,11 +159,11 @@ truth: «لماذا؟»
 ## 07_short_4_a170.jpg — short word in a small box over a credit name, alpha 170
 truth: «لماذا؟»
 
-- Lens one look ✓ shape ✗ «- لماذا؟» «لماذا؟» strays 1
+- Lens one look ✓ shape ✓ «لماذا؟» strays 2
     full «Sanat Yönetmeni ⏎ İsmail Durmaz ⏎ - ⏎ لماذا ؟ ⏎ و ⏎ Kostüm Sorumlusu ⏎ Hilcen Can»
     lines Sanat Yönetmeni[0.191,0.398,0.115,0.070 p0] İsmail Durmaz[0.192,0.573,0.227,0.164 p1] -[0.426,0.609,0.035,0.154 p2] لماذا ؟[0.502,0.609,0.094,0.154 p3] و[0.573,0.609,0.024,0.154 p4] Kostüm Sorumlusu[0.809,0.401,0.131,0.075 p5] Hilcen Can[0.811,0.580,0.168,0.139 p6]
-- Lens app ✓ shape ✗ «- لماذا؟» «لماذا؟»
-    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ - لماذا ؟ ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ - لماذا ؟ ⏎ Hilcen Can» | حول الترجمة «لماذا؟ -» | شريط الترجمة «İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» → الصورة
+- Lens app ✓ shape ✓ «لماذا؟»
+    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | حول الترجمة «لماذا؟» | شريط الترجمة «İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» → الصورة
 
 ## 08_dialogue_dashes.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
 truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
@@ -216,5 +216,5 @@ truth: «- هل أنت بخير؟ ⏎ - نعم، أنا بخير»
 
 | engine | exact shape |
 |---|---|
-| lens one look | 17/24 |
-| lens app (multi-view) | 20/24 |
+| lens one look | 18/24 |
+| lens app (multi-view) | 21/24 |
