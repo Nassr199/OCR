@@ -33,7 +33,34 @@ fun main() = runBlocking {
     val enBody = Json.parseToJsonElement(VisionEngine(ok, "k", "en").buildBody(img)).jsonObject["requests"]!!.jsonArray[0].jsonObject
     check("English subtitles: hint en only", enBody["imageContext"]!!.jsonObject["languageHints"]!!.jsonArray.map { it.jsonPrimitive.content } == listOf("en"))
     check("full text, trailing newline trimmed", text == "مرحبا يا صديقي\nكيف حالك؟", text)
-    check("cacheId per language and reading type", e.cacheId == "vision:ar:doc:v5" && VisionEngine(ok, "k", "en").cacheId == "vision:en:doc:v5" && VisionEngine(ok, "k", "ar", document = false).cacheId == "vision:ar:text:v5")
+    // Vision OCR model option: sent only when chosen; refused by Google → default model, same image again
+    check("default model: no model field", r0["features"]!!.jsonArray[0].jsonObject["model"] == null)
+    val wBody = Json.parseToJsonElement(VisionEngine(ok, "k", "ar", model = "builtin/weekly").buildBody(img)).jsonObject["requests"]!!.jsonArray[0].jsonObject
+    check("weekly model sent", wBody["features"]!!.jsonArray[0].jsonObject["model"]!!.jsonPrimitive.content == "builtin/weekly")
+    class Seq(val answers: List<Pair<Int, String>>) : HttpTransport {
+        val bodies = ArrayList<String>()
+        override suspend fun execute(request: HttpRequest): HttpResponse {
+            bodies.add(request.body!!.toString(Charsets.UTF_8))
+            val a = answers[minOf(bodies.size - 1, answers.size - 1)]
+            return HttpResponse(a.first, a.second.toByteArray(), emptyMap())
+        }
+    }
+    val good = """{"responses":[{"fullTextAnnotation":{"text":"أبي"}}]}"""
+    val refusedHttp = Seq(listOf(400 to """{"error":{"code":400,"message":"Invalid model: builtin/weekly","status":"INVALID_ARGUMENT"}}""", 200 to good, 200 to good))
+    val ew = VisionEngine(refusedHttp, "k", "ar", model = "builtin/weekly")
+    val t1 = ew.recognize(img); val t2 = ew.recognize(img)
+    check("model refused (HTTP 400) → same image read with the default model", t1 == "أبي" && refusedHttp.bodies.size == 3, "$t1 ${refusedHttp.bodies.size}")
+    check("…and every later image too", !refusedHttp.bodies[1].contains("\"model\"") && !refusedHttp.bodies[2].contains("\"model\"") && t2 == "أبي")
+    check("…the report says so", ew.modelNote().contains("رفضته") && ew.modelInUse == "")
+    val perImageModel = Seq(listOf(200 to """{"responses":[{"error":{"code":3,"message":"Model builtin/weekly is not supported"}}]}""", 200 to good))
+    val ep = VisionEngine(perImageModel, "k", "ar", model = "builtin/weekly")
+    check("model refused inside the answer (INVALID_ARGUMENT) → default model", ep.recognize(img) == "أبي" && perImageModel.bodies.size == 2)
+    val otherBad = Seq(listOf(400 to """{"error":{"code":400,"message":"Bad image data.","status":"INVALID_ARGUMENT"}}"""))
+    val eo = VisionEngine(otherBad, "k", "ar", model = "builtin/weekly")
+    val r = runCatching { eo.recognize(img) }
+    check("another 400 is not taken for a model refusal", r.exceptionOrNull() is OcrError.Failed && eo.modelInUse == "builtin/weekly" && otherBad.bodies.size == 1, r.exceptionOrNull()?.message ?: "")
+    check("accepted model: the report names it", VisionEngine(ok, "k", "ar", model = "builtin/weekly").modelNote() == "builtin/weekly")
+    check("cacheId per language, reading type, model and classic version", e.cacheId == "vision:ar:doc:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "en").cacheId == "vision:en:doc:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "ar", document = false).cacheId == "vision:ar:text:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "ar", model = "builtin/weekly").cacheId == "vision:ar:doc:builtin/weekly:c$CLASSIC_OCR_VERSION", e.cacheId)
     // 2) fallback to textAnnotations, empty response
     check("textAnnotations fallback", VisionEngine.parseText("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}]}]}""") == "أبي")
     check("no text → empty", VisionEngine.parseText("""{"responses":[{}]}""") == "")

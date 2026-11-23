@@ -33,7 +33,8 @@ class AndroidImagePreparer(
         val mime = bounds.outMimeType ?: "image/png"
         val longest = maxOf(w, h)
 
-        if (enhance) return enhanced(bytes, w, h, kind)
+        // v2.6 enhancement is Gemini's logic: classic OCR always gets the original picture
+        if (enhance && !kind.isClassicOcr) return enhanced(bytes, w, h, kind)
 
         return when {
             // Lens and Vision: the same PNG ≤ 1500 px (classic OCR)
@@ -105,6 +106,34 @@ class AndroidImagePreparer(
             val out = ByteArrayOutputStream(bmp.width * bmp.height / 2 + 1024)
             bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
             return out.toByteArray()
+        }
+    }
+}
+
+/**
+ * Lens's extra looks (ClassicViews): a part of the same picture, scaled (bilinear), as PNG — the
+ * pixels themselves are not altered.
+ */
+object AndroidResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
+    override fun view(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int, scale: Float): PreparedImage? {
+        val src = BitmapFactory.decodeByteArray(image.bytes, 0, image.bytes.size) ?: return null
+        try {
+            val l = x0.coerceIn(0, src.width - 1)
+            val t = y0.coerceIn(0, src.height - 1)
+            val r = x1.coerceIn(l + 1, src.width)
+            val b = y1.coerceIn(t + 1, src.height)
+            val part = if (l == 0 && t == 0 && r == src.width && b == src.height) src else Bitmap.createBitmap(src, l, t, r - l, b - t)
+            val nw = maxOf(1, Math.round(part.width * scale))
+            val nh = maxOf(1, Math.round(part.height * scale))
+            val out = if (nw == part.width && nh == part.height) part else Bitmap.createScaledBitmap(part, nw, nh, true)
+            try {
+                return PreparedImage(AndroidImagePreparer.toPng(out), "image/png", out.width, out.height, image.name)
+            } finally {
+                if (out !== part && out !== src) out.recycle()
+                if (part !== src) part.recycle()
+            }
+        } finally {
+            src.recycle()
         }
     }
 }

@@ -11,6 +11,9 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `ApiTest.kt` | Gemini / OpenRouter / Lens request bodies, response parsing and error classification. |
 | `vision/VisionTest.kt` | Google Cloud Vision request (key in header, DOCUMENT_TEXT_DETECTION by default or TEXT_DETECTION, language hint of the subtitles), parsing and error classification. |
 | `vision/FocusTest.kt` | Google Vision report next to the SRT (`report_sample.txt`) and two-stage reading: when the subtitle shares its row with other text (crew names) or is read unsure, the subtitle's area is cropped from the same picture and read again; the better reading is kept. Areas checked on the measured geometry of real frames. |
+| `classic/ClassicTest.kt` | 2.7.6 multi-view reading for Lens (ClassicViews): vote, edge-letter rule, background fragments, pixel reading order, plan of the looks, engine with a fake server. `classic/lens_bench_live.md` = live Lens run (GitHub Actions) on 19 synthetic crops: one look 14/19, the app 17/19. |
+| `cache/CacheTest.kt` | Resume memory: per-engine count, readings of a finished Lens/Vision job forgotten (re-runs read afresh), Gemini's kept. |
+| `../bench/` + `.github/workflows/ocr-bench.yml` | Live Lens/Vision bench on GitHub Actions (the build sandbox cannot reach Google). Vision runs when the repository has a `VISION_API_KEY` secret. |
 | `lens/LensOrderTest.kt` | Google Lens lines in reading order (rows top to bottom, right to left in Arabic) and the same place read twice. |
 | `vision/LayoutTest.kt` + `LayoutCommon.kt` + `LayoutFuzz.kt` | Vision text rebuilt from word boxes: same place read twice, blocks laid out left to right, punctuation, two lines, credits, Latin runs; 14,000 random lines (clean reads unchanged, copies removed). |
 

@@ -28,6 +28,7 @@ import com.abdulrahman.hardsubocr.data.FolderRef
 import com.abdulrahman.hardsubocr.data.Saf
 import com.abdulrahman.hardsubocr.img.AndroidImageCropper
 import com.abdulrahman.hardsubocr.img.AndroidImagePreparer
+import com.abdulrahman.hardsubocr.img.AndroidResampler
 import com.abdulrahman.hardsubocr.net.Net
 import com.abdulrahman.hardsubocr.video.VideoProbe
 import com.abdulrahman.hardsubocr.video.VideoScanner
@@ -98,8 +99,9 @@ class JobRunner(
             EngineKind.GEMINI -> append(" • ").append(req.geminiModel).append(" • تفكير ").append(req.thinking)
                 .append(" • دقة عالية ").append(req.mediaHigh)
             EngineKind.OPENROUTER -> append(" • ").append(req.openRouterModel)
-            EngineKind.LENS -> append(" • منطقة ").append(req.lensRegion)
-            EngineKind.VISION -> append(" • TEXT_DETECTION")
+            EngineKind.LENS -> append(" • منطقة ").append(req.lensRegion).append(" • نظرات إضافية ").append(req.lensMultiView)
+            EngineKind.VISION -> append(if (req.visionDocument) " • DOCUMENT_TEXT_DETECTION" else " • TEXT_DETECTION")
+                .append(" • نموذج ").append(req.visionModel.ifEmpty { "builtin/stable" })
         }
         append(" • لغة ").append(req.lang).append(" • أسلوب ").append(req.profile ?: "—").append('\n')
         append("المصدر: ").append(
@@ -121,7 +123,10 @@ class JobRunner(
     }
 
     private fun buildEngine(): OcrEngine = when (req.engine) {
-        EngineKind.LENS -> LensEngine(Net.transport, req.lang.code, req.lensRegion)
+        EngineKind.LENS -> LensEngine(
+            Net.transport, req.lang.code, req.lensRegion,
+            views = if (req.lensMultiView) AndroidResampler else null
+        )
         EngineKind.GEMINI -> GeminiEngine(
             Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh, req.lang
         )
@@ -131,9 +136,37 @@ class JobRunner(
         EngineKind.VISION -> VisionEngine(
             Net.transport, req.visionKey, req.lang.code,
             document = req.visionDocument,
+            model = req.visionModel,
             cropper = AndroidImageCropper,
             trace = { visionTraces.add(it) }
-        )
+        ).also { visionEngine = it }
+    }
+
+    @Volatile private var visionEngine: VisionEngine? = null
+
+    /**
+     * Image enhancement is part of what an AI engine reads; it enters the resume-memory key only when
+     * it differs from the profile's own choice, so the keys of existing Gemini/OpenRouter memories stay
+     * exactly as they were. Lens/Vision never get enhanced images (their key has CLASSIC_OCR_VERSION).
+     */
+    private val keySuffix: String =
+        if (!req.engine.isClassicOcr && req.enhance != (req.profile?.enhanceImages ?: false)) "|enh=${req.enhance}" else ""
+
+    /** Before reading: say plainly how many readings come back from the resume memory. */
+    private fun announceMemory(cache: FileOcrCache?, p: OcrPipeline) {
+        val n = cache?.count(p.cachePrefix) ?: 0
+        if (n > 0) addLog("♻ ذاكرة الاستئناف: $n صورة قُرئت في تشغيل سابق لم يكتمل بنفس المحرك والإعدادات — تُكمل المهمة من حيث توقفت ولا تُقرأ من جديد")
+    }
+
+    /**
+     * Lens/Vision job that read every image: its readings leave the resume memory, so running the
+     * same folder/video again reads it afresh (memory is for interrupted jobs). Gemini/OpenRouter
+     * keep theirs (they cost per image).
+     */
+    private fun forgetFinished(cache: FileOcrCache?, p: OcrPipeline) {
+        if (cache == null || !req.engine.isClassicOcr || p.failures.isNotEmpty()) return
+        val n = runCatching { cache.forget(p.cachePrefix) }.getOrDefault(0)
+        if (n > 0) DiagLog.i("Cache", "اكتملت قراءة ${req.engine}: حُذفت $n قراءة من ذاكرة الاستئناف (التشغيل التالي يقرأ من جديد)")
     }
 
     private fun newPipeline(
@@ -148,6 +181,7 @@ class JobRunner(
         concurrency = req.workers,
         retry = RetryPolicy(maxRetries = req.retries),
         cache = cache,
+        keySuffix = keySuffix,
         listener = object : PipelineListener {
             override fun onItem(item: OcrItem, outcome: ItemOutcome) {
                 when (outcome) {
@@ -347,7 +381,8 @@ class JobRunner(
         if (req.engine != EngineKind.VISION || visionTraces.isEmpty()) return
         val text = VisionReport.build(
             baseName, req.visionDocument, req.lang.code, visionTraces.toList(),
-            pipeline?.stats?.cached?.get() ?: 0
+            pipeline?.stats?.cached?.get() ?: 0,
+            visionEngine?.modelNote() ?: req.visionModel.ifEmpty { "builtin/stable" }
         )
         val ok = runCatching {
             Saf.writeFile(context, folder, "${baseName}_vision.txt", "text/plain", text.toByteArray(Charsets.UTF_8), true)
@@ -421,6 +456,7 @@ class JobRunner(
         try {
             val p = newPipeline(engine, cache)
             beginUnit(folder.name, items.size, p)
+            announceMemory(cache, p)
             phase = "قراءة الصور (${items.size})"
             val ch = Channel<OcrItem>(Channel.UNLIMITED)
             for (item in items) ch.trySend(item)
@@ -430,6 +466,7 @@ class JobRunner(
             val entries = p.mergedResult(req.mergeMode, req.stabilize)
             val target = req.output ?: folder
             val (uri, savedIn) = withContext(Dispatchers.IO) { save(target, folder.name, entries) }
+            if (uri != null) forgetFinished(cache, p)
             return JobOutput(folder.name, uri, entries, savedIn, target, p.failures.toList(), noTs)
         } finally {
             cache?.close()
@@ -467,6 +504,7 @@ class JobRunner(
         try {
             val p = newPipeline(engine, cache, videoPreparer)
             beginUnit(u.name, 0, p)
+            announceMemory(cache, p)
             decodeFraction = 0f
             videoFrames = 0
             videoStartedAt = System.currentTimeMillis()
@@ -619,6 +657,7 @@ class JobRunner(
             phase = "دمج وحفظ"
             val entries = p.mergedResult(req.mergeMode, req.stabilize)
             val (uri, savedIn) = withContext(Dispatchers.IO) { save(req.output, base, entries) }
+            if (uri != null) forgetFinished(cache, p)
             return JobOutput(
                 base, uri, entries, savedIn, req.output, p.failures.toList(),
                 info = where?.let { "صور الترجمة محفوظة في: $it ($saved صورة)" }

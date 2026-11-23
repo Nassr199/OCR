@@ -84,6 +84,22 @@ object LensProtocol {
             }
         }.take(1500)
 
+        /** Lines [readingText] drops as fragments of the background (see [withoutStrays]). */
+        val strays: Int get() = lines.size - withoutStrays(lines).size
+
+        /**
+         * Pixel boxes (x0, y0, x1, y1) of the Arabic lines kept by [readingText] — where the subtitle
+         * is, for a closer second look. Empty when Lens found no Arabic or gave no boxes.
+         */
+        fun arabicBoxes(width: Int, height: Int): List<IntArray> = withoutStrays(lines).mapNotNull { l ->
+            val b = l.box ?: return@mapNotNull null
+            if (b.w <= 0f || b.h <= 0f || ClassicViews.arabicLetters(l.text) < 2) return@mapNotNull null
+            intArrayOf(
+                Math.round((b.cx - b.w / 2) * width), Math.round((b.cy - b.h / 2) * height),
+                Math.round((b.cx + b.w / 2) * width), Math.round((b.cy + b.h / 2) * height)
+            )
+        }
+
         /** --ocr-single-line equivalent. */
         val singleLine: String get() = lines.joinToString(" ") { it.text }.trim()
 
@@ -94,19 +110,25 @@ object LensProtocol {
          *   row are joined right to left when Arabic. Lens can hand the chunks of a two-line
          *   subtitle out interleaved between the rows (Subtitle Edit fixes the same, #12149).
          * Line text itself is Lens's own. Without a box on every line it is [fullText] unchanged.
+         *
+         * Lens boxes are fractions of the image width (x) and height (y): they are turned into pixels
+         * of the [width] × [height] picture first, so distances mean the same across and down (before
+         * 2.7.6 a 1230×201 crop counted a horizontal gap six times too small, and crew names on the
+         * subtitle's row were glued to it).
          */
-        val readingText: String
-            get() {
-                val ls = lines
-                if (ls.size < 2) return fullText
+        fun readingText(width: Int, height: Int): String {
+                val ls = withoutStrays(lines)
+                if (ls.size < 2) return ls.joinToString("\n") { it.text }.trim()
+                val sx = width.coerceAtLeast(1).toFloat()
+                val sy = height.coerceAtLeast(1).toFloat()
                 val words = ls.mapIndexed { i, l ->
-                    val b = l.box ?: return fullText
-                    if (b.w <= 0f || b.h <= 0f) return fullText
-                    // centre box → integer box (same scale for every line)
+                    val b = l.box ?: return ls.joinToString("\n") { it.text }.trim()
+                    if (b.w <= 0f || b.h <= 0f) return ls.joinToString("\n") { it.text }.trim()
+                    // centre box → pixel box
                     VisionLayout.Word(
                         l.text,
-                        ((b.cx - b.w / 2) * 10_000).toInt(), ((b.cy - b.h / 2) * 10_000).toInt(),
-                        ((b.cx + b.w / 2) * 10_000).toInt(), ((b.cy + b.h / 2) * 10_000).toInt(),
+                        Math.round((b.cx - b.w / 2) * sx), Math.round((b.cy - b.h / 2) * sy),
+                        Math.round((b.cx + b.w / 2) * sx), Math.round((b.cy + b.h / 2) * sy),
                         par = i
                     )
                 }
@@ -122,12 +144,15 @@ object LensProtocol {
                     val ar = text.count { it in '\u0600'..'\u06FF' || it in '\u0750'..'\u077F' || it in '\uFB50'..'\uFDFF' || it in '\uFE70'..'\uFEFF' }
                     val lat = text.count { it.isLetter() } - ar
                     val rtl = ar > 0 && ar * 10 >= (ar + lat) * 3
-                    // chunks close together are one line; a far one (crew names beside the subtitle) stays apart
+                    // chunks close together are one line; a far one (crew names beside the subtitle) stays
+                    // apart, and so does a chunk in another script (a Latin name touching an Arabic line)
                     val pieces = ArrayList<MutableList<VisionLayout.Word>>()
                     var right = Int.MIN_VALUE
                     for (w in r.sortedBy { it.x0 }) {
                         val last = pieces.lastOrNull()
-                        if (last != null && w.x0 - right <= minOf(w.h, last.last().h) * 2.5) {
+                        if (last != null && w.x0 - right <= minOf(w.h, last.last().h) * 2.5 &&
+                            sameScript(w.text, last.last().text)
+                        ) {
                             last.add(w); right = maxOf(right, w.x1)
                         } else {
                             pieces.add(mutableListOf(w)); right = w.x1
@@ -139,6 +164,42 @@ object LensProtocol {
                 }
                 return out.joinToString("\n").trim()
             }
+    }
+
+    /**
+     * Lens reads the parts of crew names hidden behind or cut by the subtitle box as lone letters
+     * («- لماذا؟ و», «ا أبي»): with a real Arabic line (2+ letters) in the picture, a line that is a
+     * single Arabic letter, or only stray marks ("-", "'"), is a background fragment and is dropped.
+     * No subtitle line is one letter; Arabic punctuation alone (؟ ، ؛) is kept.
+     */
+    fun withoutStrays(lines: List<Line>): List<Line> {
+        if (lines.none { ClassicViews.arabicLetters(it.text) >= 2 }) return lines
+        return lines.filter { l ->
+            val t = l.text
+            val ar = ClassicViews.arabicLetters(t)
+            val letters = t.count { it.isLetter() }
+            when {
+                ar == 1 && letters == 1 -> false
+                letters == 0 && t.none { it == '؟' || it == '،' || it == '؛' } -> false
+                else -> true
+            }
+        }
+    }
+
+    private fun sameScript(a: String, b: String): Boolean {
+        val x = script(a); val y = script(b)
+        return x == y || x == 0 || y == 0
+    }
+
+    /** 1 = mostly Arabic, 2 = mostly Latin, 0 = neither (digits, punctuation). */
+    private fun script(t: String): Int {
+        val ar = t.count { it in '\u0600'..'\u06FF' || it in '\u0750'..'\u077F' || it in '\uFB50'..'\uFDFF' || it in '\uFE70'..'\uFEFF' }
+        val lat = t.count { it.isLetter() } - ar
+        return when {
+            ar == 0 && lat == 0 -> 0
+            ar >= lat -> 1
+            else -> 2
+        }
     }
 
     private fun parseBox(geometry: ProtoField?): Box? {

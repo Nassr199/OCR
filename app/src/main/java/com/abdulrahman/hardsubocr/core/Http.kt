@@ -42,6 +42,14 @@ enum class EngineKind { LENS, GEMINI, OPENROUTER, VISION }
  */
 val EngineKind.isClassicOcr: Boolean get() = this == EngineKind.LENS || this == EngineKind.VISION
 
+/**
+ * Version of the classic-OCR reading (Lens/Vision request, text assembly, cleaning). Part of their
+ * resume-memory identity: bump it whenever any of that changes, so a re-run never replays a reading
+ * made by an older version (before 2.7.6 Lens's identity never changed, and every re-run of the same
+ * video got its first reading back instantly).
+ */
+const val CLASSIC_OCR_VERSION = 6
+
 class PreparedImage(
     val bytes: ByteArray,
     val mime: String,
@@ -59,6 +67,11 @@ fun interface ImagePreparer {
 /** Crops a prepared image, in its own pixels (end exclusive); platform side (Bitmap on Android). */
 fun interface ImageCropper {
     fun crop(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int): PreparedImage?
+}
+
+/** A part of a prepared image (its own pixels, end exclusive) scaled by [scale]; platform side. */
+fun interface ImageResampler {
+    fun view(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int, scale: Float): PreparedImage?
 }
 
 interface OcrEngine {

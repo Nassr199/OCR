@@ -75,6 +75,16 @@ class Settings(context: Context) {
         get() = sp.getBoolean("vision_document", true)
         set(v) = putBool("vision_document", v)
 
+    /** Google Lens: extra looks at a picture whose first reading is suspicious (ClassicViews). */
+    var lensMultiView: Boolean
+        get() = sp.getBoolean("lens_multiview", true)
+        set(v) = putBool("lens_multiview", v)
+
+    /** Google Vision OCR model: "" = Google's default (builtin/stable), or "builtin/weekly". */
+    var visionModel: String
+        get() = str("vision_model", "")
+        set(v) = put("vision_model", v.trim())
+
     var geminiModel: String
         get() = str("gemini_model", GeminiEngine.DEFAULT_MODEL).ifBlank { GeminiEngine.DEFAULT_MODEL }
         set(v) = put("gemini_model", v.trim())
@@ -259,7 +269,15 @@ class Settings(context: Context) {
         EngineKind.LENS, EngineKind.VISION -> null
     }
 
-    fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH else when (cleanChoice) {
+    /**
+     * Lens and Vision are classic OCR, not a model that understands the picture: the v2.6 / v2.1 logic
+     * (written for Gemini) never touches them. Their text always gets the classic cleaning of the PRO
+     * program (Arabic only, one line, no tashkeel, duplicated lines removed), whatever is chosen for
+     * the AI engines; and they always read the original picture (see [enhanceFor]).
+     */
+    fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH
+    else if (kind.isClassicOcr) CleanMode.PRO
+    else when (cleanChoice) {
         CleanChoice.PRO -> CleanMode.PRO
         CleanChoice.STRICT_OR_PRECISE -> CleanMode.PRECISE
         CleanChoice.V26 -> CleanMode.V26
@@ -273,7 +291,7 @@ class Settings(context: Context) {
         Choice.AUTO -> profileFor(kind)?.merge ?: MergeMode.PRO
     }
 
-    fun enhanceFor(kind: EngineKind): Boolean = when (enhanceChoice) {
+    fun enhanceFor(kind: EngineKind): Boolean = if (kind.isClassicOcr) false else when (enhanceChoice) {
         EnhanceChoice.ON -> true
         EnhanceChoice.OFF -> false
         EnhanceChoice.AUTO -> profileFor(kind)?.enhanceImages ?: false

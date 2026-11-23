@@ -89,7 +89,7 @@ fun main() {
     val t5 = TwoAnswers(json(firstHabibi), json(secondHabibi))
     runBlocking { VisionEngine(t5, "k", "ar").recognize(img) }
     check("engine without a cropper (key test) → one request", t5.bodies.size == 1)
-    check("cache id new", VisionEngine(t5, "k", "ar").cacheId == "vision:ar:doc:v5")
+    check("cache id new", VisionEngine(t5, "k", "ar").cacheId == "vision:ar:doc:stable:c$CLASSIC_OCR_VERSION")
     // the Vision report: every image read, Vision's own text, the second look
     val traces = ArrayList<VisionEngine.Trace>()
     val t6 = TwoAnswers(json(firstHabibi), json(secondHabibi))

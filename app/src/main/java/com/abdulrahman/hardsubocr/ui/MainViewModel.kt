@@ -73,6 +73,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun chooseVisionDocument(v: Boolean) {
         visionDocument = v; s.visionDocument = v
     }
+
+    var visionModel by mutableStateOf(s.visionModel)
+        private set
+
+    var lensMultiView by mutableStateOf(s.lensMultiView)
+        private set
+
+    fun chooseLensMultiView(v: Boolean) {
+        lensMultiView = v; s.lensMultiView = v
+    }
+
+    fun chooseVisionModel(v: String) {
+        visionModel = v; s.visionModel = v
+    }
     var geminiModel by mutableStateOf(s.geminiModel)
     var openRouterModel by mutableStateOf(s.openRouterModel)
     var thinking by mutableStateOf(s.thinking)
@@ -629,6 +643,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             openRouterKey = openRouterKey.trim(),
             visionKey = visionKey.trim(),
             visionDocument = visionDocument,
+            visionModel = visionModel,
+            lensMultiView = lensMultiView,
             geminiModel = geminiModel.trim(),
             openRouterModel = openRouterModel.trim(),
             thinking = thinking,

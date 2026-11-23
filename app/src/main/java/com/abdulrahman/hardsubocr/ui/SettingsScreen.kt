@@ -136,9 +136,9 @@ private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: () -> Unit, on
             ).joinToString(" • "), last = true)
         }
         SettingsGroup("النص والملف") {
-            Entry(SettingsPage.CLEAN, onOpen, vm.cleanLabel(u.clean) + if (u.strip) " • بلا تشكيل" else "")
+            Entry(SettingsPage.CLEAN, onOpen, "Gemini/OpenRouter: " + vm.cleanLabel(u.clean) + (if (u.strip) " • بلا تشكيل" else "") + " • Lens/Vision: ثابت")
             Entry(SettingsPage.MERGE, onOpen, vm.mergeLabel(u.merge))
-            Entry(SettingsPage.ENHANCE, onOpen, vm.enhanceLabel(vm.enhanceChoice))
+            Entry(SettingsPage.ENHANCE, onOpen, "Gemini/OpenRouter: " + vm.enhanceLabel(vm.enhanceChoice) + " • Lens/Vision: الصورة الأصلية")
             Entry(SettingsPage.SRT, onOpen, listOf(
                 if (u.bom) "UTF-8 مع BOM" else "UTF-8",
                 if (u.crlf) "CRLF" else "LF",
@@ -275,13 +275,16 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
         }
 
         SettingsPage.CLEAN -> {
-            SettingsCard("طريقة التنظيف") {
+            SettingsCard(null) {
+                Hint("هذه الخيارات لـ Gemini وOpenRouter. Lens وVision قراءة OCR تقليدية لا تفهم الصورة، فلهما تنظيف ثابت: العربي فقط في سطر واحد بلا تشكيل، وحذف السطر المكرر — تنظيف برنامجك PRO الذي صُمم لـ Lens. منطق 2.6 لا يُطبَّق عليهما.")
+            }
+            SettingsCard("طريقة التنظيف (Gemini وOpenRouter)") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "Lens وVision ← سريع، وGemini/OpenRouter ← حسب الأسلوب المختار. (الإنجليزية لها تنظيف خاص تلقائيًا)"),
+                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "حسب الأسلوب المختار في Gemini/OpenRouter. (الإنجليزية لها تنظيف خاص تلقائيًا)"),
                         ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل المشوّه فقط ويُبقي الصحيح، ويصلح الكلمات المتقطعة"),
                         ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف الردود والرموز الزائدة فقط ويُبقي الأسطر والتشكيل كما قرأها الموديل"),
-                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل — مناسب لـ Lens وVision")
+                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل — وهو تنظيف Lens وVision الثابت")
                     ),
                     u.clean
                 ) { u.clean = it; s.cleanChoice = it }
@@ -303,10 +306,12 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             ) { u.merge = it; s.mergeChoice = it }
         }
 
-        SettingsPage.ENHANCE -> SettingsCard("قبل الإرسال") {
+        SettingsPage.ENHANCE -> SettingsCard("قبل الإرسال (Gemini وOpenRouter)") {
+            Hint("Lens وVision يقرآن الصورة الأصلية دائمًا: هذا التحسين من منطق 2.6 المصمم لـ Gemini.")
+            Spacer(Modifier.height(6.dp))
             ChoiceList(
                 listOf(
-                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «ذكي + تشكيل»، ومعطّل مع Lens وVision و«سريع»"),
+                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «ذكي + تشكيل»، ومعطّل مع «سريع»"),
                     ChoiceItem(EnhanceChoice.ON, vm.enhanceLabel(EnhanceChoice.ON), null),
                     ChoiceItem(EnhanceChoice.OFF, vm.enhanceLabel(EnhanceChoice.OFF), null)
                 ),
@@ -334,7 +339,7 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
         SettingsPage.CACHE -> {
             val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
             SettingsCard(null) {
-                SwitchRow("استئناف المهام المتوقفة", "كل صورة تُقرأ تُحفظ فورًا، فإعادة التشغيل لا تعيد قراءة ما تم", u.resume) { u.resume = it; s.resume = it }
+                SwitchRow("استئناف المهام المتوقفة", "كل صورة تُقرأ تُحفظ فورًا، فإكمال مهمة توقفت لا يعيد قراءة ما تم. مع Lens وVision تُمسح قراءات المهمة حين تكتمل، فتشغيل الفيديو نفسه مرة أخرى يقرؤه من جديد.", u.resume) { u.resume = it; s.resume = it }
             }
             SettingsCard("الذاكرة المؤقتة") {
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -72,10 +72,34 @@ class FileOcrCache private constructor(private val file: File) : OcrCache, Close
 
     val size: Int get() = map.size
 
+    /** Readings kept for keys starting with [prefix] (one engine + settings). */
+    fun count(prefix: String): Int = map.keys.count { it.startsWith(prefix) }
+
+    @Volatile
+    private var closedForWrites = false
+
+    /**
+     * Forgets the readings of keys starting with [prefix] (rewrites the file without them) and
+     * stops writing. Called when a classic-OCR job has finished every image: the memory exists to
+     * resume an interrupted job, so the next run of the same video reads it afresh.
+     */
+    @Synchronized
+    fun forget(prefix: String): Int {
+        val keys = map.keys.filter { it.startsWith(prefix) }
+        if (keys.isEmpty()) return 0
+        closedForWrites = true
+        runCatching { writer.flush() }
+        runCatching { writer.close() }
+        for (k in keys) map.remove(k)
+        if (map.isEmpty()) file.delete() else compact()
+        return keys.size
+    }
+
     override fun get(key: String): String? = map[key]
 
     @Synchronized
     override fun put(key: String, text: String) {
+        if (closedForWrites) return
         if (map.put(key, text) == text) return
         try {
             writer.write(line(key, text))
@@ -88,6 +112,7 @@ class FileOcrCache private constructor(private val file: File) : OcrCache, Close
 
     @Synchronized
     override fun close() {
+        if (closedForWrites) return
         runCatching { writer.flush() }
         runCatching { stream.fd.sync() }
         runCatching { writer.close() }

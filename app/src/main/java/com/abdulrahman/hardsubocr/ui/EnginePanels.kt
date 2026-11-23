@@ -117,8 +117,14 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
                         CheckLine("بلا مفتاح API ولا حساب")
                         CheckLine("اتصال مباشر بخدمة Google Lens")
                         CheckLine("عدة صور بالتوازي (من الإعدادات)")
+                        CheckLine("الصورة الأصلية كما هي، وتنظيف OCR تقليدي ثابت — منطق 2.6 خاص بـ Gemini ولا يُطبَّق هنا")
                         Spacer(Modifier.height(6.dp))
-                        EnhanceSwitch(vm, enabled, classic = true)
+                        SwitchRow(
+                            "نظرات إضافية للصورة المشكوك فيها",
+                            "إذا جاءت القراءة الأولى بلا عربي أو بكلمة قصيرة أو بحروف شاردة من الخلفية، تُقرأ الصورة نفسها مكبّرة، وحول الترجمة، وشريطها، ويُؤخذ ما تتفق عليه القراءات. الصورة لا تُعدَّل. مجاني مع Lens.",
+                            vm.lensMultiView,
+                            enabled
+                        ) { vm.chooseLensMultiView(it) }
                     }
                     EngineKind.VISION -> VisionPanel(vm, enabled)
                     EngineKind.GEMINI -> AiPanel(vm, enabled, gemini = true)
@@ -171,15 +177,26 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
         else "TEXT_DETECTION: مصمم للنص المتفرق داخل صورة كبيرة (لافتات وصور)، وقد يفوّت نصًا.",
         Modifier.padding(top = 6.dp, start = 4.dp)
     )
+    Spacer(Modifier.height(12.dp))
+    Text("نموذج القراءة", style = MaterialTheme.typography.labelLarge)
+    Spacer(Modifier.height(6.dp))
+    Segmented(
+        listOf("" to "المستقر", "builtin/weekly" to "الأحدث (أسبوعي)"),
+        vm.visionModel,
+        enabled = enabled
+    ) { vm.chooseVisionModel(it) }
+    Hint(
+        if (vm.visionModel.isEmpty()) "builtin/stable: نموذج Google الافتراضي."
+        else "builtin/weekly: أحدث إصدار من نموذج القراءة تحدّثه Google كل أسبوع (موثّق لقراءة النصوص). إن رفضته Google يكمل التطبيق بالنموذج المستقر تلقائيًا ويذكر ذلك في التقرير.",
+        Modifier.padding(top = 6.dp, start = 4.dp)
+    )
     Spacer(Modifier.height(10.dp))
-    CheckLine("يُعامل مثل Google Lens: نفس تحضير الصور والتنظيف والدمج")
+    CheckLine("الصورة الأصلية كما هي، وتنظيف OCR تقليدي ثابت — منطق 2.6 خاص بـ Gemini ولا يُطبَّق هنا")
     CheckLine("بجانب كل ملف SRT تقرير بما قرأه Vision من كل صورة")
     Hint(
         "التسعير من Google: أول 1000 صورة كل شهر بلا تكلفة، ثم 1.50$ لكل 1000 صورة.",
         Modifier.padding(top = 4.dp, start = 4.dp)
     )
-    Spacer(Modifier.height(6.dp))
-    EnhanceSwitch(vm, enabled, classic = true)
 }
 
 // ============================================================================ Gemini / OpenRouter

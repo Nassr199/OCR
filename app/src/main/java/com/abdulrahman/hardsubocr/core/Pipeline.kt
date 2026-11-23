@@ -106,7 +106,9 @@ class OcrPipeline(
     private val listener: PipelineListener = object : PipelineListener {},
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** After this many images in a row fail for good, the job stops (service is refusing us). */
-    private val breakerThreshold: Int = 12
+    private val breakerThreshold: Int = 12,
+    /** Extra part of the resume-memory key (settings that change the reading but not the engine id). */
+    private val keySuffix: String = ""
 ) {
     private val workers = concurrency.coerceIn(1, 16)
     val results = ConcurrentLinkedQueue<SubEntry>()
@@ -128,7 +130,10 @@ class OcrPipeline(
     private val cooldownUntil = AtomicLong(0)
     private val consecutiveFailures = AtomicInteger(0)
 
-    private fun cacheKey(item: OcrItem) = "${engine.cacheId}|$cleanMode|$stripDiacritics|${item.key}"
+    private fun cacheKey(item: OcrItem) = "${engine.cacheId}|$cleanMode|$stripDiacritics|${item.key}$keySuffix"
+
+    /** Every resume-memory key of this engine and its settings starts with this. */
+    val cachePrefix: String get() = "${engine.cacheId}|"
 
     /** Consumes [items] with N parallel workers until the channel is closed. */
     suspend fun run(items: ReceiveChannel<OcrItem>) = coroutineScope {

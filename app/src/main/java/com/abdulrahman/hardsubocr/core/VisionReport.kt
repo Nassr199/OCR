@@ -8,11 +8,15 @@ package com.abdulrahman.hardsubocr.core
  */
 object VisionReport {
 
-    fun build(title: String, document: Boolean, language: String, traces: List<VisionEngine.Trace>, fromMemory: Int): String {
+    fun build(
+        title: String, document: Boolean, language: String, traces: List<VisionEngine.Trace>, fromMemory: Int,
+        model: String = "builtin/stable"
+    ): String {
         val sb = StringBuilder()
         sb.append("تقرير Google Vision — ").append(title).append('\n')
         sb.append("نوع القراءة: ").append(if (document) "مستند (DOCUMENT_TEXT_DETECTION)" else "نص (TEXT_DETECTION)")
             .append(" • لغة القراءة: ").append(language).append('\n')
+        sb.append("النموذج: ").append(model).append('\n')
         sb.append("صور قرأها Vision في هذه المرة: ").append(traces.size)
         if (fromMemory > 0) sb.append(" • من ذاكرة الاستئناف (لم تُرسل): ").append(fromMemory)
         val second = traces.count { it.second != null }

@@ -35,12 +35,53 @@ class LensEngine(
     private val language: String = "ar",
     private val region: String = "US",
     private val timeZone: String = "America/New_York",
-    private val apiKey: String = LensProtocol.API_KEY
+    private val apiKey: String = LensProtocol.API_KEY,
+    /** Extra looks at a suspicious picture (ClassicViews); null = one look only. */
+    private val views: ImageResampler? = null,
+    /** Receives one line per picture that got extra looks (what each look read and the choice). */
+    private val looks: ((String) -> Unit)? = null
 ) : OcrEngine {
     override val kind = EngineKind.LENS
-    override val cacheId = "lens:$language"
+    override val cacheId = "lens:$language:$region:c$CLASSIC_OCR_VERSION" + (if (views != null) ":mv" else "")
 
+    /**
+     * One look at the whole picture; when its reading is suspicious (no Arabic, a short subtitle, or
+     * background fragments next to it) a few more looks at the same pixels — enlarged, around the
+     * subtitle, its band — and the reading they agree on (ClassicViews.vote).
+     */
     override suspend fun recognize(image: PreparedImage): String {
+        val first = read(image)
+        val text1 = first.readingText(image.width, image.height)
+        val vr = views ?: return text1
+        // the looks and the vote are made for Arabic subtitles
+        if (language != "ar" || !ClassicViews.suspicious(text1, first.strays)) return text1
+        val plan = ClassicViews.plan(image.width, image.height, first.arabicBoxes(image.width, image.height))
+        val readings = arrayListOf(text1)
+        val names = arrayListOf("الصورة")
+        for (v in plan) {
+            val img = runCatching { vr.view(image, v.x0, v.y0, v.x1, v.y1, v.scale) }.getOrNull() ?: continue
+            val named = PreparedImage(img.bytes, img.mime, img.width, img.height, image.name + " [" + v.name + "]")
+            val r = try {
+                read(named)
+            } catch (e: OcrError.Fatal) {
+                throw e
+            } catch (e: OcrError) {
+                continue // this look is lost; the others stand
+            } catch (e: java.io.IOException) {
+                continue
+            }
+            readings.add(r.readingText(img.width, img.height)); names.add(v.name)
+        }
+        val i = ClassicViews.vote(readings)
+        val line = names.indices.joinToString(" | ") { "${names[it]} «${readings[it].replace("\n", " ⏎ ").take(80)}»" } +
+            " → " + (if (i < 0) "لا ترجمة" else names[i])
+        DiagLog.i("lens", "${image.name} looks: $line")
+        looks?.invoke(line)
+        return if (i < 0) "" else readings[i]
+    }
+
+    /** One Lens request: the parsed answer, or an OcrError for the HTTP problem. */
+    private suspend fun read(image: PreparedImage): LensProtocol.Result {
         val body = LensProtocol.buildRequest(image.bytes, image.width, image.height, language, region, timeZone)
         val resp = http.execute(
             HttpRequest(
@@ -64,11 +105,11 @@ class LensEngine(
                 } catch (e: Exception) {
                     throw OcrError.Retryable("رد Google Lens غير مفهوم: ${e.message}")
                 }
-                val text = result.readingText
                 // diagnostic file: exactly what Lens returned for every image
                 if (result.paragraphs.isNotEmpty()) DiagLog.i("lens", "${image.name} lines: " + result.describe())
+                val text = result.readingText(image.width, image.height)
                 if (text != result.fullText) DiagLog.i("lens", "${image.name} order: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
-                return text
+                return result
             }
             resp.code == 429 -> throw OcrError.Retryable(
                 "Google Lens: طلبات كثيرة (429)", parseRetryAfter(resp.header("Retry-After")) ?: 8_000, true
@@ -106,6 +147,12 @@ class VisionEngine(
      */
     private val document: Boolean = true,
     /**
+     * Vision's OCR model: "" = Google's default ("builtin/stable"), or "builtin/weekly" — the
+     * "bleeding edge release updated weekly" that Google documents for TEXT_DETECTION and
+     * DOCUMENT_TEXT_DETECTION. If Google refuses it, the job carries on with the default model.
+     */
+    private val model: String = "",
+    /**
      * For the focused second look (see [recognize]); null = one look only. Crops the same
      * picture — no other change to it.
      */
@@ -114,7 +161,26 @@ class VisionEngine(
     private val trace: ((Trace) -> Unit)? = null
 ) : OcrEngine {
     override val kind = EngineKind.VISION
-    override val cacheId = "vision:$language:${if (document) "doc" else "text"}:v5"
+    override val cacheId = "vision:$language:${if (document) "doc" else "text"}:${model.ifEmpty { "stable" }}:c$CLASSIC_OCR_VERSION"
+
+    /** Set once Google refused [model]: every later request uses the default model. */
+    private val modelRefused = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** The model actually sent ("" = Google's default). */
+    val modelInUse: String get() = if (modelRefused.get()) "" else model
+
+    /** For the report: which model read the pictures. */
+    fun modelNote(): String = when {
+        model.isEmpty() -> "builtin/stable (الافتراضي)"
+        modelRefused.get() -> "$model — رفضته Google، فقرأ النموذج الافتراضي builtin/stable"
+        else -> model
+    }
+
+    private fun refuseModel(m: String, why: String) {
+        if (modelRefused.compareAndSet(false, true)) {
+            DiagLog.w("vision", "Google refused model $m: $why — default model from now on")
+        }
+    }
 
     /** One image in the Vision report. */
     class Trace(
@@ -134,11 +200,16 @@ class VisionEngine(
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
     }
 
-    fun buildBody(image: PreparedImage): String = buildJsonObject {
+    fun buildBody(image: PreparedImage, useModel: String = modelInUse): String = buildJsonObject {
         putJsonArray("requests") {
             addJsonObject {
                 putJsonObject("image") { put("content", Base64.getEncoder().encodeToString(image.bytes)) }
-                putJsonArray("features") { addJsonObject { put("type", if (document) "DOCUMENT_TEXT_DETECTION" else "TEXT_DETECTION") } }
+                putJsonArray("features") {
+                    addJsonObject {
+                        put("type", if (document) "DOCUMENT_TEXT_DETECTION" else "TEXT_DETECTION")
+                        if (useModel.isNotEmpty()) put("model", useModel)
+                    }
+                }
                 putJsonObject("imageContext") {
                     // the subtitle language alone, as in the user's own Vision tool; Google: for
                     // the best Arabic quality the hint must be given explicitly
@@ -152,17 +223,30 @@ class VisionEngine(
 
     /** One Vision request: the words with their boxes, and Vision's own text. */
     private suspend fun annotate(image: PreparedImage): Answer {
+        val m = modelInUse
         val resp = http.execute(
             HttpRequest(
                 url = ENDPOINT,
                 headers = mapOf("x-goog-api-key" to apiKey),
-                body = buildBody(image).toByteArray(Charsets.UTF_8),
+                body = buildBody(image, m).toByteArray(Charsets.UTF_8),
                 contentType = "application/json; charset=utf-8",
                 timeoutMs = 60_000
             )
         )
-        if (resp.code == 200) return parseAnswer(resp.text)
+        if (resp.code == 200) {
+            // a model Google does not accept comes back as this image's INVALID_ARGUMENT
+            val err = imageError(resp.text)
+            if (m.isNotEmpty() && err != null && err.first == 3 && err.second.contains("model", ignoreCase = true)) {
+                refuseModel(m, err.second)
+                return annotate(image)
+            }
+            return parseAnswer(resp.text)
+        }
         val e = GoogleApiError.parse(resp.text)
+        if (m.isNotEmpty() && resp.code == 400 && e.message.contains("model", ignoreCase = true)) {
+            refuseModel(m, e.message)
+            return annotate(image)
+        }
         throw classify(resp.code, e.status, e.message.ifBlank { shortBody(resp.text) }, e.reason, parseRetryAfter(resp.header("Retry-After")))
     }
 
@@ -208,6 +292,14 @@ class VisionEngine(
 
     companion object {
         const val ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
+
+        /** google.rpc code and message of the first response's own error, if it has one. */
+        fun imageError(body: String): Pair<Int, String>? {
+            val r = parseJsonOrNull(body).obj()?.get("responses").arr()?.firstOrNull().obj() ?: return null
+            val err = r["error"].obj() ?: return null
+            val code = (err["code"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+            return code to (err["message"].str() ?: "")
+        }
 
         /** Full text of the first response; a per-image error is raised like an HTTP one. */
         fun parseText(body: String, name: String = ""): String = textOf(parseAnswer(body), name)

@@ -30,6 +30,10 @@ data class JobRequest(
     val visionKey: String,
     /** Google Vision: DOCUMENT_TEXT_DETECTION (true) or TEXT_DETECTION. */
     val visionDocument: Boolean = true,
+    /** Google Lens: extra looks at suspicious pictures. */
+    val lensMultiView: Boolean = true,
+    /** Google Vision OCR model ("" = builtin/stable). */
+    val visionModel: String = "",
     val geminiModel: String,
     val openRouterModel: String,
     val thinking: ThinkingLevel,
