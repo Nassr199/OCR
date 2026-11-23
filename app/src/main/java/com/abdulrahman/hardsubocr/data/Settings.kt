@@ -70,6 +70,11 @@ class Settings(context: Context) {
         get() = SecureStore.decrypt(sp.getString("vision_key", null))
         set(v) = put("vision_key", SecureStore.encrypt(v.trim()))
 
+    /** Google Vision reading: DOCUMENT_TEXT_DETECTION (true, default) or TEXT_DETECTION. */
+    var visionDocument: Boolean
+        get() = sp.getBoolean("vision_document", true)
+        set(v) = putBool("vision_document", v)
+
     var geminiModel: String
         get() = str("gemini_model", GeminiEngine.DEFAULT_MODEL).ifBlank { GeminiEngine.DEFAULT_MODEL }
         set(v) = put("gemini_model", v.trim())

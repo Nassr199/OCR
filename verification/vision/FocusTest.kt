@@ -72,23 +72,33 @@ fun main() {
     // ---- the engine: one or two requests, the better reading, errors of the second look
     val cropped = ArrayList<IntArray>()
     val cropper = ImageCropper { im, x0, y0, x1, y1 -> cropped.add(intArrayOf(x0, y0, x1, y1)); PreparedImage("CROP".toByteArray(), "image/png", x1 - x0, y1 - y0, im.name) }
-    val img = PreparedImage("FULL".toByteArray(), "image/png", 1230, 201, "0_00_52_300.jpeg")
+    val img = PreparedImage("FULL".toByteArray(), "image/png", 1230, 201, "0_00_52_300__0_00_54_016.jpeg")
     val t1 = TwoAnswers(json(firstHabibi), json(secondHabibi))
-    val r1 = runBlocking { VisionEngine(t1, "k", "ar", cropper).recognize(img) }
+    val r1 = runBlocking { VisionEngine(t1, "k", "ar", cropper = cropper).recognize(img) }
     check("engine: two requests, second one with the cropped picture", t1.bodies.size == 2 && t1.bodies[1].contains(java.util.Base64.getEncoder().encodeToString("CROP".toByteArray())), "${t1.bodies.size}")
     check("engine: «حبيبي، هل أنت بخير؟» returned", Cleaner.clean(r1, CleanMode.PRO) == "حبيبي، هل أنت بخير؟", r1.replace("\n", " ⏎ "))
     val t2 = TwoAnswers(json(alone), "{}")
-    val r2 = runBlocking { VisionEngine(t2, "k", "ar", cropper).recognize(img) }
+    val r2 = runBlocking { VisionEngine(t2, "k", "ar", cropper = cropper).recognize(img) }
     check("engine: subtitle alone → one request, same text as before", t2.bodies.size == 1 && r2 == "حبيبي، هل أنت بخير؟", r2)
     val t3 = TwoAnswers(json(firstHabibi), "", failSecond = 429)
-    val r3 = runBlocking { VisionEngine(t3, "k", "ar", cropper).recognize(img) }
+    val r3 = runBlocking { VisionEngine(t3, "k", "ar", cropper = cropper).recognize(img) }
     check("engine: second look refused (429) → first reading, no error", Cleaner.clean(r3, CleanMode.PRO) == "بيبي، هل أنت بخير؟", r3.replace("\n", " ⏎ "))
     val t4 = TwoAnswers(json(firstHabibi), "", failSecond = 403)
-    val fatal = try { runBlocking { VisionEngine(t4, "k", "ar", cropper).recognize(img) }; false } catch (e: OcrError.Fatal) { true }
+    val fatal = try { runBlocking { VisionEngine(t4, "k", "ar", cropper = cropper).recognize(img) }; false } catch (e: OcrError.Fatal) { true }
     check("engine: key refused on the second look → stops like any refused key", fatal)
     val t5 = TwoAnswers(json(firstHabibi), json(secondHabibi))
     runBlocking { VisionEngine(t5, "k", "ar").recognize(img) }
     check("engine without a cropper (key test) → one request", t5.bodies.size == 1)
-    check("cache id new (old results came from one look)", VisionEngine(t5, "k", "ar").cacheId == "vision:ar:v4")
+    check("cache id new", VisionEngine(t5, "k", "ar").cacheId == "vision:ar:doc:v5")
+    // the Vision report: every image read, Vision's own text, the second look
+    val traces = ArrayList<VisionEngine.Trace>()
+    val t6 = TwoAnswers(json(firstHabibi), json(secondHabibi))
+    runBlocking { VisionEngine(t6, "k", "ar", cropper = cropper, trace = { traces.add(it) }).recognize(img) }
+    val t7 = TwoAnswers(json(alone), "{}")
+    runBlocking { VisionEngine(t7, "k", "ar", cropper = cropper, trace = { traces.add(it) }).recognize(PreparedImage("FULL".toByteArray(), "image/png", 1230, 201, "0_00_55_000__0_00_56_000.jpeg")) }
+    check("trace for every image read", traces.size == 2 && traces[0].second != null && traces[0].secondChosen && traces[1].second == null, traces.map { it.name }.toString())
+    val rep = VisionReport.build("ep1", true, "ar", traces, 3)
+    check("report: Vision's own text, the text, the second look, times", rep.contains("00:00:52,300 → 00:00:54,016") && rep.contains("الترجمة وحدها: «حبيبي، هل أنت بخير؟» ← اختيرت") && rep.contains("من ذاكرة الاستئناف (لم تُرسل): 3") && rep.contains("Vision: «"), rep.lines().take(8).joinToString(" / "))
+    java.io.File("/tmp/real/vision_report_sample.txt").writeText(rep)
     println(if (fails == 0) "ALL PASSED" else "$fails FAILED")
 }

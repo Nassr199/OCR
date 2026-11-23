@@ -67,6 +67,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var geminiKey by mutableStateOf(s.geminiKey)
     var openRouterKey by mutableStateOf(s.openRouterKey)
     var visionKey by mutableStateOf(s.visionKey)
+    var visionDocument by mutableStateOf(s.visionDocument)
+        private set
+
+    fun chooseVisionDocument(v: Boolean) {
+        visionDocument = v; s.visionDocument = v
+    }
     var geminiModel by mutableStateOf(s.geminiModel)
     var openRouterModel by mutableStateOf(s.openRouterModel)
     var thinking by mutableStateOf(s.thinking)
@@ -622,6 +628,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             geminiKey = geminiKey.trim(),
             openRouterKey = openRouterKey.trim(),
             visionKey = visionKey.trim(),
+            visionDocument = visionDocument,
             geminiModel = geminiModel.trim(),
             openRouterModel = openRouterModel.trim(),
             thinking = thinking,

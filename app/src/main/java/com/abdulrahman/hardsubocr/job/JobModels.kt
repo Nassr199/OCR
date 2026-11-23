@@ -28,6 +28,8 @@ data class JobRequest(
     val geminiKey: String,
     val openRouterKey: String,
     val visionKey: String,
+    /** Google Vision: DOCUMENT_TEXT_DETECTION (true) or TEXT_DETECTION. */
+    val visionDocument: Boolean = true,
     val geminiModel: String,
     val openRouterModel: String,
     val thinking: ThinkingLevel,

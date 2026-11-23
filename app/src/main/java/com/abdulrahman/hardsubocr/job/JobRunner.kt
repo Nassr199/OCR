@@ -12,6 +12,7 @@ import com.abdulrahman.hardsubocr.core.OcrItem
 import com.abdulrahman.hardsubocr.core.OcrPipeline
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
 import com.abdulrahman.hardsubocr.core.VisionEngine
+import com.abdulrahman.hardsubocr.core.VisionReport
 import com.abdulrahman.hardsubocr.core.LensProtocol
 import com.abdulrahman.hardsubocr.core.isClassicOcr
 import com.abdulrahman.hardsubocr.core.PipelineListener
@@ -127,7 +128,12 @@ class JobRunner(
         EngineKind.OPENROUTER -> OpenRouterEngine(
             Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO, req.lang
         )
-        EngineKind.VISION -> VisionEngine(Net.transport, req.visionKey, req.lang.code, AndroidImageCropper)
+        EngineKind.VISION -> VisionEngine(
+            Net.transport, req.visionKey, req.lang.code,
+            document = req.visionDocument,
+            cropper = AndroidImageCropper,
+            trace = { visionTraces.add(it) }
+        )
     }
 
     private fun newPipeline(
@@ -330,10 +336,27 @@ class JobRunner(
         if (folder == null) return null to null
         val name = "$baseName.srt"
         val uri = Saf.writeFile(context, folder, name, Saf.SRT_MIME, Srt.bytes(entries, req.bom, req.crlf), req.overwrite)
+        writeVisionReport(folder, baseName)
         return uri to folder.name
     }
 
+    /** Google Vision: what Vision read for every image of this unit, next to the SRT. */
+    private val visionTraces = java.util.concurrent.ConcurrentLinkedQueue<VisionEngine.Trace>()
+
+    private fun writeVisionReport(folder: FolderRef, baseName: String) {
+        if (req.engine != EngineKind.VISION || visionTraces.isEmpty()) return
+        val text = VisionReport.build(
+            baseName, req.visionDocument, req.lang.code, visionTraces.toList(),
+            pipeline?.stats?.cached?.get() ?: 0
+        )
+        val ok = runCatching {
+            Saf.writeFile(context, folder, "${baseName}_vision.txt", "text/plain", text.toByteArray(Charsets.UTF_8), true)
+        }.isSuccess
+        if (ok) addLog("📄 تقرير Vision بجانب الترجمة: ${baseName}_vision.txt (${visionTraces.size} صورة)")
+    }
+
     private fun beginUnit(title: String, total: Int, p: OcrPipeline) {
+        visionTraces.clear()
         unitTitle = title
         unitTotal = total
         unitStartedAt = System.currentTimeMillis()

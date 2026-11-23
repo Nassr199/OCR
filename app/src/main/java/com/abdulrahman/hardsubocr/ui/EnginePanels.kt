@@ -158,9 +158,22 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
         linkUrl = "https://console.cloud.google.com/apis/library/vision.googleapis.com",
         testable = true
     )
+    Spacer(Modifier.height(12.dp))
+    Text("نوع القراءة", style = MaterialTheme.typography.labelLarge)
+    Spacer(Modifier.height(6.dp))
+    Segmented(
+        listOf(true to "مستند — الأدق", false to "نص"),
+        vm.visionDocument,
+        enabled = enabled
+    ) { vm.chooseVisionDocument(it) }
+    Hint(
+        if (vm.visionDocument) "DOCUMENT_TEXT_DETECTION: يفحص الصورة كلها بتفصيل، ويتعرف على كل اللغات المدعومة، ويعطي درجة ثقة لكل كلمة. نفس السعر."
+        else "TEXT_DETECTION: مصمم للنص المتفرق داخل صورة كبيرة (لافتات وصور)، وقد يفوّت نصًا.",
+        Modifier.padding(top = 6.dp, start = 4.dp)
+    )
     Spacer(Modifier.height(10.dp))
     CheckLine("يُعامل مثل Google Lens: نفس تحضير الصور والتنظيف والدمج")
-    CheckLine("قراءة TEXT_DETECTION بلغة الترجمة المختارة")
+    CheckLine("بجانب كل ملف SRT تقرير بما قرأه Vision من كل صورة")
     Hint(
         "التسعير من Google: أول 1000 صورة كل شهر بلا تكلفة، ثم 1.50$ لكل 1000 صورة.",
         Modifier.padding(top = 4.dp, start = 4.dp)

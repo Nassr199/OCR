@@ -98,13 +98,37 @@ class VisionEngine(
     private val apiKey: String,
     private val language: String = "ar",
     /**
+     * DOCUMENT_TEXT_DETECTION (default) or TEXT_DETECTION — the two choices of the user's own
+     * Vision tool. Google: TEXT_DETECTION is "optimized for areas of sparse text within a larger
+     * image" and auto-detects only a subset of languages; DOCUMENT_TEXT_DETECTION auto-detects
+     * the full set, returns confidence without asking, and in field tests found text in far more
+     * photos. Same price.
+     */
+    private val document: Boolean = true,
+    /**
      * For the focused second look (see [recognize]); null = one look only. Crops the same
      * picture — no other change to it.
      */
-    private val cropper: ImageCropper? = null
+    private val cropper: ImageCropper? = null,
+    /** Receives what Vision read for every image (the Vision report next to the SRT). */
+    private val trace: ((Trace) -> Unit)? = null
 ) : OcrEngine {
     override val kind = EngineKind.VISION
-    override val cacheId = "vision:$language:v4"
+    override val cacheId = "vision:$language:${if (document) "doc" else "text"}:v5"
+
+    /** One image in the Vision report. */
+    class Trace(
+        val name: String,
+        /** Vision's own text, exactly as returned. */
+        val vision: String,
+        /** After ordering (before cleaning). */
+        val text: String,
+        /** Mean confidence of the subtitle's words, 0 when Vision gave none. */
+        val confidence: Double,
+        /** The focused second look, when there was one. */
+        val second: String? = null,
+        val secondChosen: Boolean = false
+    )
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
@@ -114,17 +138,13 @@ class VisionEngine(
         putJsonArray("requests") {
             addJsonObject {
                 putJsonObject("image") { put("content", Base64.getEncoder().encodeToString(image.bytes)) }
-                putJsonArray("features") { addJsonObject { put("type", "TEXT_DETECTION") } }
+                putJsonArray("features") { addJsonObject { put("type", if (document) "DOCUMENT_TEXT_DETECTION" else "TEXT_DETECTION") } }
                 putJsonObject("imageContext") {
-                    // like Subtitle Edit: the subtitle language plus English, so Latin crew names
-                    // beside the subtitle are read as Latin (and removed by cleaning) instead of
-                    // being forced into Arabic letters
-                    putJsonArray("languageHints") {
-                        add(JsonPrimitive(language))
-                        if (language != "en") add(JsonPrimitive("en"))
-                    }
-                    // TEXT_DETECTION gives word confidence only when asked; the layout uses it
-                    putJsonObject("textDetectionParams") { put("enableTextDetectionConfidenceScore", true) }
+                    // the subtitle language alone, as in the user's own Vision tool; Google: for
+                    // the best Arabic quality the hint must be given explicitly
+                    putJsonArray("languageHints") { add(JsonPrimitive(language)) }
+                    // TEXT_DETECTION gives word confidence only when asked (DOCUMENT always does)
+                    if (!document) putJsonObject("textDetectionParams") { put("enableTextDetectionConfidenceScore", true) }
                 }
             }
         }
@@ -158,9 +178,11 @@ class VisionEngine(
     override suspend fun recognize(image: PreparedImage): String {
         val first = annotate(image)
         val text1 = textOf(first, image.name)
-        val crop = cropper ?: return text1
-        val area = VisionLayout.focusArea(first.words, image.width, image.height) ?: return text1
-        val part = runCatching { crop.crop(image, area[0], area[1], area[2], area[3]) }.getOrNull() ?: return text1
+        val conf1 = VisionLayout.confidence(first.words)
+        val firstOnly = { trace?.invoke(Trace(image.name, first.full, text1, conf1)); text1 }
+        val crop = cropper ?: return firstOnly()
+        val area = VisionLayout.focusArea(first.words, image.width, image.height) ?: return firstOnly()
+        val part = runCatching { crop.crop(image, area[0], area[1], area[2], area[3]) }.getOrNull() ?: return firstOnly()
         val name2 = image.name + " [focus]"
         val second = try {
             annotate(PreparedImage(part.bytes, part.mime, part.width, part.height, name2))
@@ -170,13 +192,14 @@ class VisionEngine(
             null // the first reading stands
         } catch (e: java.io.IOException) {
             null
-        } ?: return text1
+        } ?: return firstOnly()
         val text2 = textOf(second, name2)
         val better = text2.isNotBlank() && VisionLayout.secondIsBetter(first.words, second.words)
         DiagLog.i(
             "vision",
             "${image.name} focus ${area.joinToString(",")}: «${oneLine(text1)}» | «${oneLine(text2)}» → ${if (better) "focus" else "first"}"
         )
+        trace?.invoke(Trace(image.name, first.full, text1, conf1, text2, better))
         return if (better) text2 else text1
     }
 

@@ -302,6 +302,13 @@ object VisionLayout {
     private fun hasArabic(s: String) = s.any { isArabicChar(it) }
     private fun hasLatin(s: String) = s.any { it.isLetter() && !isArabicChar(it) }
 
+    /** 1 = Arabic letters, 2 = other letters, 0 = neither (digits, marks). */
+    private fun script(w: Word): Int = when {
+        hasArabic(w.text) -> 1
+        hasLatin(w.text) -> 2
+        else -> 0
+    }
+
     private fun arabicLine(ws: List<Word>): Boolean {
         var ar = 0; var lat = 0
         for (w in ws) for (c in w.text) if (isArabicChar(c)) ar++ else if (c.isLetter()) lat++
@@ -361,7 +368,11 @@ object VisionLayout {
             var right = Int.MIN_VALUE
             for (w in row) {
                 val last = pieces.lastOrNull()
-                if (last != null && w.x0 - right <= hMed * 2.5) {
+                // a different script after more than a word space (crew names beside the
+                // subtitle) starts a separate line too; the Arabic line filter then drops it
+                val gap = w.x0 - right
+                val scriptChange = last != null && script(w) != 0 && script(last.last()) != 0 && script(w) != script(last.last())
+                if (last != null && gap <= hMed * 2.5 && !(scriptChange && gap > hMed * 0.6)) {
                     last.add(w); right = maxOf(right, w.x1)
                 } else {
                     pieces.add(mutableListOf(w)); right = w.x1
@@ -472,6 +483,12 @@ object VisionLayout {
         // nearly the whole picture: looking again would see the same
         if ((x1 - x0).toLong() * (y1 - y0) >= imgW.toLong() * imgH * 0.85) return null
         return intArrayOf(x0, y0, x1, y1)
+    }
+
+    /** Mean confidence (by letters) of the subtitle's words; 0 when Vision gave none. */
+    fun confidence(words: List<Word>): Double {
+        val c = subtitleWords(dedupe(words)).first.filter { it.conf > 0f }
+        return if (c.isEmpty()) 0.0 else c.sumOf { it.conf.toDouble() * it.letters } / c.sumOf { it.letters }
     }
 
     /**

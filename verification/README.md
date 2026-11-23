@@ -9,8 +9,8 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `gen_video*.py` + `SegTest.kt` | Synthetic 720p/1080p hard-sub video (moving bright background, white flash, yellow text, fades, back-to-back changes); all 7 subtitles found, boundaries within 1 frame. |
 | `PipeTest.kt` | Parallel workers, 429 back-off, resume cache, fatal stop with partial results, cancellation, failure breaker. |
 | `ApiTest.kt` | Gemini / OpenRouter / Lens request bodies, response parsing and error classification. |
-| `vision/VisionTest.kt` | Google Cloud Vision request (key in header, TEXT_DETECTION, language hints ar + en, word confidence), parsing and error classification. |
-| `vision/FocusTest.kt` | Google Vision two-stage reading: when the subtitle shares its row with other text (crew names) or is read unsure, the subtitle's area is cropped from the same picture and read again; the better reading is kept. Areas checked on the measured geometry of real frames. |
+| `vision/VisionTest.kt` | Google Cloud Vision request (key in header, DOCUMENT_TEXT_DETECTION by default or TEXT_DETECTION, language hint of the subtitles), parsing and error classification. |
+| `vision/FocusTest.kt` | Google Vision report next to the SRT (`report_sample.txt`) and two-stage reading: when the subtitle shares its row with other text (crew names) or is read unsure, the subtitle's area is cropped from the same picture and read again; the better reading is kept. Areas checked on the measured geometry of real frames. |
 | `lens/LensOrderTest.kt` | Google Lens lines in reading order (rows top to bottom, right to left in Arabic) and the same place read twice. |
 | `vision/LayoutTest.kt` + `LayoutCommon.kt` + `LayoutFuzz.kt` | Vision text rebuilt from word boxes: same place read twice, blocks laid out left to right, punctuation, two lines, credits, Latin runs; 14,000 random lines (clean reads unchanged, copies removed). |
 
