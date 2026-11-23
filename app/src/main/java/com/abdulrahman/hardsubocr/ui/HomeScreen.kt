@@ -423,7 +423,7 @@ private fun SourceCard(
         ) { vm.chooseLang(it) }
         Hint(
             if (vm.subLang == SubLang.ARABIC) "مضبوط للعربية: الحروف المتصلة، النقاط والتشكيل، ومنع انقسام السطر الواحد."
-            else "English mode: Latin-tuned detection, English OCR prompt and cleaning.",
+            else "مضبوط للإنجليزية: كشف الحروف اللاتينية وقراءتها وتنظيفها.",
             Modifier.padding(top = 4.dp, bottom = 10.dp, start = 4.dp)
         )
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -518,9 +518,9 @@ private fun SourceCard(
                 ) { vm.chooseVideoMode(it) }
                 Hint(
                     if (vm.videoMode == VideoMode.FRAMES_ONLY)
-                        "تُحفظ صورة لكل ترجمة في مجلد name_RGBImages بأسماء تحمل التوقيت (متوافقة مع VideoSubFinder) ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد — لا يحتاج مفتاح API الآن."
+                        "تُحفظ صورة لكل ترجمة في مجلد «اسم الفيديو_RGBImages» بأسماء تحمل التوقيت (كما يحفظها VideoSubFinder) ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد. لا يحتاج مفتاح API الآن."
                     else
-                        "تُحفظ صور الترجمات أولًا في name_RGBImages، وتُقرأ بالتوازي أثناء التحليل، ثم يُكتب ملف SRT.",
+                        "تُحفظ صور الترجمات في مجلد «اسم الفيديو_RGBImages»، وتُقرأ أثناء التحليل، ثم يُكتب ملف SRT.",
                     Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
                 )
             }

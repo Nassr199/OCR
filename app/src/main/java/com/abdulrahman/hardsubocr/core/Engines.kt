@@ -54,7 +54,7 @@ class LensEngine(
         val text1 = first.readingText(image.width, image.height)
         val vr = views ?: return text1
         // the looks and the vote are made for Arabic subtitles
-        if (language != "ar" || !ClassicViews.suspicious(text1, first.strays)) return text1
+        if (language != "ar" || !ClassicViews.suspicious(text1, first.strays(image.width, image.height))) return text1
         val plan = ClassicViews.plan(image.width, image.height, first.arabicBoxes(image.width, image.height))
         val readings = arrayListOf(text1)
         val names = arrayListOf("الصورة")
@@ -171,9 +171,9 @@ class VisionEngine(
 
     /** For the report: which model read the pictures. */
     fun modelNote(): String = when {
-        model.isEmpty() -> "builtin/stable (الافتراضي)"
-        modelRefused.get() -> "$model — رفضته Google، فقرأ النموذج الافتراضي builtin/stable"
-        else -> model
+        model.isEmpty() -> "المعتاد (builtin/stable)"
+        modelRefused.get() -> "الأحدث ($model) غير متاح لحسابك، فقرأ المعتاد (builtin/stable)"
+        else -> "الأحدث ($model)"
     }
 
     private fun refuseModel(m: String, why: String) {

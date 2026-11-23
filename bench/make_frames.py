@@ -119,6 +119,47 @@ for i, (word, role, name) in enumerate(SHORT):
         subtitle(img, [word], cx=618)
         save(f'07_short_{i}_a{alpha}', img, word, 'short word in a small box over a credit name, alpha %d' % alpha)
 
+# 8: outlined white text without a box (dialogue dashes, two lines, punctuation) — the shape must survive
+OUT_FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 44)
+
+
+def outlined(img, lines, top=None):
+    d = ImageDraw.Draw(img)
+    lh = 64
+    y0 = top if top is not None else (H2 - lh * len(lines)) // 2 + 10
+    for i, l in enumerate(lines):
+        d.text((W // 2, y0 + lh * i + lh // 2), l, font=OUT_FONT, fill=(255, 255, 255), anchor='mm',
+               direction='rtl', language='ar', stroke_width=3, stroke_fill=(0, 0, 0))
+    LAST_BOX[:] = [0, 0, 0, 0]
+
+
+H2 = 230
+
+
+def bright(seed):
+    rnd = random.Random(seed)
+    img = Image.new('RGB', (W, H2), (200, 196, 180))
+    d = ImageDraw.Draw(img)
+    for _ in range(18):
+        x, y = rnd.randint(-100, W), rnd.randint(-80, H2)
+        r = rnd.randint(40, 220)
+        col = rnd.choice([(230, 228, 215), (180, 40, 45), (90, 120, 70), (240, 240, 235), (60, 70, 50), (200, 150, 130)])
+        d.ellipse([x, y, x + r * 2, y + int(r * 1.2)], fill=col)
+    return img.filter(ImageFilter.GaussianBlur(14))
+
+
+DIALOGUE = [
+    ('08_dialogue_dashes', ['- هوليا', '- ابتعدي يا جوليزار']),
+    ('09_two_lines_period', ['هوليا. ساعدوني', 'ماذا حدث؟']),
+    ('10_dash_one_line', ['- لا أعرف']),
+    ('11_ellipsis', ['انتظر... لا تذهب!']),
+    ('12_dialogue_question', ['- هل أنت بخير؟', '- نعم، أنا بخير']),
+]
+for i, (name, lines) in enumerate(DIALOGUE):
+    img = bright(200 + i)
+    outlined(img, lines)
+    save(name, img, '\n'.join(lines), 'outlined white text, the shape (lines, dashes, punctuation) must be kept')
+
 with open(os.path.join(OUT, 'truth.json'), 'w', encoding='utf-8') as f:
     json.dump(cases, f, ensure_ascii=False, indent=1)
 print(len(cases), 'images')

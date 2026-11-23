@@ -116,12 +116,12 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
                     EngineKind.LENS -> {
                         CheckLine("بلا مفتاح API ولا حساب")
                         CheckLine("اتصال مباشر بخدمة Google Lens")
-                        CheckLine("عدة صور بالتوازي (من الإعدادات)")
-                        CheckLine("الصورة الأصلية كما هي، وتنظيف OCR تقليدي ثابت — منطق 2.6 خاص بـ Gemini ولا يُطبَّق هنا")
+                        CheckLine("يقرأ عدة صور في الوقت نفسه")
+                        CheckLine("يقرأ الصورة كما هي ويحافظ على شكل الترجمة: الأسطر وشرطات الحوار وعلامات الترقيم")
                         Spacer(Modifier.height(6.dp))
                         SwitchRow(
-                            "نظرات إضافية للصورة المشكوك فيها",
-                            "إذا جاءت القراءة الأولى بلا عربي أو بكلمة قصيرة أو بحروف شاردة من الخلفية، تُقرأ الصورة نفسها مكبّرة، وحول الترجمة، وشريطها، ويُؤخذ ما تتفق عليه القراءات. الصورة لا تُعدَّل. مجاني مع Lens.",
+                            "إعادة القراءة عند الشك",
+                            "إذا لم تُقرأ الترجمة، أو قُرئت كلمة قصيرة، أو ظهرت حروف من الخلفية، تُقرأ الصورة نفسها مرة أخرى مكبّرة ومن حول الترجمة، ويُعتمد ما تتفق عليه القراءات. يلتقط الكلمات القصيرة التي تضيع بين أسماء الطاقم.",
                             vm.lensMultiView,
                             enabled
                         ) { vm.chooseLensMultiView(it) }
@@ -136,11 +136,10 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean, classic: Boolean) {
+private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean) {
     SwitchRow(
         "تحسين الصور قبل القراءة",
-        if (classic) "قصّ منطقة الترجمة + تكبير + تباين وحدّة. جرّبه إن كانت النتائج ضعيفة."
-        else "قصّ منطقة الترجمة + تكبير Lanczos + تباين وحدّة (مطابق لـ Pillow بكسلًا بكسل).",
+        "يقصّ شريط الترجمة ويكبّره ويزيد وضوحه قبل الإرسال، فتُقرأ الحروف الصغيرة والتشكيل بدقة أكبر.",
         vm.enhanceEffective(),
         enabled
     ) { vm.setEnhance(it) }
@@ -168,31 +167,31 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
     Text("نوع القراءة", style = MaterialTheme.typography.labelLarge)
     Spacer(Modifier.height(6.dp))
     Segmented(
-        listOf(true to "مستند — الأدق", false to "نص"),
+        listOf(true to "مفصّلة — الأدق", false to "سريعة"),
         vm.visionDocument,
         enabled = enabled
     ) { vm.chooseVisionDocument(it) }
     Hint(
-        if (vm.visionDocument) "DOCUMENT_TEXT_DETECTION: يفحص الصورة كلها بتفصيل، ويتعرف على كل اللغات المدعومة، ويعطي درجة ثقة لكل كلمة. نفس السعر."
-        else "TEXT_DETECTION: مصمم للنص المتفرق داخل صورة كبيرة (لافتات وصور)، وقد يفوّت نصًا.",
+        if (vm.visionDocument) "تفحص الصورة كلها بتفصيل وتعطي درجة ثقة لكل كلمة. السعر نفسه."
+        else "مصممة للنص القليل داخل الصور، وقد تفوّت بعض الأسطر.",
         Modifier.padding(top = 6.dp, start = 4.dp)
     )
     Spacer(Modifier.height(12.dp))
     Text("نموذج القراءة", style = MaterialTheme.typography.labelLarge)
     Spacer(Modifier.height(6.dp))
     Segmented(
-        listOf("" to "المستقر", "builtin/weekly" to "الأحدث (أسبوعي)"),
+        listOf("" to "المعتاد", "builtin/weekly" to "الأحدث"),
         vm.visionModel,
         enabled = enabled
     ) { vm.chooseVisionModel(it) }
     Hint(
-        if (vm.visionModel.isEmpty()) "builtin/stable: نموذج Google الافتراضي."
-        else "builtin/weekly: أحدث إصدار من نموذج القراءة تحدّثه Google كل أسبوع (موثّق لقراءة النصوص). إن رفضته Google يكمل التطبيق بالنموذج المستقر تلقائيًا ويذكر ذلك في التقرير.",
+        if (vm.visionModel.isEmpty()) "نموذج القراءة الذي تستخدمه Google افتراضيًا."
+        else "آخر تحديث تنشره Google لنموذج القراءة كل أسبوع. إن لم يتوفر لحسابك يكمل التطبيق بالمعتاد تلقائيًا ويذكر ذلك في التقرير.",
         Modifier.padding(top = 6.dp, start = 4.dp)
     )
     Spacer(Modifier.height(10.dp))
-    CheckLine("الصورة الأصلية كما هي، وتنظيف OCR تقليدي ثابت — منطق 2.6 خاص بـ Gemini ولا يُطبَّق هنا")
-    CheckLine("بجانب كل ملف SRT تقرير بما قرأه Vision من كل صورة")
+    CheckLine("يقرأ الصورة كما هي ويحافظ على شكل الترجمة: الأسطر وشرطات الحوار وعلامات الترقيم")
+    CheckLine("يحفظ بجانب ملف الترجمة تقريرًا بما قرأه من كل صورة")
     Hint(
         "التسعير من Google: أول 1000 صورة كل شهر بلا تكلفة، ثم 1.50$ لكل 1000 صورة.",
         Modifier.padding(top = 4.dp, start = 4.dp)
@@ -202,9 +201,9 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
 // ============================================================================ Gemini / OpenRouter
 
 private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.V26 -> "تحسين الصور + حماية التشكيل + تثبيت التشكيل بين الإطارات المتتالية."
-    AiProfile.V21 -> "تعليمات مفصّلة جدًا وتنظيف حرفي يحفظ الأسطر والتشكيل كما هي، ودمج الانقسام فقط."
-    AiProfile.PRO -> "تعليمات مختصرة: سطر واحد بدون تشكيل، ودمج التكرار الذكي. الأسرع."
+    AiProfile.V26 -> "يحسّن الصورة قبل الإرسال، ويحذف التشكيل الخاطئ ويُبقي الصحيح، ويوحّد تشكيل الجملة نفسها في الإطارات المتتالية."
+    AiProfile.V21 -> "تعليمات مفصّلة، ويُبقي الأسطر والتشكيل كما قرأها النموذج، ولا يدمج إلا المقطع المنقسم."
+    AiProfile.PRO -> "تعليمات مختصرة: سطر واحد بلا تشكيل، ويدمج المقاطع المتكررة. الأسرع."
 }
 
 private val thinkingOptions = listOf(
@@ -255,7 +254,7 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
     Spacer(Modifier.height(10.dp))
     SectionLabel("الأسلوب")
     Segmented(
-        listOf(AiProfile.V26 to "ذكي + تشكيل", AiProfile.V21 to "حرفي دقيق", AiProfile.PRO to "سريع"),
+        listOf(AiProfile.V26 to "مع التشكيل", AiProfile.V21 to "حرفي", AiProfile.PRO to "سريع"),
         vm.currentProfile(),
         enabled
     ) { vm.chooseProfile(it) }
@@ -272,12 +271,12 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
         Spacer(Modifier.height(6.dp))
         SwitchRow(
             "دقة عالية للصور",
-            "media_resolution = HIGH: قراءة أدق للحروف الصغيرة والتشكيل.",
+            "يرسل الصورة بدقة أعلى: قراءة أدق للحروف الصغيرة والتشكيل، وتكلفة أعلى.",
             vm.mediaHigh,
             enabled
         ) { vm.chooseMediaHigh(it) }
     }
-    EnhanceSwitch(vm, enabled, classic = false)
+    EnhanceSwitch(vm, enabled)
 }
 
 // ============================================================================ API key

@@ -61,10 +61,10 @@ fun main() = runBlocking {
         par(line("-", 0.47f, 0.55f, 0.01f, 0.05f)), par(line("لماذا ؟", 0.50f, 0.62f, 0.10f, 0.25f)), par(line("و", 0.56f, 0.6f, 0.01f, 0.1f)),
         par(line("Senaryo", 0.5f, 0.41f, 0.06f, 0.09f))
     ), "ar", null)
-    check("strays: «-» and «و» dropped", r.strays == 2, r.strays.toString())
+    check("strays: «-» and «و» dropped", r.strays(1230, 201) == 2, r.strays(1230, 201).toString())
     check("strays: reading without them", Cleaner.clean(r.readingText(1230, 201), CleanMode.PRO).replace(" ", "") == "لماذا؟", Cleaner.clean(r.readingText(1230, 201), CleanMode.PRO))
     val lone = LensProtocol.Result(listOf(par(line("و", 0.5f, 0.6f, 0.01f, 0.1f)), par(line("Kerem Çatay", 0.5f, 0.6f, 0.2f, 0.2f))), "ar", null)
-    check("strays: nothing removed without a real Arabic line", lone.strays == 0)
+    check("strays: nothing removed without a real Arabic line", lone.strays(1230, 201) == 0)
     val credits = LensProtocol.Result(listOf(
         par(line("Saç Tasarım", 0.187f, 0.410f, 0.085f, 0.085f)), par(line("Mustafa Gümüş", 0.187f, 0.654f, 0.245f, 0.259f)),
         par(line("حبيبي، هل أنت بخير؟", 0.500f, 0.665f, 0.335f, 0.259f)),
@@ -80,6 +80,47 @@ fun main() = runBlocking {
     check("order: interleaved chunks → rows right to left", inter.readingText(1230, 201) == "أين كنت\nكنت أبحث عنك", inter.readingText(1230, 201).replace("\n", " ⏎ "))
     val two = LensProtocol.Result(listOf(par(line("أين كنت؟", 0.5f, 0.35f, 0.2f, 0.25f), line("كنت أبحث عنك", 0.5f, 0.7f, 0.25f, 0.25f))), "ar", null)
     check("order: two lines unchanged", two.readingText(1230, 201) == "أين كنت؟\nكنت أبحث عنك")
+
+    // ---------------------------------------------------------------- the subtitle's shape (2.7.7)
+    fun ct(s: String, strip: Boolean = false) = ClassicText.clean(s, strip)
+    check("shape: dialogue dashes and lines kept", ct("- هوليا\n- ابتعدي يا جوليزار") == "- هوليا\n- ابتعدي يا جوليزار", ct("- هوليا\n- ابتعدي يا جوليزار"))
+    check("shape: two lines and punctuation kept, space before ؟ removed", ct("هوليا. ساعدوني\nماذا حدث ؟") == "هوليا. ساعدوني\nماذا حدث؟")
+    check("shape: dash glued to the word gets its space", ct("-هوليا") == "- هوليا")
+    check("shape: Latin credits lines dropped", ct("Saç Tasarım\nحبيبي، هل أنت بخير؟\nBeste Bayoğlu") == "حبيبي، هل أنت بخير؟")
+    check("shape: Latin glued to the line removed", ct("Mustafa Gümüş حبيبي") == "حبيبي")
+    check("shape: presentation forms → ordinary letters", ct("\uFEFB أعرف") == "لا أعرف", ct("\uFEFB أعرف"))
+    check("shape: tatweel removed", ct("جـميل") == "جميل")
+    check("shape: a subtitle saying «لا يوجد نص» stays (no AI reply filter)", ct("لا يوجد نص في الرسالة") == "لا يوجد نص في الرسالة")
+    check("shape: tashkeel kept as read", ct("سَأَعودُ") == "سَأَعودُ")
+    check("shape: tashkeel removed when asked", ct("سَأَعودُ", true) == "سأعود")
+    check("shape: ellipsis and exclamation", ct("انتظر... لا تذهب !") == "انتظر... لا تذهب!")
+    check("shape: quotes and numbers", ct("قال: «ارحل» الساعة 12:30") == "قال: «ارحل» الساعة 12:30", ct("قال: «ارحل» الساعة 12:30"))
+    check("shape: a lone mark is not a subtitle", ct("-") == "" && ct("- \n Ketay") == "")
+    check("cleaner: CLASSIC mode = ClassicText", Cleaner.clean("Kurgu\n- هوليا\n- ابتعدي", CleanMode.CLASSIC) == "- هوليا\n- ابتعدي")
+    check("cleaner: CLASSIC + remove tashkeel", Cleaner.clean("سَأَعودُ", CleanMode.CLASSIC, stripDiacritics = true) == "سأعود")
+    // Lens: a dash read as its own line beside the text is the dialogue dash; one over the text is a fragment
+    val dash = LensProtocol.Result(listOf(
+        par(line("هوليا", 0.50f, 0.36f, 0.10f, 0.25f)), par(line("-", 0.565f, 0.37f, 0.012f, 0.03f)),
+        par(line("ابتعدي يا جوليزار", 0.48f, 0.68f, 0.26f, 0.25f)), par(line("-", 0.625f, 0.69f, 0.012f, 0.03f))
+    ), "ar", null)
+    val dt = dash.readingText(1230, 230)
+    check("lens: dialogue dashes beside the lines kept, in front", ClassicText.clean(dt) == "- هوليا\n- ابتعدي يا جوليزار", dt.replace("\n", " ⏎ "))
+    val over = LensProtocol.Result(listOf(par(line("لماذا ؟", 0.50f, 0.62f, 0.10f, 0.25f)), par(line("-", 0.505f, 0.55f, 0.01f, 0.05f))), "ar", null)
+    check("lens: a dash over the text is a fragment", over.strays(1230, 201) == 1 && ClassicText.clean(over.readingText(1230, 201)) == "لماذا؟", over.readingText(1230, 201))
+    val bang = LensProtocol.Result(listOf(par(line("لا تذهب", 0.52f, 0.5f, 0.15f, 0.25f)), par(line("!", 0.437f, 0.5f, 0.01f, 0.2f))), "ar", null)
+    check("lens: «!» beside the line stays at its end", ClassicText.clean(bang.readingText(1230, 201)) == "لا تذهب!", bang.readingText(1230, 201))
+
+    // live bench 07_short_4_a170: «E» of «Ece» left of the box read as «-» on the subtitle's row
+    val leftDash = LensProtocol.Result(listOf(
+        par(line("-", 0.426f, 0.609f, 0.035f, 0.154f)), par(line("لماذا ؟", 0.502f, 0.609f, 0.094f, 0.154f)), par(line("و", 0.573f, 0.609f, 0.024f, 0.154f))
+    ), "ar", null)
+    check("lens: a dash on the left of an Arabic line is a crew-name piece", ClassicText.clean(leftDash.readingText(1230, 201)) == "لماذا؟" && leftDash.strays(1230, 201) == 2, leftDash.readingText(1230, 201))
+
+    val mixedRow = LensProtocol.Result(listOf(
+        par(line("Yardımcı Yönetmen Gökhan Yılmaz", 0.2f, 0.5f, 0.3f, 0.2f)), par(line("هوليا", 0.50f, 0.5f, 0.10f, 0.25f)),
+        par(line("-", 0.565f, 0.5f, 0.012f, 0.03f)), par(line("2. Ekip Görüntü Yönetmeni Tuğberk Süel", 0.82f, 0.5f, 0.3f, 0.2f))
+    ), "ar", null)
+    check("lens: on a row of long crew names the Arabic piece still reads right to left", ClassicText.clean(mixedRow.readingText(1230, 230)) == "- هوليا", mixedRow.readingText(1230, 230).replace("\n", " ⏎ "))
 
     // ---------------------------------------------------------------- plan
     val p = ClassicViews.plan(1230, 201, boxes)

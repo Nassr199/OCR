@@ -121,6 +121,9 @@ private fun lensRaw(body: ByteArray): String {
                 sb.append(" «").append(w.firstOf(2)?.asString() ?: "").append("»")
                 val sep = w.firstOf(3)?.asString()
                 if (!sep.isNullOrEmpty()) sb.append("+sep«").append(sep).append("»")
+                // word box centre x (field 4 → geometry → box → cx)
+                val cx = w.firstOf(4)?.asMessage()?.firstOf(1)?.asMessage()?.firstOf(1)?.takeIf { it.wire == 5 }?.asFloat()
+                if (cx != null) sb.append("@").append("%.3f".format(java.util.Locale.US, cx))
             }
             sb.append('\n')
         }
@@ -157,6 +160,14 @@ fun main(args: Array<String>) = runBlocking {
     sb.append("# OCR bench — commit ").append(System.getenv("GITHUB_SHA") ?: "local").append(" — ").append(java.time.Instant.now()).append("\n\n")
     sb.append("Vision: ").append(if (visionKey.isBlank()) "no VISION_API_KEY secret — Lens only" else "key present (not shown)").append("\n\n")
     val scores = LinkedHashMap<String, Score>()
+    val shapes = LinkedHashMap<String, IntArray>()
+    /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
+    fun shape(name: String, got: String, truth: String): String {
+        val s = shapes.getOrPut(name) { IntArray(2) }
+        val ok = com.abdulrahman.hardsubocr.core.ClassicText.clean(got) == com.abdulrahman.hardsubocr.core.ClassicText.clean(truth)
+        s[1]++; if (ok) s[0]++
+        return if (ok) "shape ✓" else "shape ✗ «" + one(com.abdulrahman.hardsubocr.core.ClassicText.clean(got)) + "»"
+    }
     fun score(name: String, got: String, truth: String): String {
         val s = scores.getOrPut(name) { Score() }
         val g = norm(got); val t = norm(truth)
@@ -177,8 +188,8 @@ fun main(args: Array<String>) = runBlocking {
         val res = lens(http, png)
         if (res == null) sb.append("- Lens one look: failed\n") else {
             val reading = res.readingText(png.w, png.h)
-            sb.append("- Lens one look ").append(score("lens one look", reading, truth))
-                .append(" «").append(one(norm(reading))).append("» strays ").append(res.strays).append('\n')
+            sb.append("- Lens one look ").append(score("lens one look", reading, truth)).append(' ').append(shape("lens one look", reading, truth))
+                .append(" «").append(one(norm(reading))).append("» strays ").append(res.strays(png.w, png.h)).append('\n')
             sb.append("    full «").append(one(res.fullText)).append("»\n")
             sb.append("    lines ").append(res.describe()).append('\n')
         }
@@ -191,7 +202,8 @@ fun main(args: Array<String>) = runBlocking {
             val text = t.getOrNull()
             if (text == null) sb.append("- Lens app: ").append(t.exceptionOrNull()?.message).append('\n')
             else {
-                sb.append("- Lens app ").append(score("lens app (multi-view)", text, truth)).append(" «").append(one(norm(text))).append("»\n")
+                sb.append("- Lens app ").append(score("lens app (multi-view)", text, truth)).append(' ').append(shape("lens app (multi-view)", text, truth))
+                    .append(" «").append(one(norm(text))).append("»\n")
                 if (looks.isNotEmpty()) sb.append("    looks: ").append(looks).append('\n')
             }
         }
@@ -235,7 +247,7 @@ fun main(args: Array<String>) = runBlocking {
                             sb.append("- ").append(name).append(": ").append(a.exceptionOrNull()?.message).append('\n'); continue
                         }
                         val text = VisionEngine.textOf(ans)
-                        sb.append("- ").append(name).append(' ').append(score(name, text, truth))
+                        sb.append("- ").append(name).append(' ').append(score(name, text, truth)).append(' ').append(shape(name, text, truth))
                             .append(" app «").append(one(norm(text))).append("» conf ")
                             .append("%.2f".format(java.util.Locale.US, VisionLayout.confidence(ans.words)))
                             .append(" | vision «").append(one(ans.full)).append("»\n")
@@ -251,6 +263,8 @@ fun main(args: Array<String>) = runBlocking {
         sb.append("| ").append(k).append(" | ").append(s.exact).append('/').append(s.n).append(" | ")
             .append(s.errors).append(" | ").append("%.1f%%".format(java.util.Locale.US, 100.0 * s.errors / maxOf(1, s.chars))).append(" |\n")
     }
+    sb.append("\n## Shape kept (lines, dialogue dashes, punctuation — after the app's Lens/Vision cleaning)\n\n| engine | exact shape |\n|---|---|\n")
+    for ((k, v) in shapes) sb.append("| ").append(k).append(" | ").append(v[0]).append('/').append(v[1]).append(" |\n")
     outFile.parentFile?.mkdirs()
     outFile.writeText(sb.toString())
     println(sb)

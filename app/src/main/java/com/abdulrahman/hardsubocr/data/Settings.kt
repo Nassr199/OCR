@@ -75,6 +75,14 @@ class Settings(context: Context) {
         get() = sp.getBoolean("vision_document", true)
         set(v) = putBool("vision_document", v)
 
+    /**
+     * Google Lens / Vision text shape: false (default) = as on screen (lines, dialogue dashes,
+     * punctuation); true = one line without tashkeel (the PRO program's cleaning).
+     */
+    var classicOneLine: Boolean
+        get() = sp.getBoolean("classic_one_line", false)
+        set(v) = putBool("classic_one_line", v)
+
     /** Google Lens: extra looks at a picture whose first reading is suspicious (ClassicViews). */
     var lensMultiView: Boolean
         get() = sp.getBoolean("lens_multiview", true)
@@ -270,13 +278,13 @@ class Settings(context: Context) {
     }
 
     /**
-     * Lens and Vision are classic OCR, not a model that understands the picture: the v2.6 / v2.1 logic
-     * (written for Gemini) never touches them. Their text always gets the classic cleaning of the PRO
-     * program (Arabic only, one line, no tashkeel, duplicated lines removed), whatever is chosen for
-     * the AI engines; and they always read the original picture (see [enhanceFor]).
+     * Lens and Vision are classic OCR, not a model that understands the picture: the cleanings written
+     * for Gemini/OpenRouter (v2.6 / v2.1) never touch them. Their text keeps its shape on screen
+     * (CleanMode.CLASSIC: lines, dialogue dashes, punctuation), or one line if the user asks for it;
+     * and they always read the original picture (see [enhanceFor]).
      */
     fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH
-    else if (kind.isClassicOcr) CleanMode.PRO
+    else if (kind.isClassicOcr) (if (classicOneLine) CleanMode.PRO else CleanMode.CLASSIC)
     else when (cleanChoice) {
         CleanChoice.PRO -> CleanMode.PRO
         CleanChoice.STRICT_OR_PRECISE -> CleanMode.PRECISE
@@ -297,7 +305,7 @@ class Settings(context: Context) {
         EnhanceChoice.AUTO -> profileFor(kind)?.enhanceImages ?: false
     }
 
-    fun stabilizeFor(kind: EngineKind): Boolean = subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
+    fun stabilizeFor(kind: EngineKind): Boolean = !kind.isClassicOcr && subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
         ((profileFor(kind)?.stabilize ?: false) || cleanChoice == CleanChoice.V26)
 
     /** Lens and Vision share the "classic OCR" setting. */

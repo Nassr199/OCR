@@ -48,7 +48,7 @@ val EngineKind.isClassicOcr: Boolean get() = this == EngineKind.LENS || this == 
  * made by an older version (before 2.7.6 Lens's identity never changed, and every re-run of the same
  * video got its first reading back instantly).
  */
-const val CLASSIC_OCR_VERSION = 6
+const val CLASSIC_OCR_VERSION = 7
 
 class PreparedImage(
     val bytes: ByteArray,

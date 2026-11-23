@@ -81,6 +81,7 @@ class SettingsUi(s: Settings) {
     var clean by mutableStateOf(s.cleanChoice)
     var merge by mutableStateOf(s.mergeChoice)
     var strip by mutableStateOf(s.stripDiacritics)
+    var classicOneLine by mutableStateOf(s.classicOneLine)
     var bom by mutableStateOf(s.bom)
     var crlf by mutableStateOf(s.crlf)
     var overwrite by mutableStateOf(s.overwrite)
@@ -136,9 +137,9 @@ private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: () -> Unit, on
             ).joinToString(" • "), last = true)
         }
         SettingsGroup("النص والملف") {
-            Entry(SettingsPage.CLEAN, onOpen, "Gemini/OpenRouter: " + vm.cleanLabel(u.clean) + (if (u.strip) " • بلا تشكيل" else "") + " • Lens/Vision: ثابت")
+            Entry(SettingsPage.CLEAN, onOpen, (if (u.classicOneLine) "Lens وVision: سطر واحد" else "Lens وVision: كما في الصورة") + " • " + vm.cleanLabel(u.clean) + (if (u.strip) " • بلا تشكيل" else ""))
             Entry(SettingsPage.MERGE, onOpen, vm.mergeLabel(u.merge))
-            Entry(SettingsPage.ENHANCE, onOpen, "Gemini/OpenRouter: " + vm.enhanceLabel(vm.enhanceChoice) + " • Lens/Vision: الصورة الأصلية")
+            Entry(SettingsPage.ENHANCE, onOpen, vm.enhanceLabel(vm.enhanceChoice))
             Entry(SettingsPage.SRT, onOpen, listOf(
                 if (u.bom) "UTF-8 مع BOM" else "UTF-8",
                 if (u.crlf) "CRLF" else "LF",
@@ -146,7 +147,7 @@ private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: () -> Unit, on
             ).joinToString(" • "), last = true)
         }
         SettingsGroup("الخدمات والبيانات") {
-            Entry(SettingsPage.LENS, onOpen, "المنطقة ${u.region.ifBlank { "US" }}")
+            Entry(SettingsPage.LENS, onOpen, "رمز الدولة ${u.region.ifBlank { "US" }}")
             Entry(SettingsPage.CACHE, onOpen, (if (u.resume) "الاستئناف مفعّل" else "الاستئناف متوقف") + " • $cacheLabel")
             Entry(SettingsPage.DIAG, onOpen, (if (vm.diagnostics) "مفعّل" else "متوقف") + " • $diagLabel", last = true)
         }
@@ -205,7 +206,7 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             SettingsCard("العمليات المتوازية") {
                 SliderRow("Google Lens / Vision", "${u.workersLens}", u.workersLens.toFloat(), 1f..8f, 6,
                     onChange = { u.workersLens = it.roundToInt() }, onDone = { s.workersLens = u.workersLens })
-                Hint("يشترك فيه Google Lens وGoogle Vision. الاتصال مباشر فيمكن رفعه، والأكثر من 6 قد يسبب حظرًا مؤقتًا (429).")
+                Hint("يشترك فيه Google Lens وGoogle Vision. الأكثر من 6 قد يجعل Google توقف الطلبات مؤقتًا.")
                 Spacer(Modifier.height(8.dp))
                 SliderRow("Gemini / OpenRouter", "${u.workersAi}", u.workersAi.toFloat(), 1f..12f, 10,
                     onChange = { u.workersAi = it.roundToInt() }, onDone = { s.workersAi = u.workersAi })
@@ -213,7 +214,7 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             SettingsCard("الأخطاء") {
                 SliderRow("عدد مرات إعادة المحاولة", "${u.retries}", u.retries.toFloat(), 0f..10f, 9,
                     onChange = { u.retries = it.roundToInt() }, onDone = { s.retries = u.retries })
-                Hint("إعادة تلقائية مع تأخير أُسّي (2–20 ث) لأخطاء الشبكة و429 و5xx. الخطأ الدائم (مفتاح خاطئ/رصيد) يوقف المهمة فورًا.")
+                Hint("إذا انقطعت الشبكة أو انشغلت الخدمة تُعاد الصورة تلقائيًا بعد انتظار يزيد تدريجيًا (2–20 ثانية). أما المفتاح الخاطئ أو نفاد الرصيد فيوقف المهمة فورًا.")
             }
         }
 
@@ -275,71 +276,77 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
         }
 
         SettingsPage.CLEAN -> {
-            SettingsCard(null) {
-                Hint("هذه الخيارات لـ Gemini وOpenRouter. Lens وVision قراءة OCR تقليدية لا تفهم الصورة، فلهما تنظيف ثابت: العربي فقط في سطر واحد بلا تشكيل، وحذف السطر المكرر — تنظيف برنامجك PRO الذي صُمم لـ Lens. منطق 2.6 لا يُطبَّق عليهما.")
-            }
-            SettingsCard("طريقة التنظيف (Gemini وOpenRouter)") {
+            SettingsCard("Google Lens وGoogle Vision") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "حسب الأسلوب المختار في Gemini/OpenRouter. (الإنجليزية لها تنظيف خاص تلقائيًا)"),
-                        ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل المشوّه فقط ويُبقي الصحيح، ويصلح الكلمات المتقطعة"),
-                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف الردود والرموز الزائدة فقط ويُبقي الأسطر والتشكيل كما قرأها الموديل"),
-                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل — وهو تنظيف Lens وVision الثابت")
+                        ChoiceItem(false, "كما في الصورة (موصى به)", "تبقى الأسطر وشرطات الحوار وعلامات الترقيم كما تظهر في الترجمة. تُحذف أسماء الطاقم اللاتينية والحروف الشاردة من الخلفية."),
+                        ChoiceItem(true, "سطر واحد بلا تشكيل", "تُجمع الأسطر في سطر واحد، وتُحذف شرطات الحوار والتشكيل.")
+                    ),
+                    u.classicOneLine
+                ) { u.classicOneLine = it; s.classicOneLine = it }
+            }
+            SettingsCard("Gemini وOpenRouter") {
+                ChoiceList(
+                    listOf(
+                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "حسب الأسلوب المختار للنموذج. (الترجمة الإنجليزية لها تنظيف خاص تلقائيًا)"),
+                        ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل الخاطئ فقط ويُبقي الصحيح، ويصلح الكلمات التي قُرئت حروفًا منفصلة"),
+                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف ردود النموذج والرموز الزائدة فقط، ويُبقي الأسطر والتشكيل كما قرأها"),
+                        ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل")
                     ),
                     u.clean
                 ) { u.clean = it; s.cleanChoice = it }
             }
             SettingsCard(null) {
-                SwitchRow("إزالة التشكيل نهائيًا", "يحذف كل الحركات من النص الناتج", u.strip) { u.strip = it; s.stripDiacritics = it }
+                SwitchRow("إزالة التشكيل نهائيًا", "يحذف كل الحركات من الترجمة، مع كل المحركات", u.strip) { u.strip = it; s.stripDiacritics = it }
             }
         }
 
         SettingsPage.MERGE -> SettingsCard("طريقة الدمج") {
             ChoiceList(
                 listOf(
-                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision ← دمج التكرار، والذكاء الاصطناعي ← حسب الأسلوب"),
-                    ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "يجمع المقاطع المتقاربة (أقل من 0.35 ث) المتشابهة 90% أو أكثر في ترجمة واحدة"),
-                    ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "يجمع فقط صورتين متلاصقتين (فرق ≤ 10 مللي ث) بنفس النص، مثل 0_01_55_280__0_01_56_879 و0_01_56_880__… — ولا يدمج نصين مختلفين أبدًا"),
-                    ChoiceItem(Choice.NONE, vm.mergeLabel(Choice.NONE), "كل صورة = ترجمة مستقلة بتوقيتها كما هو، حتى لو تكرر النص (مشهدان مختلفان)")
+                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision: دمج التكرار. Gemini وOpenRouter: حسب الأسلوب المختار."),
+                    ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "يجمع المقاطع المتتالية المتطابقة تقريبًا (90% فأكثر) التي يفصلها أقل من ثلث ثانية في ترجمة واحدة"),
+                    ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "يجمع فقط مقطعين متلاصقين بالنص نفسه (ترجمة انقسمت إلى صورتين)، ولا يدمج نصين مختلفين أبدًا"),
+                    ChoiceItem(Choice.NONE, vm.mergeLabel(Choice.NONE), "كل صورة ترجمة مستقلة بتوقيتها، حتى لو تكرر النص")
                 ),
                 u.merge
             ) { u.merge = it; s.mergeChoice = it }
         }
 
-        SettingsPage.ENHANCE -> SettingsCard("قبل الإرسال (Gemini وOpenRouter)") {
-            Hint("Lens وVision يقرآن الصورة الأصلية دائمًا: هذا التحسين من منطق 2.6 المصمم لـ Gemini.")
+        SettingsPage.ENHANCE -> SettingsCard("Gemini وOpenRouter") {
+            Hint("Google Lens وGoogle Vision يقرآن الصورة كما هي دائمًا، فهما أدق مع الصورة الأصلية.")
             Spacer(Modifier.height(6.dp))
             ChoiceList(
                 listOf(
-                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «ذكي + تشكيل»، ومعطّل مع «سريع»"),
+                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «مع التشكيل»، ومعطّل مع «حرفي» و«سريع»"),
                     ChoiceItem(EnhanceChoice.ON, vm.enhanceLabel(EnhanceChoice.ON), null),
                     ChoiceItem(EnhanceChoice.OFF, vm.enhanceLabel(EnhanceChoice.OFF), null)
                 ),
                 vm.enhanceChoice
             ) { vm.chooseEnhanceChoice(it) }
             Spacer(Modifier.height(4.dp))
-            Hint("قصّ شريط الترجمة (6–94% عرضًا، 35–96% ارتفاعًا) ← تكبير Lanczos للصور الصغيرة ← رمادي ← autocontrast ← تباين 1.12 ← حدّة. مطابق لـ Pillow بكسلًا بكسل.")
+            Hint("يقصّ الجزء الذي فيه الترجمة، ويكبّر الصور الصغيرة، ويحوّلها إلى رمادي بتباين ووضوح أعلى قبل الإرسال.")
         }
 
         SettingsPage.SRT -> SettingsCard(null) {
-            SwitchRow("UTF-8 مع BOM", "مطلوب لبعض برامج ويندوز العربية (الافتراضي كما في النسخة الأصلية)", u.bom) { u.bom = it; s.bom = it }
-            SwitchRow("نهايات أسطر ويندوز CRLF", null, u.crlf) { u.crlf = it; s.crlf = it }
-            SwitchRow("استبدال الملف إن وُجد", "عند الإيقاف يُنشأ اسم جديد مثل name (2).srt", u.overwrite) { u.overwrite = it; s.overwrite = it }
+            SwitchRow("UTF-8 مع BOM", "تحتاجه بعض برامج ويندوز لتظهر العربية صحيحة", u.bom) { u.bom = it; s.bom = it }
+            SwitchRow("نهايات أسطر ويندوز (CRLF)", "لبرامج ويندوز القديمة", u.crlf) { u.crlf = it; s.crlf = it }
+            SwitchRow("استبدال الملف إن وُجد", "عند الإيقاف يُحفظ باسم جديد مثل «الاسم (2).srt»", u.overwrite) { u.overwrite = it; s.overwrite = it }
         }
 
         SettingsPage.LENS -> SettingsCard(null) {
             OutlinedTextField(
                 u.region, { u.region = it; s.lensRegion = it },
-                label = { Text("المنطقة") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                label = { Text("رمز الدولة") }, singleLine = true, modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(6.dp))
-            Hint("المنطقة الافتراضية US. لغة Lens تُضبط تلقائيًا من «لغة الترجمة» في الشاشة الرئيسية.")
+            Hint("رمز الدولة الذي يُرسل مع كل طلب (الافتراضي US). لغة القراءة تُضبط تلقائيًا من «لغة الترجمة» في الشاشة الرئيسية.")
         }
 
         SettingsPage.CACHE -> {
             val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
             SettingsCard(null) {
-                SwitchRow("استئناف المهام المتوقفة", "كل صورة تُقرأ تُحفظ فورًا، فإكمال مهمة توقفت لا يعيد قراءة ما تم. مع Lens وVision تُمسح قراءات المهمة حين تكتمل، فتشغيل الفيديو نفسه مرة أخرى يقرؤه من جديد.", u.resume) { u.resume = it; s.resume = it }
+                SwitchRow("استئناف المهام المتوقفة", "كل صورة تُقرأ تُحفظ فورًا، فإذا توقفت المهمة تكمل من حيث وقفت دون قراءة ما تم. مع Lens وVision تُمسح القراءات حين تكتمل المهمة، فتشغيل الفيديو نفسه مرة أخرى يقرؤه من جديد.", u.resume) { u.resume = it; s.resume = it }
             }
             SettingsCard("الذاكرة المؤقتة") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -378,13 +385,13 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             Text("HardSub Arabic OCR — Android ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Hint(
-                "تطبيق أندرويد أصلي (Kotlin وJetpack Compose) يستخرج الترجمة المدمجة في الفيديو ويحوّلها إلى ملف SRT. " +
-                    "يكتشف الترجمة في الفيديو مباشرة بمحرك مصمَّم للخط العربي، ثم يقرأ النص بالمحرك الذي تختاره: " +
-                    "Google Lens أو Google Cloud Vision أو Gemini أو OpenRouter. ويقرأ أيضًا مجلدات الصور التي تحمل أسماؤها التوقيت (صيغة VideoSubFinder)."
+                "يستخرج الترجمة المدمجة في الفيديو ويحوّلها إلى ملف SRT. " +
+                    "يكتشف الترجمة في الفيديو مباشرة بطريقة مصمَّمة للخط العربي، ثم يقرأ النص بالمحرك الذي تختاره: " +
+                    "Google Lens أو Google Cloud Vision أو Gemini أو OpenRouter. ويقرأ أيضًا مجلدات صور الترجمة التي تحمل أسماؤها التوقيت (كما يحفظها VideoSubFinder)."
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "مفاتيح API محفوظة على جهازك مشفّرة بـ Android Keystore، ولا تُرسل إلا إلى الخدمة التي تختارها.",
+                "مفاتيح API محفوظة مشفّرة على جهازك، ولا تُرسل إلا إلى الخدمة التي تختارها.",
                 style = MaterialTheme.typography.bodySmall
             )
         }

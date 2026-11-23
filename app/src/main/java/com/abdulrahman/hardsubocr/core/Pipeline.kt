@@ -25,7 +25,13 @@ enum class CleanMode {
     V26,
 
     /** English / Latin subtitles: Arabic filters would delete every line. */
-    ENGLISH
+    ENGLISH,
+
+    /**
+     * Google Lens / Google Vision: the subtitle as on screen — lines, dialogue dashes, punctuation and
+     * tashkeel kept; Latin letters, lines without Arabic and tatweel removed (ClassicText).
+     */
+    CLASSIC
 }
 
 object Cleaner {
@@ -40,13 +46,14 @@ object Cleaner {
             CleanMode.V26 -> ArabicV26.conservativeCleanDiacritics(ArabicText.cleanOcrOutput(raw))
                 .let { if (it.isEmpty() || ArabicText.isSymbolsOnly(it)) "" else it }
             CleanMode.ENGLISH -> EnglishText.clean(raw)
+            CleanMode.CLASSIC -> ClassicText.clean(raw, stripDiacritics)
         }
         if (mode == CleanMode.ENGLISH) return t
         // Arabic subtitles: a result without a single Arabic letter is background text
         // (credits "Gökhan Yılmaz", numerals "2.", channel logos) — never a subtitle line.
         if (!ArabicText.hasArabic(t)) return ""
         if (t.isEmpty()) return ""
-        return if (stripDiacritics && mode != CleanMode.PRO) ArabicText.pyStrip(ArabicText.stripDiacritics(t)) else t
+        return if (stripDiacritics && mode != CleanMode.PRO && mode != CleanMode.CLASSIC) ArabicText.pyStrip(ArabicText.stripDiacritics(t)) else t
     }
 }
 

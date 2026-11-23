@@ -51,7 +51,7 @@ fun main() = runBlocking {
     val t1 = ew.recognize(img); val t2 = ew.recognize(img)
     check("model refused (HTTP 400) → same image read with the default model", t1 == "أبي" && refusedHttp.bodies.size == 3, "$t1 ${refusedHttp.bodies.size}")
     check("…and every later image too", !refusedHttp.bodies[1].contains("\"model\"") && !refusedHttp.bodies[2].contains("\"model\"") && t2 == "أبي")
-    check("…the report says so", ew.modelNote().contains("رفضته") && ew.modelInUse == "")
+    check("…the report says so", ew.modelNote().contains("غير متاح") && ew.modelInUse == "")
     val perImageModel = Seq(listOf(200 to """{"responses":[{"error":{"code":3,"message":"Model builtin/weekly is not supported"}}]}""", 200 to good))
     val ep = VisionEngine(perImageModel, "k", "ar", model = "builtin/weekly")
     check("model refused inside the answer (INVALID_ARGUMENT) → default model", ep.recognize(img) == "أبي" && perImageModel.bodies.size == 2)
@@ -59,7 +59,7 @@ fun main() = runBlocking {
     val eo = VisionEngine(otherBad, "k", "ar", model = "builtin/weekly")
     val r = runCatching { eo.recognize(img) }
     check("another 400 is not taken for a model refusal", r.exceptionOrNull() is OcrError.Failed && eo.modelInUse == "builtin/weekly" && otherBad.bodies.size == 1, r.exceptionOrNull()?.message ?: "")
-    check("accepted model: the report names it", VisionEngine(ok, "k", "ar", model = "builtin/weekly").modelNote() == "builtin/weekly")
+    check("accepted model: the report names it", VisionEngine(ok, "k", "ar", model = "builtin/weekly").modelNote() == "الأحدث (builtin/weekly)")
     check("cacheId per language, reading type, model and classic version", e.cacheId == "vision:ar:doc:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "en").cacheId == "vision:en:doc:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "ar", document = false).cacheId == "vision:ar:text:stable:c$CLASSIC_OCR_VERSION" && VisionEngine(ok, "k", "ar", model = "builtin/weekly").cacheId == "vision:ar:doc:builtin/weekly:c$CLASSIC_OCR_VERSION", e.cacheId)
     // 2) fallback to textAnnotations, empty response
     check("textAnnotations fallback", VisionEngine.parseText("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}]}]}""") == "أبي")

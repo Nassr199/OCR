@@ -379,7 +379,9 @@ object VisionLayout {
                 }
             }
             val rtl = arabicLine(row)
-            for (p in if (rtl) pieces.reversed() else pieces) out.add(readingOrder(p, rtl))
+            // words of each piece in its own direction: an Arabic piece next to crew names on the
+            // same row (a row Latin by letter count) still reads right to left, dash in front
+            for (p in if (rtl) pieces.reversed() else pieces) out.add(readingOrder(p, arabicLine(p)))
         }
         return out
     }

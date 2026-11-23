@@ -207,5 +207,60 @@
    691,
    159
   ]
+ },
+ {
+  "file": "08_dialogue_dashes.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "09_two_lines_period.jpg",
+  "truth": "هوليا. ساعدوني\nماذا حدث؟",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "10_dash_one_line.jpg",
+  "truth": "- لا أعرف",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "11_ellipsis.jpg",
+  "truth": "انتظر... لا تذهب!",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "12_dialogue_question.jpg",
+  "truth": "- هل أنت بخير؟\n- نعم، أنا بخير",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
  }
 ]

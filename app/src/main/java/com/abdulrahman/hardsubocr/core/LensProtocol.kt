@@ -85,13 +85,13 @@ object LensProtocol {
         }.take(1500)
 
         /** Lines [readingText] drops as fragments of the background (see [withoutStrays]). */
-        val strays: Int get() = lines.size - withoutStrays(lines).size
+        fun strays(width: Int, height: Int): Int = lines.size - withoutStrays(lines, width, height).size
 
         /**
          * Pixel boxes (x0, y0, x1, y1) of the Arabic lines kept by [readingText] — where the subtitle
          * is, for a closer second look. Empty when Lens found no Arabic or gave no boxes.
          */
-        fun arabicBoxes(width: Int, height: Int): List<IntArray> = withoutStrays(lines).mapNotNull { l ->
+        fun arabicBoxes(width: Int, height: Int): List<IntArray> = withoutStrays(lines, width, height).mapNotNull { l ->
             val b = l.box ?: return@mapNotNull null
             if (b.w <= 0f || b.h <= 0f || ClassicViews.arabicLetters(l.text) < 2) return@mapNotNull null
             intArrayOf(
@@ -117,7 +117,7 @@ object LensProtocol {
          * subtitle's row were glued to it).
          */
         fun readingText(width: Int, height: Int): String {
-                val ls = withoutStrays(lines)
+                val ls = withoutStrays(lines, width, height)
                 if (ls.size < 2) return ls.joinToString("\n") { it.text }.trim()
                 val sx = width.coerceAtLeast(1).toFloat()
                 val sy = height.coerceAtLeast(1).toFloat()
@@ -133,13 +133,27 @@ object LensProtocol {
                     )
                 }
                 val kept = VisionLayout.dedupe(words).toHashSet()
+                // rows: a line belongs to the row it overlaps by half of the smaller height (a dialogue
+                // dash, a few pixels high, falls inside its line's row)
                 val rows = ArrayList<MutableList<VisionLayout.Word>>()
+                val spans = ArrayList<IntArray>()
                 for (w in words.filter { it in kept }.sortedBy { it.cy }) {
-                    val row = rows.firstOrNull { r -> Math.abs(r[0].cy - w.cy) <= minOf(r[0].h, w.h) * 0.5 }
-                    if (row != null) row.add(w) else rows.add(mutableListOf(w))
+                    var best = -1
+                    var bestOv = 0.0
+                    for ((k, sp) in spans.withIndex()) {
+                        val ov = (minOf(sp[1], w.y1) - maxOf(sp[0], w.y0)).toDouble() / minOf(sp[1] - sp[0], w.h).coerceAtLeast(1)
+                        if (ov > bestOv) { bestOv = ov; best = k }
+                    }
+                    if (best >= 0 && bestOv >= 0.5) {
+                        rows[best].add(w)
+                        spans[best][0] = minOf(spans[best][0], w.y0); spans[best][1] = maxOf(spans[best][1], w.y1)
+                    } else {
+                        rows.add(mutableListOf(w)); spans.add(intArrayOf(w.y0, w.y1))
+                    }
                 }
+                val order = rows.indices.sortedBy { spans[it][0] }
                 val out = ArrayList<String>()
-                for (r in rows) {
+                for (r in order.map { rows[it] }) {
                     val text = r.joinToString("") { it.text }
                     val ar = text.count { it in '\u0600'..'\u06FF' || it in '\u0750'..'\u077F' || it in '\uFB50'..'\uFDFF' || it in '\uFE70'..'\uFEFF' }
                     val lat = text.count { it.isLetter() } - ar
@@ -150,7 +164,7 @@ object LensProtocol {
                     var right = Int.MIN_VALUE
                     for (w in r.sortedBy { it.x0 }) {
                         val last = pieces.lastOrNull()
-                        if (last != null && w.x0 - right <= minOf(w.h, last.last().h) * 2.5 &&
+                        if (last != null && w.x0 - right <= maxOf(w.h, last.last().h) * 2.5 &&
                             sameScript(w.text, last.last().text)
                         ) {
                             last.add(w); right = maxOf(right, w.x1)
@@ -159,7 +173,8 @@ object LensProtocol {
                         }
                     }
                     for (p in if (rtl) pieces.reversed() else pieces) {
-                        out.add((if (rtl) p.reversed() else p).joinToString(" ") { it.text })
+                        // each piece in its own direction (an Arabic piece on a row of long crew names)
+                        out.add((if (script(p.joinToString("") { it.text }) == 1) p.reversed() else p).joinToString(" ") { it.text })
                     }
                 }
                 return out.joinToString("\n").trim()
@@ -169,21 +184,46 @@ object LensProtocol {
     /**
      * Lens reads the parts of crew names hidden behind or cut by the subtitle box as lone letters
      * («- لماذا؟ و», «ا أبي»): with a real Arabic line (2+ letters) in the picture, a line that is a
-     * single Arabic letter, or only stray marks ("-", "'"), is a background fragment and is dropped.
-     * No subtitle line is one letter; Arabic punctuation alone (؟ ، ؛) is kept.
+     * single Arabic letter is a background fragment and is dropped, and so is a line of marks only
+     * («-», «'») — unless it sits beside an Arabic line, on its row: that is the line's own dialogue
+     * dash or punctuation («- هوليا», «لا تذهب !»). Arabic punctuation alone (؟ ، ؛) is kept.
+     * [width]/[height]: the picture in pixels (Lens boxes are fractions of each side).
      */
-    fun withoutStrays(lines: List<Line>): List<Line> {
-        if (lines.none { ClassicViews.arabicLetters(it.text) >= 2 }) return lines
+    fun withoutStrays(lines: List<Line>, width: Int = 1, height: Int = 1): List<Line> {
+        val arabic = lines.filter { ClassicViews.arabicLetters(it.text) >= 2 }
+        if (arabic.isEmpty()) return lines
         return lines.filter { l ->
             val t = l.text
             val ar = ClassicViews.arabicLetters(t)
             val letters = t.count { it.isLetter() }
             when {
                 ar == 1 && letters == 1 -> false
-                letters == 0 && t.none { it == '؟' || it == '،' || it == '؛' } -> false
+                letters == 0 && t.none { it == '؟' || it == '،' || it == '؛' } -> besideArabic(l, arabic, width, height)
                 else -> true
             }
         }
+    }
+
+    /**
+     * [mark] is on an Arabic line's row (centre within its height) and next to it, not over it: on
+     * its right, where an Arabic line starts (dialogue dash, opening quote), or on its left only when
+     * it is closing punctuation («!», «…»). A dash on the left of an Arabic line is a piece of a crew
+     * name beside the subtitle box («E» of «Ece» read as «-»), not the line's dash.
+     */
+    private fun besideArabic(mark: Line, arabic: List<Line>, width: Int, height: Int): Boolean {
+        val m = mark.box ?: return false
+        val w = width.coerceAtLeast(1).toFloat()
+        val h = height.coerceAtLeast(1).toFloat()
+        val closing = mark.text.trim().let { t -> t.isNotEmpty() && t.all { it in "!?.…؟،؛:»\")" } }
+        for (a in arabic) {
+            val b = a.box ?: continue
+            if (m.cx < b.cx && !closing) continue
+            val ah = b.h * h
+            if (Math.abs(m.cy - b.cy) * h > ah * 0.4f) continue
+            val gap = maxOf((m.cx - m.w / 2) - (b.cx + b.w / 2), (b.cx - b.w / 2) - (m.cx + m.w / 2)) * w
+            if (gap >= -ah * 0.2f && gap <= ah * 1.2f) return true
+        }
+        return false
     }
 
     private fun sameScript(a: String, b: String): Boolean {

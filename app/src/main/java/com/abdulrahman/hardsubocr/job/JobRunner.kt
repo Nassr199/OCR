@@ -586,14 +586,14 @@ class JobRunner(
                         if (ocr != null && req.videoEngine == VideoEngine.ENSEMBLE && isActive) {
                             // 2.1's images are read first; then the other engines' images are read only
                             // where they disagree with 2.1 or where 2.1's image read nothing
-                            phase = "قراءة صور 2.1"
+                            phase = "قراءة صور الترجمة"
                             while (isActive && ocr.isActive && p.stats.processed.get() < sent.get()) delay(150)
                             val basePieces = r.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"]) }
                             val altRaw = r.alts.map { l -> l.map { a -> Arbiter.Piece(a[0], a[1], null) } }
                             val need = Arbiter.needed(basePieces, altRaw, r.frameUs, r.minFrames)
                             phase = "قراءة الشهود (${need.sumOf { it.size }})"
                             evidenceReport = sc.emitEvidence(need) { isActive }
-                            addLog("🔎 ${need.sumOf { it.size }} صورة شاهدة من 2.2 و2.0 للتحقق من 2.1")
+                            addLog("🔎 ${need.sumOf { it.size }} صورة إضافية من طريقتي الكشف الأخريين للتحقق من الأسطر المختلف عليها")
                         }
                     }
                 } finally {
@@ -626,7 +626,7 @@ class JobRunner(
                 }
                 report = rep.toString()
                 val added = changed.count { it.engine >= 0 }
-                if (changed.isNotEmpty()) addLog("🧠 القراءة صحّحت ${changed.size} سطرًا (منها $added سطر فاته 2.1)")
+                if (changed.isNotEmpty()) addLog("🧠 القراءة صحّحت ${changed.size} سطرًا (منها $added سطر فاته الكشف الأساسي)")
                 // images of the lines that came from the other engines, next to 2.1's
                 if (rgbFolder != null) withContext(Dispatchers.IO) {
                     for (l in lines) {
