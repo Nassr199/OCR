@@ -96,10 +96,15 @@ data class ModelInfo(val id: String, val name: String, val family: String, val n
 class VisionEngine(
     private val http: HttpTransport,
     private val apiKey: String,
-    private val language: String = "ar"
+    private val language: String = "ar",
+    /**
+     * For the focused second look (see [recognize]); null = one look only. Crops the same
+     * picture — no other change to it.
+     */
+    private val cropper: ImageCropper? = null
 ) : OcrEngine {
     override val kind = EngineKind.VISION
-    override val cacheId = "vision:$language:v3"
+    override val cacheId = "vision:$language:v4"
 
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Google Cloud Vision أولاً")
@@ -125,7 +130,8 @@ class VisionEngine(
         }
     }.toString()
 
-    override suspend fun recognize(image: PreparedImage): String {
+    /** One Vision request: the words with their boxes, and Vision's own text. */
+    private suspend fun annotate(image: PreparedImage): Answer {
         val resp = http.execute(
             HttpRequest(
                 url = ENDPOINT,
@@ -135,18 +141,58 @@ class VisionEngine(
                 timeoutMs = 60_000
             )
         )
-        if (resp.code == 200) return parseText(resp.text, image.name)
+        if (resp.code == 200) return parseAnswer(resp.text)
         val e = GoogleApiError.parse(resp.text)
         throw classify(resp.code, e.status, e.message.ifBlank { shortBody(resp.text) }, e.reason, parseRetryAfter(resp.header("Retry-After")))
     }
+
+    /**
+     * Two-stage reading, used by OCR systems to read a line next to unrelated text:
+     * 1) the whole picture, as Lens gets it;
+     * 2) only when Vision's own answer shows the subtitle was read together with other text on
+     *    its rows (crew names beside or touching the box) or unsure: the subtitle's area, located
+     *    by Vision's own word boxes, cropped from the same picture and read again. The better
+     *    reading of the subtitle is kept (more of it, without the noise, or surer).
+     * Pictures with the subtitle alone are read once, exactly as before.
+     */
+    override suspend fun recognize(image: PreparedImage): String {
+        val first = annotate(image)
+        val text1 = textOf(first, image.name)
+        val crop = cropper ?: return text1
+        val area = VisionLayout.focusArea(first.words, image.width, image.height) ?: return text1
+        val part = runCatching { crop.crop(image, area[0], area[1], area[2], area[3]) }.getOrNull() ?: return text1
+        val name2 = image.name + " [focus]"
+        val second = try {
+            annotate(PreparedImage(part.bytes, part.mime, part.width, part.height, name2))
+        } catch (e: OcrError.Fatal) {
+            throw e
+        } catch (e: OcrError) {
+            null // the first reading stands
+        } catch (e: java.io.IOException) {
+            null
+        } ?: return text1
+        val text2 = textOf(second, name2)
+        val better = text2.isNotBlank() && VisionLayout.secondIsBetter(first.words, second.words)
+        DiagLog.i(
+            "vision",
+            "${image.name} focus ${area.joinToString(",")}: «${oneLine(text1)}» | «${oneLine(text2)}» → ${if (better) "focus" else "first"}"
+        )
+        return if (better) text2 else text1
+    }
+
+    /** Words (with boxes) of one answer and Vision's own text of it. */
+    class Answer(val words: List<VisionLayout.Word>, val full: String)
 
     companion object {
         const val ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
 
         /** Full text of the first response; a per-image error is raised like an HTTP one. */
-        fun parseText(body: String, name: String = ""): String {
+        fun parseText(body: String, name: String = ""): String = textOf(parseAnswer(body), name)
+
+        /** Words and Vision's own text of the first response; a per-image error is raised like an HTTP one. */
+        fun parseAnswer(body: String): Answer {
             val root = parseJsonOrNull(body).obj() ?: throw OcrError.Retryable("رد Google Vision غير مفهوم")
-            val r = root["responses"].arr()?.firstOrNull().obj() ?: return ""
+            val r = root["responses"].arr()?.firstOrNull().obj() ?: return Answer(emptyList(), "")
             r["error"].obj()?.let { err ->
                 val code = (err["code"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
                 val msg = err["message"].str() ?: ""
@@ -154,14 +200,19 @@ class VisionEngine(
             }
             val full = (r["fullTextAnnotation"].obj()?.get("text").str()
                 ?: r["textAnnotations"].arr()?.firstOrNull().obj()?.get("description").str()
-                ?: return "").trimEnd('\n', ' ')
-            // Vision's own text repeats words read twice and lays blocks out left to right:
-            // the text is rebuilt from the word boxes (VisionLayout), its own text is the fallback.
-            val words = VisionLayout.wordsOf(r)
+                ?: return Answer(emptyList(), "")).trimEnd('\n', ' ')
+            return Answer(VisionLayout.wordsOf(r), full)
+        }
+
+        /**
+         * Vision's own text repeats words read twice and lays blocks out left to right: the text is
+         * rebuilt from the word boxes (VisionLayout), its own text is the fallback.
+         */
+        fun textOf(a: Answer, name: String = ""): String {
             // diagnostic file: exactly what Vision returned for every image
-            if (words.isNotEmpty()) DiagLog.i("vision", "$name words: " + VisionLayout.describe(words))
-            val rebuilt = VisionLayout.rebuild(words) ?: return full
-            if (rebuilt != full) DiagLog.i("vision", "$name layout: «${oneLine(full)}» → «${oneLine(rebuilt)}»")
+            if (a.words.isNotEmpty()) DiagLog.i("vision", "$name words: " + VisionLayout.describe(a.words))
+            val rebuilt = VisionLayout.rebuild(a.words) ?: return a.full
+            if (rebuilt != a.full) DiagLog.i("vision", "$name layout: «${oneLine(a.full)}» → «${oneLine(rebuilt)}»")
             return rebuilt
         }
 

@@ -30,7 +30,7 @@ fun main() = runBlocking {
     val enBody = Json.parseToJsonElement(VisionEngine(ok, "k", "en").buildBody(img)).jsonObject["requests"]!!.jsonArray[0].jsonObject
     check("English subtitles: hint en only", enBody["imageContext"]!!.jsonObject["languageHints"]!!.jsonArray.map { it.jsonPrimitive.content } == listOf("en"))
     check("full text, trailing newline trimmed", text == "مرحبا يا صديقي\nكيف حالك؟", text)
-    check("cacheId per language", e.cacheId == "vision:ar:v3" && VisionEngine(ok, "k", "en").cacheId == "vision:en:v3")
+    check("cacheId per language", e.cacheId == "vision:ar:v4" && VisionEngine(ok, "k", "en").cacheId == "vision:en:v4")
     // 2) fallback to textAnnotations, empty response
     check("textAnnotations fallback", VisionEngine.parseText("""{"responses":[{"textAnnotations":[{"description":"أبي\n"}]}]}""") == "أبي")
     check("no text → empty", VisionEngine.parseText("""{"responses":[{}]}""") == "")

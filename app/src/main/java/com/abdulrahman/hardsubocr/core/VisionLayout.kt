@@ -413,4 +413,89 @@ object VisionLayout {
         return lines(dedupe(words)).map { dropStrays(it) }.filter { it.isNotEmpty() }
             .joinToString("\n") { join(it) }.trim().ifEmpty { null }
     }
+
+    // ------------------------------------------------------------------ focused second look
+
+    /**
+     * The subtitle's words (core) and Arabic "words" that are only noise: an unsure word right
+     * next to other text on its row — the stroke of a crew name read as Arabic letters.
+     */
+    private fun subtitleWords(ws: List<Word>): Pair<List<Word>, List<Word>> {
+        val ar = ws.filter { hasArabic(it.text) && !stray(it) }
+        val other = ws.filter { (!hasArabic(it.text) && !it.punct) || stray(it) }
+        val noise = ar.filter { w ->
+            w.conf > 0f && w.conf < 0.6f && other.any { o ->
+                minOf(o.y1, w.y1) - maxOf(o.y0, w.y0) > 0 && maxOf(o.x0 - w.x1, w.x0 - o.x1) < w.h * 1.5
+            }
+        }
+        return ar.filter { it !in noise } to noise
+    }
+
+    /**
+     * Where to look again — only when the first answer itself shows the subtitle was read together
+     * with other text on its rows (crew names beside or touching the box), or unsure. The area is
+     * the subtitle's words with a small margin, never reaching into that other text: the same
+     * picture, cropped, nothing else changed. null = the first answer stands (no second request).
+     */
+    fun focusArea(words: List<Word>, imgW: Int, imgH: Int): IntArray? {
+        val ws = dedupe(words)
+        val (core, noise) = subtitleWords(ws)
+        if (core.isEmpty()) return null
+        val ax0 = core.minOf { it.x0 }; val ax1 = core.maxOf { it.x1 }
+        val ay0 = core.minOf { it.y0 }; val ay1 = core.maxOf { it.y1 }
+        val h = core.map { it.h }.sorted()[core.size / 2]
+        val others = ws.filter { it !in core && !it.punct }
+        val beside = others.any { o -> minOf(o.y1, ay1) - maxOf(o.y0, ay0) > 0 }
+        val sure = core.filter { it.conf > 0f }
+        val unsure = sure.isNotEmpty() && (sure.any { it.conf < 0.5f } ||
+            sure.sumOf { it.conf.toDouble() * it.letters } / sure.sumOf { it.letters } < 0.8)
+        if (!beside && !unsure && noise.isEmpty()) return null
+        var x0 = ax0 - (0.35 * h).toInt()
+        var x1 = ax1 + (0.35 * h).toInt()
+        // other text on the subtitle's rows: the area stops before it (never inside the subtitle)
+        for (o in others) {
+            if (minOf(o.y1, ay1) - maxOf(o.y0, ay0) <= 0) continue
+            if (o.cx < ax0) x0 = maxOf(x0, minOf(o.x1 + 2, ax0))
+            else if (o.cx > ax1) x1 = minOf(x1, maxOf(o.x0 - 2, ax1))
+        }
+        var y0 = ay0 - (0.25 * h).toInt()
+        var y1 = ay1 + (0.25 * h).toInt()
+        // other text above or below inside that width (a crew title over the box)
+        for (o in others) {
+            if (minOf(o.x1, x1) - maxOf(o.x0, x0) <= 0) continue
+            if (o.cy < ay0 && o.y1 <= ay0 + h / 4) y0 = maxOf(y0, minOf(o.y1 + 2, ay0))
+            else if (o.cy > ay1 && o.y0 >= ay1 - h / 4) y1 = minOf(y1, maxOf(o.y0 - 2, ay1))
+        }
+        x0 = x0.coerceAtLeast(0); y0 = y0.coerceAtLeast(0)
+        x1 = x1.coerceAtMost(imgW); y1 = y1.coerceAtMost(imgH)
+        if (x1 - x0 < 8 || y1 - y0 < 8) return null
+        // nearly the whole picture: looking again would see the same
+        if ((x1 - x0).toLong() * (y1 - y0) >= imgW.toLong() * imgH * 0.85) return null
+        return intArrayOf(x0, y0, x1, y1)
+    }
+
+    /**
+     * Is the focused look the better reading of the subtitle? It must not lose a quarter of it;
+     * it wins when it reads more of it, when it is the same subtitle without the noise of the
+     * first look, or when Vision is clearly surer of it.
+     */
+    fun secondIsBetter(first: List<Word>, second: List<Word>): Boolean {
+        val (core1, noise1) = subtitleWords(dedupe(first))
+        val core2 = dedupe(second).filter { hasArabic(it.text) && !stray(it) }
+        val l1 = core1.sumOf { it.letters }
+        val l2 = core2.sumOf { it.letters }
+        if (l2 == 0) return false
+        if (l1 == 0) return true
+        if (l2 < l1 * 0.75) return false
+        fun conf(ws: List<Word>): Double {
+            val c = ws.filter { it.conf > 0f }
+            return if (c.isEmpty()) 0.0 else c.sumOf { it.conf.toDouble() * it.letters } / c.sumOf { it.letters }
+        }
+        val c1 = conf(core1)
+        val c2 = conf(core2)
+        if (l2 > l1 && c2 >= c1 - 0.05) return true
+        if (noise1.isNotEmpty() && l2 >= l1 && c2 >= c1 - 0.05) return true
+        if (c1 > 0 || c2 > 0) return c2 > c1 + 0.02
+        return l2 > l1
+    }
 }

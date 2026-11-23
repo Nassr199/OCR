@@ -14,8 +14,8 @@ android {
         applicationId = "com.abdulrahman.hardsubocr"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.7.3"
+        versionCode = 14
+        versionName = "2.7.4"
     }
 
     // One fixed key for debug AND release, so every new APK installs over the old one

@@ -56,6 +56,11 @@ fun interface ImagePreparer {
     fun prepare(bytes: ByteArray, nameHint: String, kind: EngineKind): PreparedImage
 }
 
+/** Crops a prepared image, in its own pixels (end exclusive); platform side (Bitmap on Android). */
+fun interface ImageCropper {
+    fun crop(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int): PreparedImage?
+}
+
 interface OcrEngine {
     val kind: EngineKind
 

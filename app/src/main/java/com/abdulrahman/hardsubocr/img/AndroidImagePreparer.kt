@@ -3,6 +3,7 @@ package com.abdulrahman.hardsubocr.img
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.abdulrahman.hardsubocr.core.EngineKind
+import com.abdulrahman.hardsubocr.core.ImageCropper
 import com.abdulrahman.hardsubocr.core.ImagePreparer
 import com.abdulrahman.hardsubocr.core.ImageV26
 import com.abdulrahman.hardsubocr.core.LensProtocol
@@ -104,6 +105,30 @@ class AndroidImagePreparer(
             val out = ByteArrayOutputStream(bmp.width * bmp.height / 2 + 1024)
             bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
             return out.toByteArray()
+        }
+    }
+}
+
+/**
+ * Google Vision's focused second look: the same picture cropped to the subtitle's area (Vision's
+ * own word boxes), saved as PNG — nothing else about the pixels changes.
+ */
+object AndroidImageCropper : ImageCropper {
+    override fun crop(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int): PreparedImage? {
+        val src = BitmapFactory.decodeByteArray(image.bytes, 0, image.bytes.size) ?: return null
+        try {
+            val l = x0.coerceIn(0, src.width - 1)
+            val t = y0.coerceIn(0, src.height - 1)
+            val r = x1.coerceIn(l + 1, src.width)
+            val b = y1.coerceIn(t + 1, src.height)
+            val part = Bitmap.createBitmap(src, l, t, r - l, b - t)
+            try {
+                return PreparedImage(AndroidImagePreparer.toPng(part), "image/png", part.width, part.height, image.name)
+            } finally {
+                if (part !== src) part.recycle()
+            }
+        } finally {
+            src.recycle()
         }
     }
 }

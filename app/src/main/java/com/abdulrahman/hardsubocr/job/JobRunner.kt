@@ -25,6 +25,7 @@ import com.abdulrahman.hardsubocr.core.stackTraceOf
 import com.abdulrahman.hardsubocr.data.FileOcrCache
 import com.abdulrahman.hardsubocr.data.FolderRef
 import com.abdulrahman.hardsubocr.data.Saf
+import com.abdulrahman.hardsubocr.img.AndroidImageCropper
 import com.abdulrahman.hardsubocr.img.AndroidImagePreparer
 import com.abdulrahman.hardsubocr.net.Net
 import com.abdulrahman.hardsubocr.video.VideoProbe
@@ -126,7 +127,7 @@ class JobRunner(
         EngineKind.OPENROUTER -> OpenRouterEngine(
             Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO, req.lang
         )
-        EngineKind.VISION -> VisionEngine(Net.transport, req.visionKey, req.lang.code)
+        EngineKind.VISION -> VisionEngine(Net.transport, req.visionKey, req.lang.code, AndroidImageCropper)
     }
 
     private fun newPipeline(
