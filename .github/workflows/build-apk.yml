@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   build:
+    # the branch "ocr-bench" carries work in progress for the live OCR bench: never built or released
+    if: github.ref_name != 'ocr-bench'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

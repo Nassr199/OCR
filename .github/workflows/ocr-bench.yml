@@ -5,8 +5,8 @@ name: OCR bench (live Google Lens / Vision)
 # The report is committed to the orphan branch "ocr-bench-results" (no APK is built or released).
 on:
   push:
-    branches: [ "android-app" ]
-    paths: [ "bench/**", ".github/workflows/ocr-bench.yml" ]
+    branches: [ "android-app", "ocr-bench" ]
+    paths: [ "bench/**", ".github/workflows/ocr-bench.yml", "app/src/main/java/com/abdulrahman/hardsubocr/core/**" ]
   workflow_dispatch:
 
 permissions:
