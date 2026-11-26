@@ -510,6 +510,15 @@ object AiRecipe {
     /** Output room per answer, thinking included (Google: never a small limit with thinking on). */
     const val MAX_OUTPUT_TOKENS = 8192
 
+    /**
+     * The room asked for one answer. A subtitle is a few dozen tokens; with «minimal» or «low»
+     * thinking 2048 leaves the model plenty. OpenRouter holds the price of the whole room against the
+     * account while a request runs ("in-flight budget", 402): asking 8192 for every image made a job
+     * with several images at once wait on a modest balance (2.9.0). Medium, high and the model's own
+     * level keep [MAX_OUTPUT_TOKENS].
+     */
+    fun maxTokens(level: String?): Int = if (level == "minimal" || level == "low") 2048 else MAX_OUTPUT_TOKENS
+
     fun thinkingFor(model: String, level: ThinkingLevel): String? {
         val id = model.trim().substringAfterLast('/').lowercase()
         return if (level == ThinkingLevel.MINIMAL && (id.startsWith("gemini-4") || id.startsWith("gemini-3.8"))) "low" else level.api
@@ -808,7 +817,8 @@ class OpenRouterEngine(
             }
         }
         // no temperature / top_p: ignored by current Gemini models (see GeminiEngine.buildBody)
-        put("max_tokens", AiRecipe.MAX_OUTPUT_TOKENS)
+        // room held against the balance while the request runs: what the thinking level needs
+        put("max_tokens", AiRecipe.maxTokens(effort))
         // without it OpenRouter lets the model think at its own default (Gemini 4 Hydrogen: high — far slower)
         effort?.let { e -> putJsonObject("reasoning") { put("effort", e); put("exclude", true) } }
     }.toString()

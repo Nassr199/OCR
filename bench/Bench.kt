@@ -203,9 +203,7 @@ private val AI_VARIANTS = listOf(
     AiVariant("2.8.0", Pic.V26, PROMPT_280, MIN),
     AiVariant("color", Pic.COLOR, PROMPT_280, MIN),
     AiVariant("color framed", Pic.COLOR_FRAMED, PROMPT_280, MIN),
-    AiVariant("gray framed ×1", Pic.V26_FRAMED_NO_UPSCALE, PROMPT_280, MIN),
-    AiVariant("2.8.0 every line", Pic.V26, PROMPT_EVERY_LINE, MIN),
-    AiVariant("2.9.0 draft", Pic.V26_FRAMED, null, MIN),
+    AiVariant("color framed every line", Pic.COLOR_FRAMED, PROMPT_EVERY_LINE, MIN),
 )
 private const val AI_RUNS = 3
 
@@ -306,7 +304,8 @@ fun main(args: Array<String>) = runBlocking {
     val shapes = LinkedHashMap<String, IntArray>()
     /** AI variants: [line left out, «خوليا», dot at a line start, letters wrong, failed] per run. */
     val aiFaults = LinkedHashMap<String, IntArray>()
-    val aiGate = kotlinx.coroutines.sync.Semaphore(4)
+    val aiGate = kotlinx.coroutines.sync.Semaphore(2)
+    val aiUsage = com.abdulrahman.hardsubocr.core.AiUsage()
     /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
     fun shape(name: String, got: String, truth: String): String {
         val s = shapes.getOrPut(name) { IntArray(2) }
@@ -330,7 +329,7 @@ fun main(args: Array<String>) = runBlocking {
         sb.append("## ").append(file).append(" — ").append(o["note"]!!.jsonPrimitive.content).append('\n')
         sb.append("truth: «").append(one(truth)).append("»\n\n")
 
-        if (aiOnly && !file.contains("_roi_") && !file.startsWith("0") && !file.startsWith("25")) { sb.append('\n'); continue }
+        if (aiOnly && !file.contains("_roi_") && !file.startsWith("08") && !file.startsWith("09") && !file.startsWith("25")) continue
         if (!aiOnly) {
         // ---------------------------------------------------------------- Google Lens: one look (raw)
         val body = lensBody(http, png)
@@ -394,9 +393,16 @@ fun main(args: Array<String>) = runBlocking {
                     async(Dispatchers.IO) {
                         aiGate.acquire()
                         try {
-                            val engine = if (label == "gemini") com.abdulrahman.hardsubocr.core.GeminiEngine(http, key, model, v.thinking, promptOverride = v.prompt)
-                            else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, key, model, v.thinking, promptOverride = v.prompt)
-                            Triple(v, n, runCatching { engine.recognize(pics[v.pic]!!) })
+                            val engine = if (label == "gemini") com.abdulrahman.hardsubocr.core.GeminiEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
+                            else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
+                            var r = runCatching { engine.recognize(pics[v.pic]!!) }
+                            var tries = 0
+                            while (tries < 6 && r.exceptionOrNull() is com.abdulrahman.hardsubocr.core.OcrError.Retryable) {
+                                kotlinx.coroutines.delay((r.exceptionOrNull() as com.abdulrahman.hardsubocr.core.OcrError.Retryable).retryAfterMs ?: (2000L shl tries).coerceAtMost(20_000))
+                                tries++
+                                r = runCatching { engine.recognize(pics[v.pic]!!) }
+                            }
+                            Triple(v, n, r)
                         } finally { aiGate.release() }
                     }
                 }.map { it.await() }
@@ -499,6 +505,7 @@ fun main(args: Array<String>) = runBlocking {
         sb.append('\n')
     }
     if (aiFaults.isNotEmpty()) {
+        aiUsage.summary()?.let { sb.append("AI usage of this run: ").append(it).append("\n\n") }
         sb.append("## AI faults (runs)\n\n| variant | line left out | «خوليا» | dot at a line start | letters wrong | failed |\n|---|---|---|---|---|---|\n")
         for ((k, f) in aiFaults) sb.append("| $k | ${f[0]} | ${f[1]} | ${f[2]} | ${f[3]} | ${f[4]} |\n")
         sb.append('\n')
