@@ -1,4 +1,4 @@
-# OCR bench — commit ad066455f2e6f24270f1523c6fbc5723ae2d4790 — 2026-11-26T00:01:00.167626302Z
+# OCR bench — commit 2b2acf4f746c8de49178d127506837ab99ded734 — 2026-11-26T00:12:14.333234477Z
 
 Vision: no VISION_API_KEY secret — Lens only
 
@@ -211,7 +211,8 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
 - Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
     full «هوليا ⏎ - ابتعدي يا جوليزار»
     lines هوليا[0.491,0.530,0.069,0.154 p0] - ابتعدي يا جوليزار[0.497,0.775,0.251,0.179 p1]
-- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+- Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
+    looks: الصورة «هوليا ⏎ - ابتعدي يا جوليزار» | ×2 «- هوليا ⏎ - ابتعدي يا جوليزار» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» → الصورة + شرطة حوار من قراءة أخرى «- هوليا ⏎ - ابتعدي يا جوليزار»
 
 ## 14_dialogue_box_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
 truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
@@ -219,7 +220,8 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
 - Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
     full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ هوليا ⏎ - ابتعدي يا جوليزار ⏎ Kurgu ⏎ Ali Kaya»
     lines Görüntü Yönetmeni[0.140,0.402,0.136,0.075 p0] Selin Aydın[0.142,0.599,0.171,0.169 p1] هوليا[0.491,0.530,0.069,0.154 p2] - ابتعدي يا جوليزار[0.498,0.770,0.250,0.179 p3] Kurgu[0.860,0.412,0.048,0.095 p4] Ali Kaya[0.859,0.594,0.128,0.154 p5]
-- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+- Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
+    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
 ## 15_dialogue_box_thin_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
 truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
@@ -227,7 +229,8 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
 - Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
     full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ هوليا ⏎ - ابتعدي يا جوليزار ⏎ Kurgu ⏎ Ali Kaya»
     lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.143,0.596,0.172,0.164 p1] هوليا[0.492,0.550,0.050,0.144 p2] - ابتعدي يا جوليزار[0.498,0.785,0.193,0.169 p3] Kurgu[0.859,0.419,0.047,0.090 p4] Ali Kaya[0.860,0.594,0.127,0.154 p5]
-- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+- Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
+    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Goruntu Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
 ## 16_dialogue_box_long2_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
 truth: «- ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن»
@@ -252,6 +255,7 @@ truth: «- لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث»
     full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ - لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث ⏎ Kurgu ⏎ Ali Kaya»
     lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.142,0.598,0.171,0.169 p1] - لا أعرف ماذا سأفعل[0.498,0.443,0.293,0.209 p2] بعد كل ما حدث[0.500,0.746,0.200,0.159 p2] Kurgu[0.860,0.416,0.048,0.095 p3] Ali Kaya[0.860,0.595,0.128,0.159 p4]
 - Lens app ✓ shape ✓ «لا أعرف ماذا سأفعل بعد كل ما حدث»
+    looks: الصورة «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » | ×2 «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » | حول الترجمة «- لا أعرف ماذا سأفعل ⏎ eni ⏎ Lin ⏎ بعد كل ما حدث» | شريط الترجمة «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » → الصورة
 
 ## Summary (after the app's classic cleaning; errors = edit distance to the truth)
 
@@ -265,4 +269,4 @@ truth: «- لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث»
 | engine | exact shape |
 |---|---|
 | lens one look | 21/30 |
-| lens app (multi-view) | 24/30 |
+| lens app (multi-view) | 27/30 |
