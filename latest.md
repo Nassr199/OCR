@@ -1,4 +1,4 @@
-# OCR bench — commit 580c6027a1fdfaef281fec038978fa22450f59ed — 2026-11-26T01:31:03.293301910Z
+# OCR bench — commit 1758d631736666b98ffc313e5262f2ab27dbde39 — 2026-11-26T10:54:12.484257133Z
 
 Vision: no VISION_API_KEY secret — Lens only
 AI: not run (needs the secrets and [bench-ai] in the commit message) — the app's exact reading (picture enhanced as in the app, thinking low)
@@ -27,7 +27,7 @@ truth: «حبيبي، هل أنت بخير؟»
 
 - Lens one look ✓ shape ✓ «حبيبي، هل أنت بخير؟» strays 0
     full «Saç Tasarım ⏎ Mustafa Gümüş ⏎ حبيبي، هل أنت بخير؟ ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu»
-    lines Saç Tasarım[0.187,0.413,0.087,0.090 p0] Mustafa Gümüş[0.189,0.652,0.243,0.254 p1] حبيبي، هل أنت بخير؟[0.499,0.663,0.337,0.254 p2] Makyaj Tasarım[0.820,0.413,0.115,0.100 p3] Beste Bayoğlu[0.822,0.602,0.219,0.169 p4]
+    lines Saç Tasarım[0.187,0.413,0.087,0.090 p0] Mustafa Gümüş[0.189,0.652,0.243,0.254 p1] حبيبي، هل أنت بخير؟[0.499,0.663,0.337,0.254 p2] Makyaj Tasarım[0.820,0.413,0.115,0.100 p3] Beste Bayoğlu[0.823,0.602,0.220,0.169 p4]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
       line: «Saç»+sep« »@0.157,0.410,0.027,0.095 «Tasarım»+sep« »@0.201,0.410,0.060,0.095
@@ -38,7 +38,7 @@ truth: «حبيبي، هل أنت بخير؟»
     p3 dir=null lang=null
       line: «Makyaj»+sep« »@0.790,0.413,0.054,0.100 «Tasarım»+sep« »@0.850,0.413,0.057,0.100
     p4 dir=null lang=null
-      line: «Beste»+sep« »@0.755,0.595,0.084,0.184 «Bayoğlu»@0.871,0.595,0.122,0.184
+      line: «Beste»+sep« »@0.755,0.595,0.084,0.184 «Bayoğlu»@0.871,0.595,0.123,0.184
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 01_habibi_credits_bg2.jpg — credits both sides, background variant 2
@@ -49,7 +49,7 @@ truth: «حبيبي، هل أنت بخير؟»
     lines Saç Tasarım[0.187,0.408,0.086,0.090 p0] Mustafa Gümüş[0.187,0.650,0.245,0.259 p1] حبيبي، هل أنت بخير؟[0.500,0.661,0.334,0.259 p2] Makyaj Tasarım[0.820,0.413,0.115,0.100 p3] Beste Bayoğlu[0.822,0.602,0.220,0.169 p4]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Saç»+sep« »@0.158,0.408,0.028,0.090 «Tasarım»+sep« »@0.201,0.408,0.059,0.090
+      line: «Saç»+sep« »@0.158,0.413,0.028,0.100 «Tasarım»+sep« »@0.201,0.413,0.059,0.100
     p1 dir=1 lang=null
       line: «Mustafa»+sep« »@0.129,0.648,0.128,0.259 «Gümüş»+sep« »@0.255,0.653,0.109,0.259
     p2 dir=1 lang=null
@@ -57,7 +57,7 @@ truth: «حبيبي، هل أنت بخير؟»
     p3 dir=null lang=null
       line: «Makyaj»+sep« »@0.789,0.413,0.054,0.100 «Tasarım»+sep« »@0.850,0.413,0.055,0.100
     p4 dir=null lang=null
-      line: «Beste»+sep« »@0.754,0.602,0.085,0.169 «Bayoğlu»@0.871,0.602,0.123,0.169
+      line: «Beste»+sep« »@0.754,0.595,0.085,0.174 «Bayoğlu»@0.871,0.595,0.123,0.174
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 02_habibi_alone.jpg — no credits
@@ -494,7 +494,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.143,0.596,0.172,0.164 p1] هوليا[0.492,0.550,0.050,0.144 p2] - ابتعدي يا جوليزار[0.498,0.785,0.193,0.169 p3] Kurgu[0.859,0.419,0.047,0.090 p4] Ali Kaya[0.860,0.594,0.127,0.154 p5]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Görüntü»+sep« »@0.102,0.403,0.059,0.090 «Yönetmeni»+sep« »@0.171,0.403,0.074,0.090
+      line: «Görüntü»+sep« »@0.102,0.401,0.059,0.075 «Yönetmeni»+sep« »@0.171,0.401,0.074,0.075
     p1 dir=null lang=null
       line: «Selin»+sep« »@0.095,0.595,0.076,0.164 «Aydın»+sep« »@0.186,0.595,0.085,0.164
     p2 dir=1 lang=null
@@ -502,11 +502,11 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     p3 dir=1 lang=null
       line: «-»+sep« »@0.589,0.784,0.010,0.164 «ابتعدي»+sep« »@0.544,0.783,0.066,0.164 «يا»+sep« »@0.497,0.784,0.011,0.164 «جوليزار»+sep« »@0.441,0.786,0.080,0.169
     p4 dir=null lang=null
-      line: «Kurgu»+sep« »@0.859,0.412,0.047,0.095
+      line: «Kurgu»+sep« »@0.859,0.419,0.047,0.090
     p5 dir=null lang=null
-      line: «Ali»+sep« »@0.818,0.591,0.042,0.164 «Kaya»@0.887,0.592,0.072,0.164
+      line: «Ali»+sep« »@0.818,0.593,0.042,0.149 «Kaya»@0.887,0.594,0.072,0.149
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
-    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | شريط الترجمة «Goruntu Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
+    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Goruntu Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
 ## 16_dialogue_box_long2_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
 truth: «- ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن»
