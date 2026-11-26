@@ -1,0 +1,1129 @@
+package com.abdulrahman.hardsubocr.core
+
+/**
+ * SubScan — Arabic-first burned-in subtitle tracker (successor of [SubtitleSegmenter]).
+ *
+ * Why VideoSubFinder struggles with Arabic, and what is done differently here:
+ *
+ *  1. VSF only accepts text that survives an AND of the text masks of `sub_frame_length`
+ *     (8) consecutive frames, then filters it with glyph-shape rules written for separated
+ *     Latin/CJK letters. Thin, connected Arabic strokes and the dots/tashkeel flicker under
+ *     compression, so the intersection erodes them and the line is rejected (missed lines).
+ *     → Here: a two-level (hysteresis) mask keeps weak anti-aliased strokes that touch strong
+ *       ones, persistence is checked against the previous frame only, and a frame is accepted
+ *       as "text" by a line-band test, not by glyph shapes.
+ *
+ *  2. VSF decides "new subtitle" per text line from vertical-edge pixel differences with a
+ *     30 % tolerance. Arabic has few vertical edges and a lot of flickering dots, so the ratio
+ *     crosses 30 % in the middle of a subtitle → one line saved as two images (split).
+ *     → Here: each subtitle keeps a majority-vote reference mask built from all its frames;
+ *       a change needs text *lost from the reference* or *new text outside it* (both jitter
+ *       tolerant), must persist for several frames (hysteresis), and short blanks/flashes or
+ *       false changes are re-joined when the same text comes back (split repair).
+ *
+ *  3. Every subtitle is exported as a multi-frame composite: text pixels are identical in all
+ *     frames while the background moves, so an order statistic across frames suppresses the
+ *     background and keeps the letters (much cleaner input for OCR).
+ */
+enum class SubLang(val code: String) { ARABIC("ar"), ENGLISH("en") }
+
+/** LIGHT = white/yellow/bright text with an outline or shadow (most hard-subs). DARK = dark text on a light band. */
+enum class SubStyle { LIGHT, DARK }
+
+data class ScanParams(
+    val lang: SubLang = SubLang.ARABIC,
+    val style: SubStyle = SubStyle.LIGHT,
+    /** Strong text pixel: brightness and local contrast against its darkest neighbour. */
+    val brightHigh: Int = 150,
+    val contrastHigh: Int = 60,
+    /** Weak text pixel, accepted only when 8-connected to a strong one (thin strokes, fades). */
+    val brightLow: Int = 110,
+    val contrastLow: Int = 38,
+    /** Outline search radius in grid pixels. */
+    val radius: Int = 1,
+    /** Strong pixels must lie on a thin bright stroke: darker pixels on BOTH sides within this radius. */
+    val ridgeRadius: Int = 4,
+    /** Components at least this big are strokes; smaller ones survive only within [attachRadius] of a stroke. */
+    val strokeComponent: Int = 16,
+    val attachRadius: Int = 5,
+    val minTextPixels: Int = 24,
+    val minTextFraction: Double = 0.0006,
+    /** A text line must span at least this fraction of the ROI width. */
+    val minSpanFraction: Double = 0.010,
+    /**
+     * A real subtitle change is TWO-SIDED: text disappears from the reference AND new text appears
+     * (different sentences: both ≈ 0.7). A scene cut behind the same subtitle only shrinks or grows
+     * its mask (one side ≈ 0.5, the other ≈ 0) — that is exactly what makes VSF split one line in two.
+     */
+    val changeBoth: Double = 0.25,
+    /** One-sided change large enough to be a new subtitle anyway. */
+    val changeExtreme: Double = 0.85,
+    /** Same, per text line, both sides (one line of a two-line subtitle replaced). */
+    val bandThreshold: Double = 0.60,
+    /** Persistent one-sided growth (e.g. a second dialogue line appears): the reference is replaced. */
+    val growGain: Double = 0.30,
+    val growConfirmFrames: Int = 8,
+    /** Analysed frames a change must persist before it is accepted. */
+    val confirmFrames: Int = 3,
+    val minDurationMs: Long = 160,
+    /** Fade-in: during this time a fuller version of the same text replaces the reference. */
+    val growWindowMs: Long = 700,
+    /** Re-join pieces of the same subtitle (false splits, flashes, short occlusions). */
+    val repairSplits: Boolean = true,
+    val bridgeMs: Long = 280,
+    /** Frames kept per subtitle for the background-cleaning composite (1 = best frame only). */
+    val compositeFrames: Int = 5,
+    val captureSpacingMs: Long = 200,
+    /** Temporal stability: a pixel is text only if present in [stableNeed] of the last [stableWindow] frames. */
+    val stableWindow: Int = 5,
+    val stableNeed: Int = 4,
+    /** Letters/words closer than this (grid px, horizontally) form one text object. */
+    val wordGap: Int = 6,
+    /** Mean motion energy above which a text-like object is moving scenery, not a subtitle. */
+    val motionLimit: Double = 0.12,
+    /**
+     * A separate block of text appearing next to the current text (a subtitle next to the credits,
+     * «حبيبي» 0.4 s after "Saç Tasarım"), or vanishing while the rest stays, starts a new subtitle
+     * instead of being absorbed as "growth".
+     */
+    val farCut: Boolean = true,
+    /**
+     * When the text around a subtitle disappears and nothing new comes (the credits beside «أبي»
+     * fade out), the part of the subtitle still on screen keeps the state alive instead of turning
+     * into "background" and leaving a hole in the subtitle's time. Everything else is decided
+     * exactly as without it.
+     */
+    val carryText: Boolean = true
+) {
+    /** The 2.1 engine (one-frame persistence, no motion filter) — used by the ensemble. */
+    fun legacy21(): ScanParams = copy(stableWindow = 1, stableNeed = 1, motionLimit = 1.0)
+
+    companion object {
+        /** Tuned defaults per language. [sensitivity] 0..1 scales the change thresholds (0.5 = default). */
+        fun preset(
+            lang: SubLang,
+            style: SubStyle = SubStyle.LIGHT,
+            brightHigh: Int = 150,
+            contrastHigh: Int = 60,
+            repairSplits: Boolean = true,
+            composite: Boolean = true,
+            minDurationMs: Long = 160,
+            changeTolerance: Double? = null
+        ): ScanParams {
+            val bh = brightHigh.coerceIn(60, 250)
+            val ch = contrastHigh.coerceIn(15, 200)
+            val bl = (bh - 40).coerceAtLeast(50)
+            val cl = (ch * 0.63).toInt().coerceAtLeast(10)
+            return when (lang) {
+                // Arabic: dots/tashkeel flicker, cursive strokes → wider tolerance, longer confirmation.
+                SubLang.ARABIC -> ScanParams(
+                    lang, style, bh, ch, bl, cl,
+                    changeBoth = changeTolerance ?: 0.25,
+                    bandThreshold = 0.60,
+                    confirmFrames = 3,
+                    minDurationMs = minDurationMs,
+                    repairSplits = repairSplits,
+                    bridgeMs = 440,
+                    compositeFrames = if (composite) 5 else 1
+                )
+                // Latin: stable vertical strokes → tighter, reacts faster to quick dialogue changes.
+                SubLang.ENGLISH -> ScanParams(
+                    lang, style, bh, ch, bl, cl,
+                    changeBoth = changeTolerance ?: 0.22,
+                    bandThreshold = 0.56,
+                    confirmFrames = 2,
+                    minDurationMs = minDurationMs,
+                    repairSplits = repairSplits,
+                    bridgeMs = 360,
+                    compositeFrames = if (composite) 5 else 1
+                )
+            }
+        }
+    }
+}
+
+// ================================================================================ mask
+
+object ScanMask {
+
+    /** Hysteresis text mask of a luma grid (see class doc, point 1). */
+    fun compute(g: LumaGrid, p: ScanParams): TextMask = fromClasses(classify(g, p), g.width, g.height, p)
+
+    /**
+     * Per-pixel stage (the GPU computes exactly the same bytes, see video/GpuClassifier):
+     * 0 = not text, 1 = weak (bright enough + some contrast), 2 = strong (bright, high contrast,
+     * on a thin stroke).
+     */
+    fun classify(g: LumaGrid, p: ScanParams): ByteArray {
+        val w = g.width
+        val h = g.height
+        val n = w * h
+        val cls = ByteArray(n)
+        if (w < 3 || h < 3) return cls
+        val inv = p.style == SubStyle.DARK
+        val v = IntArray(n)
+        for (i in 0 until n) {
+            val raw = g.data[i].toInt() and 0xFF
+            v[i] = if (inv) 255 - raw else raw
+        }
+        val nmin = minFilter(v, w, h, p.radius.coerceAtLeast(1))
+        for (i in 0 until n) {
+            val c = v[i]
+            if (c < p.brightLow) continue
+            val d = c - nmin[i]
+            if (c >= p.brightHigh && d >= p.contrastHigh && ridge(v, w, h, i, c - p.contrastHigh, p.ridgeRadius)) {
+                cls[i] = 2
+            } else if (d >= p.contrastLow) {
+                cls[i] = 1
+            }
+        }
+        return cls
+    }
+
+    /** Hysteresis (strong pixels grow into 8-connected weak ones) + component filter. */
+    fun fromClasses(cls: ByteArray, w: Int, h: Int, p: ScanParams): TextMask {
+        val n = w * h
+        val bits = BooleanArray(n)
+        if (w < 3 || h < 3) return TextMask(w, h, bits, 0)
+        val queue = IntArray(n)
+        var qh = 0
+        var qt = 0
+        for (i in 0 until n) if (cls[i].toInt() == 2) {
+            bits[i] = true; queue[qt++] = i
+        }
+        while (qh < qt) {
+            val i = queue[qh++]
+            val x = i % w
+            val y = i / w
+            for (dy in -1..1) {
+                val yy = y + dy
+                if (yy < 0 || yy >= h) continue
+                for (dx in -1..1) {
+                    val xx = x + dx
+                    if (xx < 0 || xx >= w) continue
+                    val j = yy * w + xx
+                    if (cls[j].toInt() == 1 && !bits[j]) {
+                        bits[j] = true; queue[qt++] = j
+                    }
+                }
+            }
+        }
+        return componentFilter(bits, w, h, p)
+    }
+
+    /**
+     * Keeps only pixels on subtitle-like text lines: rows standing out above the clutter level,
+     * grouped into bands no taller than 80 % of the region, extended up/down so that tashkeel and
+     * dots stay attached. Applied after old static pixels were removed (see SubtitleTracker.fgSince).
+     */
+    fun lineFilter(m: TextMask, p: ScanParams): TextMask {
+        if (m.count == 0) return m
+        val w = m.width
+        val h = m.height
+        val rows = IntArray(h)
+        var maxRow = 0
+        for (y in 0 until h) {
+            var c = 0
+            val row = y * w
+            for (x in 0 until w) if (m.bits[row + x]) c++
+            rows[y] = c
+            if (c > maxRow) maxRow = c
+        }
+        // robust: clutter raises every row (median), a text line stands out above it
+        val med = rows.sorted()[h / 2]
+        val thr = maxOf(3, med + ((maxRow - med) * 0.15).toInt())
+        val keepRow = BooleanArray(h)
+        var y = 0
+        var any = false
+        while (y < h) {
+            if (rows[y] < thr) { y++; continue }
+            var e = y
+            var last = y
+            while (e + 1 < h && (rows[e + 1] >= thr || (e + 1 - last <= 2 && rows.sliceSum(e + 1, minOf(h - 1, last + 3), thr)))) {
+                e++; if (rows[e] >= thr) last = e
+            }
+            val top = y
+            val bot = last
+            val bh = bot - top + 1
+            var lo = w
+            var hi = -1
+            var c = 0
+            for (yy in top..bot) {
+                val row = yy * w
+                for (x in 0 until w) if (m.bits[row + x]) {
+                    c++; if (x < lo) lo = x; if (x > hi) hi = x
+                }
+            }
+            if (bh >= 2 && bh <= h * 0.8 && c >= p.minTextPixels / 2) {
+                val margin = maxOf(2, (bh * 0.45).toInt())
+                for (yy in maxOf(0, top - margin)..minOf(h - 1, bot + margin)) keepRow[yy] = true
+                any = true
+            }
+            y = bot + 1
+        }
+        if (!any) return TextMask(w, h, BooleanArray(w * h), 0)
+        val out = BooleanArray(w * h)
+        var c = 0
+        for (yy in 0 until h) if (keepRow[yy]) {
+            val row = yy * w
+            for (x in 0 until w) if (m.bits[row + x]) {
+                out[row + x] = true; c++
+            }
+        }
+        return TextMask(w, h, out, c)
+    }
+
+    private fun IntArray.sliceSum(a: Int, b: Int, thr: Int): Boolean {
+        for (i in a..b) if (this[i] >= thr) return true
+        return false
+    }
+
+    /**
+     * Keeps stroke-sized components, and small ones (Arabic dots, tashkeel, Latin i-dots, commas)
+     * only when they sit close to a stroke. Scattered isolated blobs — lit windows, sparkles,
+     * static background texture — are removed.
+     */
+    fun componentFilter(bits: BooleanArray, w: Int, h: Int, p: ScanParams): TextMask {
+        val n = w * h
+        val label = IntArray(n)
+        val sizes = ArrayList<Int>()
+        sizes.add(0)
+        val queue = IntArray(n)
+        for (s0 in 0 until n) {
+            if (!bits[s0] || label[s0] != 0) continue
+            val id = sizes.size
+            var qh = 0
+            var qt = 0
+            queue[qt++] = s0; label[s0] = id
+            while (qh < qt) {
+                val i = queue[qh++]
+                val x = i % w
+                val y = i / w
+                for (dy in -1..1) {
+                    val yy = y + dy
+                    if (yy < 0 || yy >= h) continue
+                    for (dx in -1..1) {
+                        val xx = x + dx
+                        if (xx < 0 || xx >= w) continue
+                        val j = yy * w + xx
+                        if (bits[j] && label[j] == 0) {
+                            label[j] = id; queue[qt++] = j
+                        }
+                    }
+                }
+            }
+            sizes.add(qt)
+        }
+        val big = BooleanArray(n)
+        var bigCount = 0
+        for (i in 0 until n) if (label[i] != 0 && sizes[label[i]] >= p.strokeComponent) {
+            big[i] = true; bigCount++
+        }
+        if (bigCount == 0) return TextMask(w, h, BooleanArray(n), 0)
+        val near = TextMaskOps.dilate(TextMask(w, h, big, bigCount), p.attachRadius)
+        val out = BooleanArray(n)
+        var c = 0
+        for (i in 0 until n) if (bits[i] && (big[i] || near[i])) {
+            out[i] = true; c++
+        }
+        return TextMask(w, h, out, c)
+    }
+
+    /**
+     * Thin-stroke test: a darker pixel (<= [limit]) on both the left and the right, or both above and
+     * below, within [r]. Letter strokes pass; the edge of a big bright area (shirt, wall, sky) does not.
+     */
+    private fun ridge(v: IntArray, w: Int, h: Int, i: Int, limit: Int, r: Int): Boolean {
+        val x = i % w
+        val y = i / w
+        var a = false
+        var b = false
+        for (k in 1..r) {
+            if (!a && x - k >= 0 && v[i - k] <= limit) a = true
+            if (!b && x + k < w && v[i + k] <= limit) b = true
+            if (a && b) return true
+        }
+        a = false; b = false
+        for (k in 1..r) {
+            if (!a && y - k >= 0 && v[i - k * w] <= limit) a = true
+            if (!b && y + k < h && v[i + k * w] <= limit) b = true
+            if (a && b) return true
+        }
+        return false
+    }
+
+    /** Dilation by [rx] horizontally and [ry] vertically (joins the letters/words of one line). */
+    fun dilateXY(a: BooleanArray, w: Int, h: Int, rx: Int, ry: Int): BooleanArray {
+        val tmp = BooleanArray(a.size)
+        for (y in 0 until h) {
+            val row = y * w
+            var last = -100000
+            for (x in 0 until w) {
+                if (a[row + x]) last = x
+                if (x - last <= rx) tmp[row + x] = true
+            }
+            last = 100000
+            for (x in w - 1 downTo 0) {
+                if (a[row + x]) last = x
+                if (last - x <= rx) tmp[row + x] = true
+            }
+        }
+        if (ry <= 0) return tmp
+        val out = BooleanArray(a.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!tmp[y * w + x]) continue
+            for (yy in maxOf(0, y - ry)..minOf(h - 1, y + ry)) out[yy * w + x] = true
+        }
+        return out
+    }
+
+    /** Square min filter (separable, edges clamped). */
+    fun minFilter(v: IntArray, w: Int, h: Int, r: Int): IntArray {
+        val tmp = IntArray(v.size)
+        for (y in 0 until h) {
+            val row = y * w
+            for (x in 0 until w) {
+                var m = 255
+                val a = maxOf(0, x - r)
+                val b = minOf(w - 1, x + r)
+                for (k in a..b) {
+                    val t = v[row + k]; if (t < m) m = t
+                }
+                tmp[row + x] = m
+            }
+        }
+        val out = IntArray(v.size)
+        for (y in 0 until h) {
+            val a = maxOf(0, y - r)
+            val b = minOf(h - 1, y + r)
+            for (x in 0 until w) {
+                var m = 255
+                for (k in a..b) {
+                    val t = tmp[k * w + x]; if (t < m) m = t
+                }
+                out[y * w + x] = m
+            }
+        }
+        return out
+    }
+
+    /** Horizontal text bands: rows with text, gaps of <= [gap] rows bridged (tashkeel sits apart). */
+    fun bands(bits: BooleanArray, w: Int, h: Int, minRow: Int = 2, gap: Int = 2): List<IntArray> {
+        val rows = IntArray(h)
+        for (y in 0 until h) {
+            var c = 0
+            val row = y * w
+            for (x in 0 until w) if (bits[row + x]) c++
+            rows[y] = c
+        }
+        val out = ArrayList<IntArray>()
+        var start = -1
+        var last = -1
+        for (y in 0 until h) {
+            if (rows[y] >= minRow) {
+                if (start < 0) start = y
+                else if (y - last - 1 > gap) {
+                    out.add(intArrayOf(start, last)); start = y
+                }
+                last = y
+            }
+        }
+        if (start >= 0) out.add(intArrayOf(start, last))
+        return out
+    }
+
+    /** "Is there a subtitle line?" — pixel count plus at least one band with a real horizontal extent. */
+    fun isText(m: TextMask, p: ScanParams): Boolean {
+        val need = maxOf(p.minTextPixels, (p.minTextFraction * m.width * m.height).toInt())
+        if (m.count < need) return false
+        val w = m.width
+        val minSpan = maxOf(4, (p.minSpanFraction * w).toInt())
+        for (b in bands(m.bits, w, m.height)) {
+            if (b[1] - b[0] + 1 < 2) continue
+            var lo = w
+            var hi = -1
+            var c = 0
+            for (y in b[0]..b[1]) {
+                val row = y * w
+                for (x in 0 until w) if (m.bits[row + x]) {
+                    c++; if (x < lo) lo = x; if (x > hi) hi = x
+                }
+            }
+            if (hi - lo + 1 >= minSpan && c >= p.minTextPixels / 2) return true
+        }
+        return false
+    }
+}
+
+/** How a frame mask relates to a reference mask. */
+class MaskCmp(val lost: Double, val gained: Double, val bandLost: Double, val bandGained: Double)
+
+object MaskCompare {
+
+    fun compare(
+        ref: BooleanArray, refCount: Int, refDil: BooleanArray,
+        cur: BooleanArray, curCount: Int, curDil: BooleanArray,
+        w: Int, h: Int
+    ): MaskCmp {
+        var lost = 0
+        var gained = 0
+        val n = w * h
+        for (i in 0 until n) {
+            if (ref[i] && !curDil[i]) lost++
+            if (cur[i] && !refDil[i]) gained++
+        }
+        val l = if (refCount == 0) 0.0 else lost.toDouble() / refCount
+        val g = if (curCount == 0) 0.0 else gained.toDouble() / curCount
+        return MaskCmp(l, g, worstBand(ref, refCount, curDil, w, h), worstBand(cur, curCount, refDil, w, h))
+    }
+
+    /** Max over significant text lines of a (fraction of that line not covered by [otherDil]). */
+    private fun worstBand(a: BooleanArray, aCount: Int, otherDil: BooleanArray, w: Int, h: Int): Double {
+        if (aCount == 0) return 0.0
+        var worst = 0.0
+        for (b in ScanMask.bands(a, w, h)) {
+            var tot = 0
+            var miss = 0
+            for (y in b[0]..b[1]) {
+                val row = y * w
+                for (x in 0 until w) {
+                    val i = row + x
+                    if (a[i]) {
+                        tot++; if (!otherDil[i]) miss++
+                    }
+                }
+            }
+            if (tot * 100 < aCount * 15) continue // ignore tiny bands (dots, noise)
+            worst = maxOf(worst, miss.toDouble() / tot)
+        }
+        return worst
+    }
+
+    /** Symmetric distance used for re-joining split pieces (0 identical .. 1 unrelated). */
+    fun distance(a: BooleanArray, aCount: Int, aDil: BooleanArray, b: BooleanArray, bCount: Int, bDil: BooleanArray): Double {
+        if (aCount + bCount == 0) return 0.0
+        var miss = 0
+        for (i in a.indices) {
+            if (a[i] && !bDil[i]) miss++
+            if (b[i] && !aDil[i]) miss++
+        }
+        return miss.toDouble() / (aCount + bCount)
+    }
+}
+
+// ================================================================================ tracker
+
+/**
+ * A finished subtitle: [endUs] is exclusive (first frame without it). [mask] = its stable text mask on
+ * the grid; [x0]..[y1] = bounding box of that mask in grid pixels (inclusive).
+ */
+class ScanSegment(val id: Int, val startUs: Long, val endUs: Long, val mask: TextMask) {
+    val x0: Int
+    val y0: Int
+    val x1: Int
+    val y1: Int
+
+    init {
+        var a = mask.width
+        var b = mask.height
+        var c = -1
+        var d = -1
+        for (i in mask.bits.indices) if (mask.bits[i]) {
+            val x = i % mask.width
+            val y = i / mask.width
+            if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y
+        }
+        if (c < 0) {
+            a = 0; b = 0; c = mask.width - 1; d = mask.height - 1
+        }
+        x0 = a; y0 = b; x1 = c; y1 = d
+    }
+}
+
+/** BEST: replace the best frame. POOL: add to the composite pool. RESTART: drop best+pool, this frame becomes best. */
+enum class CaptureKind { BEST, POOL, RESTART }
+
+class Capture(val segId: Int, val kind: CaptureKind)
+
+class ScanDecision(val captures: List<Capture>, val closed: List<ScanSegment>, val discarded: List<Int>) {
+    companion object {
+        val NONE = ScanDecision(emptyList(), emptyList(), emptyList())
+    }
+}
+
+class SubtitleTracker(private val p: ScanParams) {
+
+    private inner class Seg(val id: Int, var startUs: Long, val isText: Boolean, w: Int, h: Int, val startFrame: Int) {
+        /** frame index at which this state was created (startFrame may be an inherited age baseline) */
+        val createdFrame = frameIdx
+        /**
+         * Set when only the remaining part of the previous subtitle is on screen (it is carried over:
+         * older than [startFrame]). Such a state is judged as a state without text, like before.
+         */
+        var carry: BooleanArray? = null
+        /**
+         * A carried line still on screen when new text replaced the carried state: not part of this
+         * state (nothing is judged with it), but it is the subtitle if this state's own text leaves.
+         */
+        var dormant: BooleanArray? = null
+        var lastUs = startUs
+        var endUs = -1L
+        val counts = if (isText) ShortArray(w * h) else ShortArray(0)
+        var n = 0
+        var stable = BooleanArray(if (isText) w * h else 0)
+        var stableCount = 0
+        var stableDil = BooleanArray(0)
+        var bestScore = Double.NEGATIVE_INFINITY
+        var pool = 0
+        var lastPoolUs = Long.MIN_VALUE / 2
+        var growFrames = 0
+
+        fun reseed(m: TextMask) {
+            java.util.Arrays.fill(counts, 0.toShort())
+            n = 0
+            add(m)
+        }
+
+        fun add(m: TextMask) {
+            if (!isText) return
+            n++
+            for (i in counts.indices) if (m.bits[i] && counts[i] < Short.MAX_VALUE) counts[i]++
+            var c = 0
+            val s = BooleanArray(counts.size)
+            for (i in counts.indices) if (counts[i] * 2 >= n && counts[i] > 0) {
+                s[i] = true; c++
+            }
+            stable = s
+            stableCount = c
+            stableDil = TextMaskOps.dilate(TextMask(m.width, m.height, s, c), DIL)
+        }
+
+        fun mask(w: Int, h: Int) = TextMask(w, h, stable, stableCount)
+    }
+
+    private class Cand(val startUs: Long, val prevUs: Long, var mask: TextMask, var dil: BooleanArray, val isText: Boolean, val startFrame: Int) {
+        var count = 1
+        /** the remaining part of the current subtitle, carried into this state (see [persistentOf]) */
+        var carry: BooleanArray? = null
+        /** with [carry]: the mask without it; every comparison uses this one, as before */
+        var own: TextMask? = null
+        var ownDil: BooleanArray? = null
+    }
+
+    private var current: Seg? = null
+    private var held: Seg? = null
+    private var cand: Cand? = null
+    private var nextId = 1
+    private var prevRawDil: BooleanArray? = null
+    private var firstMismatchUs = -1L
+    private var firstMismatchIdx = -1
+    /** Start of the current run of frames losing the reference (A→B: A vanishes before B is stable). */
+    private var lossRunUs = -1L
+    private var farSinceUs = -1L
+    private var farFrames = 0
+    private var integral = IntArray(0)
+    private var lossRunIdx = -1
+    private var prevPtsUs = -1L
+    private var gw = 0
+    private var gh = 0
+    private var presence = ByteArray(0)
+    private val history = ArrayDeque<BooleanArray>()
+    private val ptsRing = LongArray(64)
+
+    /** Per-pixel motion energy: running average (~25 frames) of "this pixel flipped since the last frame". */
+    private var energy = FloatArray(0)
+    private var lastRaw: BooleanArray? = null
+
+    private fun updateMotion(raw: TextMask) {
+        val n = raw.bits.size
+        if (energy.size != n) energy = FloatArray(n)
+        val prev = lastRaw
+        if (prev != null && prev.size == n) {
+            for (i in 0 until n) energy[i] = energy[i] * 0.96f + if (prev[i] != raw.bits[i]) 0.04f else 0f
+        }
+        lastRaw = raw.bits
+    }
+
+    /**
+     * Removes whole text-like objects whose area keeps changing (teeth while talking, jewellery,
+     * foliage, water): a burned-in subtitle flips its pixels once when it appears and then sits still.
+     */
+    private fun suppressMoving(m: TextMask): TextMask {
+        if (m.count == 0 || p.motionLimit >= 1.0) return m
+        val w = m.width
+        val h = m.height
+        val n = m.bits.size
+        val joined = ScanMask.dilateXY(m.bits, w, h, p.wordGap, 1)
+        val label = IntArray(n)
+        val queue = IntArray(n)
+        val out = m.bits.copyOf()
+        var removed = 0
+        var next = 0
+        for (s0 in 0 until n) {
+            if (!joined[s0] || label[s0] != 0) continue
+            next++
+            var qh = 0
+            var qt = 0
+            queue[qt++] = s0; label[s0] = next
+            var e = 0.0
+            var c = 0
+            while (qh < qt) {
+                val i = queue[qh++]
+                if (m.bits[i]) {
+                    e += energy[i]; c++
+                }
+                val x = i % w
+                val y = i / w
+                for (dy in -1..1) {
+                    val yy = y + dy
+                    if (yy < 0 || yy >= h) continue
+                    for (dx in -1..1) {
+                        val xx = x + dx
+                        if (xx < 0 || xx >= w) continue
+                        val j = yy * w + xx
+                        if (joined[j] && label[j] == 0) {
+                            label[j] = next; queue[qt++] = j
+                        }
+                    }
+                }
+            }
+            if (c > 0 && e / c > p.motionLimit) {
+                for (k in 0 until qt) {
+                    val i = queue[k]
+                    if (out[i]) {
+                        out[i] = false; removed++
+                    }
+                }
+            }
+        }
+        return if (removed == 0) m else TextMask(w, h, out, m.count - removed)
+    }
+
+    private var legacyPrevDil: BooleanArray? = null
+
+    private fun stabilize(raw: TextMask): TextMask {
+        if (p.stableNeed <= 1) {
+            // 2.1 behaviour: one-frame persistence
+            val prev = legacyPrevDil
+            legacyPrevDil = TextMaskOps.dilate(raw, 1)
+            return if (prev != null && prev.size == raw.bits.size) TextMaskOps.intersect(raw, prev) else raw
+        }
+        val n = raw.bits.size
+        if (presence.size != n) {
+            presence = ByteArray(n); history.clear()
+        }
+        for (i in 0 until n) if (raw.bits[i]) presence[i]++
+        history.addLast(raw.bits)
+        if (history.size > p.stableWindow) {
+            val old = history.removeFirst()
+            for (i in 0 until n) if (old[i]) presence[i]--
+        }
+        val need = minOf(p.stableNeed, history.size)
+        val out = BooleanArray(n)
+        var c = 0
+        for (i in 0 until n) if (raw.bits[i] && presence[i] >= need) {
+            out[i] = true; c++
+        }
+        return TextMask(raw.width, raw.height, out, c)
+    }
+
+    /** Text becomes visible in the stable mask (stableNeed - 1) frames after it really appeared. */
+    private fun backDate(us: Long): Long {
+        val lag = p.stableNeed - 1
+        if (lag <= 0 || frameIdx <= lag) return us
+        // ptsRing holds the pts of analysed frames by index; find the frame `lag` before the one at `us`
+        for (k in 0 until minOf(frameIdx, ptsRing.size - lag)) {
+            val idx = frameIdx - 1 - k // 0-based index of an analysed frame
+            if (ptsRing[idx % ptsRing.size] == us && idx - lag >= 0) return ptsRing[(idx - lag) % ptsRing.size]
+        }
+        return us
+    }
+
+    /** Consecutive analysed frames each pixel has been text-like (static background grows old). */
+    private var age = IntArray(0)
+    private var frameIdx = 0
+
+    /** Pixels of [m] that appeared at or after [startFrame] (with slack): background that was already there is ignored. */
+    private fun fgSince(m: TextMask, startFrame: Int, carry: BooleanArray? = null): TextMask {
+        val limit = frameIdx - startFrame + p.confirmFrames + 3
+        val out = BooleanArray(m.bits.size)
+        var c = 0
+        for (i in out.indices) if (m.bits[i] && (age[i] <= limit || (carry != null && carry[i]))) {
+            out[i] = true; c++
+        }
+        return if (c == m.count) m else TextMask(m.width, m.height, out, c)
+    }
+
+    /**
+     * The part of subtitle [s] that has stayed on screen without a break since the state was created
+     * and is still there — only when it stands out as a line: static texture that came with a scene
+     * change (and so got into the state) fills every row of the band about evenly and is not carried.
+     */
+    private fun persistentOf(s: Seg, mAll: TextMask): BooleanArray? {
+        if (!p.carryText || !s.isText || s.carry != null) return null
+        val need = frameIdx - s.createdFrame - 1
+        if (need < 1) return null
+        val d = s.dormant
+        val n = mAll.bits.size
+        val out = BooleanArray(n)
+        val rowsAll = IntArray(gh)
+        val carriedRow = BooleanArray(gh)
+        var c = 0
+        for (i in 0 until n) if (mAll.bits[i] && age[i] >= need) {
+            val y = i / gw
+            rowsAll[y]++
+            if (s.stable[i] || (d != null && d[i])) {
+                out[i] = true; c++; carriedRow[y] = true
+            }
+        }
+        if (c < p.minTextPixels) return null
+        // everything else that stayed on screen as long, row by row: the clutter level of this picture
+        val other = ArrayList<Int>(gh)
+        var sum = 0
+        var rowsIn = 0
+        for (y in 0 until gh) if (carriedRow[y]) {
+            sum += rowsAll[y]; rowsIn++
+        } else other.add(rowsAll[y])
+        val clutter = if (other.size >= 3) other.sorted()[other.size / 2] else 0
+        return if (sum.toDouble() / rowsIn >= 2.0 * clutter + 1) out else null
+    }
+
+    var framesSeen = 0
+        private set
+    var lastMask: TextMask? = null
+        private set
+
+    private fun cmpTo(s: Seg, m: TextMask, mDil: BooleanArray): MaskCmp =
+        MaskCompare.compare(s.stable, s.stableCount, s.stableDil, m.bits, m.count, mDil, gw, gh)
+
+    private fun isChange(c: MaskCmp) =
+        (c.lost >= p.changeBoth && c.gained >= p.changeBoth) ||
+            c.lost >= p.changeExtreme || c.gained >= p.changeExtreme ||
+            (c.bandLost >= p.bandThreshold && c.bandGained >= p.bandThreshold)
+
+    fun push(ptsUs: Long, grid: LumaGrid): ScanDecision = pushRaw(ptsUs, ScanMask.compute(grid, p))
+
+    /**
+     * Same as [push] with the per-frame mask already computed ([ScanMask.compute] is independent per
+     * frame, so the video scanner runs it on all CPU cores and feeds the results here in order).
+     */
+    fun pushRaw(ptsUs: Long, raw: TextMask): ScanDecision {
+        framesSeen++
+        gw = raw.width; gh = raw.height
+        val before = prevPtsUs
+        prevPtsUs = ptsUs
+
+        // Burned-in text sits on the same pixels frame after frame; moving detail (teeth, jewellery,
+        // leaves, lights) does not: keep pixels present in >= stableNeed of the last stableWindow frames.
+        updateMotion(raw)
+        val mAll = suppressMoving(stabilize(raw))
+        ptsRing[frameIdx % ptsRing.size] = ptsUs
+        if (age.size != mAll.bits.size) age = IntArray(mAll.bits.size)
+        for (i in age.indices) age[i] = if (mAll.bits[i]) age[i] + 1 else 0
+        frameIdx++
+        lastMask = mAll
+        // judged against the current state: ignore what was already on screen before it began
+        val m = ScanMask.lineFilter(current?.let { fgSince(mAll, it.startFrame, it.carry) } ?: mAll, p)
+        val text = ScanMask.isText(m, p)
+        val mDil = TextMaskOps.dilate(m, DIL)
+        // a carried state is judged without its carried line, exactly as the state without text it replaces
+        val carried = current?.carry != null
+        val m0 = if (carried) ScanMask.lineFilter(fgSince(mAll, current!!.startFrame), p) else m
+        val m0Dil = if (carried) TextMaskOps.dilate(m0, DIL) else mDil
+
+        val captures = ArrayList<Capture>(2)
+        val closed = ArrayList<ScanSegment>(1)
+        val discarded = ArrayList<Int>(1)
+
+        val cur = current
+        if (cur != null) {
+            val match: Boolean
+            var cmp: MaskCmp? = null
+            var restart = false
+            if (!cur.isText && !text) match = true
+            else if (cur.isText != text) match = false
+            else if (carried) {
+                // only the remaining line is there: it lasts until something new is text (or it leaves)
+                cmp = cmpTo(cur, m, mDil)
+                match = !ScanMask.isText(m0, p)
+            } else {
+                val c = cmpTo(cur, m, mDil)
+                cmp = c
+                val young = ptsUs - cur.startUs <= p.growWindowMs * 1000
+                val far = p.farCut && farChange(cur, m, c)
+                if (far) {
+                    if (farFrames == 0) farSinceUs = ptsUs
+                    farFrames++
+                } else {
+                    farFrames = 0; farSinceUs = -1
+                }
+                val growth = !far && c.lost <= 0.12 && c.gained >= p.growGain && m.count > cur.stableCount * 1.12
+                match = (young && growth) || !isChange(c)
+                if (match && far && farFrames >= p.confirmFrames) {
+                    // a separate text block appeared / vanished while the rest stays: the subtitle changed.
+                    // The new state keeps the same age baseline, so it holds everything still on screen.
+                    val at = farSinceUs
+                    cur.endUs = at
+                    hold(cur, closed, discarded)
+                    val seg = Seg(nextId++, at, true, gw, gh, cur.startFrame)
+                    seg.dormant = cur.dormant
+                    seg.lastUs = ptsUs
+                    seg.add(m)
+                    seg.bestScore = m.count.toDouble()
+                    current = seg
+                    captures.add(Capture(seg.id, CaptureKind.BEST))
+                    cand = null
+                    firstMismatchUs = -1
+                    lossRunUs = -1
+                    farFrames = 0
+                    farSinceUs = -1
+                    expireHeld(ptsUs, closed, discarded)
+                    return ScanDecision(captures, closed, discarded)
+                }
+                if (match) {
+                    cur.growFrames = if (growth) cur.growFrames + 1 else 0
+                    if (growth && (young || cur.growFrames >= p.growConfirmFrames)) {
+                        // fade-in finished / a line was added: the fuller text becomes the reference
+                        cur.reseed(m)
+                        cur.growFrames = 0
+                        restart = true
+                    }
+                }
+            }
+            if (match) {
+                cur.lastUs = ptsUs
+                cand = null
+                firstMismatchUs = -1
+                val lc = cmp
+                if (lc != null && lc.lost >= p.changeBoth) {
+                    if (lossRunUs < 0) {
+                        lossRunUs = ptsUs; lossRunIdx = frameIdx
+                    }
+                } else {
+                    lossRunUs = -1
+                }
+                if (cur.isText && cmp != null) {
+                    if (restart) {
+                        cur.pool = 0
+                        cur.lastPoolUs = Long.MIN_VALUE / 2
+                        cur.bestScore = m.count.toDouble()
+                        captures.add(Capture(cur.id, CaptureKind.RESTART))
+                    } else {
+                        cur.add(m)
+                        planCaptures(cur, ptsUs, m, cmp, captures)
+                    }
+                }
+                expireHeld(ptsUs, closed, discarded)
+                return ScanDecision(captures, closed, discarded)
+            }
+        }
+
+        // ---- mismatch: candidate for a new state
+        if (firstMismatchUs < 0) {
+            firstMismatchUs = ptsUs; firstMismatchIdx = frameIdx
+        }
+        val c0 = cand
+        val c0Mask = c0?.own ?: c0?.mask
+        val c0Dil = c0?.ownDil ?: c0?.dil
+        val sameAsCand = c0 != null && c0.isText == text && (!text ||
+            !isChange(MaskCompare.compare(c0Mask!!.bits, c0Mask.count, c0Dil!!, m0.bits, m0.count, m0Dil, gw, gh)))
+        if (sameAsCand) {
+            c0!!.count++
+            val cm = ScanMask.lineFilter(fgSince(mAll, c0.startFrame), p)
+            if (ScanMask.isText(cm, p) == c0.isText) {
+                if (c0.carry != null) {
+                    c0.own = cm; c0.ownDil = TextMaskOps.dilate(cm, DIL)
+                    val wc = ScanMask.lineFilter(fgSince(mAll, c0.startFrame, c0.carry), p)
+                    c0.mask = wc; c0.dil = TextMaskOps.dilate(wc, DIL)
+                } else {
+                    c0.mask = cm; c0.dil = TextMaskOps.dilate(cm, DIL)
+                }
+            }
+        } else {
+            // a new state starts now: only what appeared in the last few frames belongs to it
+            val cm = if (text) ScanMask.lineFilter(fgSince(mAll, frameIdx), p) else m0
+            val ct = if (text) ScanMask.isText(cm, p) else false
+            val base = if (ct) cm else m0
+            cand = Cand(ptsUs, if (before >= 0) before else ptsUs, base, if (ct) TextMaskOps.dilate(cm, DIL) else m0Dil, text, frameIdx - 1)
+            // nothing new is text, yet part of the current subtitle is still on screen: it stays a
+            // subtitle (before, it became "background" here and the subtitle's time got a hole)
+            val carry = if (text && !ct && cur != null) persistentOf(cur, mAll) else null
+            if (carry != null) {
+                val wc = ScanMask.lineFilter(fgSince(mAll, frameIdx, carry), p)
+                if (ScanMask.isText(wc, p)) {
+                    val cd = cand!!
+                    cd.carry = carry
+                    cd.own = cd.mask; cd.ownDil = cd.dil
+                    cd.mask = wc; cd.dil = TextMaskOps.dilate(wc, DIL)
+                }
+            }
+        }
+        val cc = cand!!
+        if (cur != null && cc.count < p.confirmFrames) {
+            expireHeld(ptsUs, closed, discarded)
+            return ScanDecision(captures, closed, discarded)
+        }
+
+        // ---- accept the new state (start corrected for the stability delay)
+        var start = if (cc.isText && p.stableNeed > 1) backDate(cc.startUs) else cc.prevUs
+        if (cur != null) {
+            var end = minOf(firstMismatchUs, cc.startUs)
+            if (p.stableNeed > 1 && lossRunUs in 0 until end && firstMismatchIdx - lossRunIdx <= p.stableNeed) end = lossRunUs
+            cur.endUs = end
+            if (cur.isText) {
+                // after a carried state the next one starts where it would after a state without text
+                if (cur.carry != null) cur.endUs = minOf(end, start) else start = maxOf(start, end)
+                hold(cur, closed, discarded)
+            }
+        }
+        current = null
+        cand = null
+        firstMismatchUs = -1
+        lossRunUs = -1
+
+        if (cc.isText) {
+            val h = held
+            val om = cc.own ?: cc.mask
+            val oDil = cc.ownDil ?: cc.dil
+            if (p.repairSplits && h != null && backDate(cc.startUs) - h.endUs <= p.bridgeMs * 1000 &&
+                !isChange(MaskCompare.compare(h.stable, h.stableCount, h.stableDil, om.bits, om.count, oDil, gw, gh))
+            ) {
+                // Same subtitle again after a flash / short blank / false change: continue it.
+                held = null
+                h.endUs = -1
+                h.lastUs = ptsUs
+                h.add(om)
+                current = h
+                planCaptures(h, ptsUs, om, cmpTo(h, om, oDil), captures)
+                return ScanDecision(captures, closed, discarded)
+            }
+            val seg = Seg(nextId++, start, true, gw, gh, cc.startFrame)
+            seg.carry = cc.carry
+            if (cc.carry == null && cur != null) seg.dormant = cur.carry ?: cur.dormant
+            seg.lastUs = ptsUs
+            seg.add(cc.mask)
+            current = seg
+            seg.bestScore = cc.mask.count.toDouble()
+            captures.add(Capture(seg.id, CaptureKind.BEST))
+        } else {
+            current = Seg(nextId++, start, false, gw, gh, cc.startFrame)
+        }
+        expireHeld(ptsUs, closed, discarded)
+        return ScanDecision(captures, closed, discarded)
+    }
+
+    /**
+     * True when a block of text at least [minFar] pixels big appeared farther than r from all the
+     * current text (or such a block of the current text vanished while something stays). Fade-in
+     * (new pixels next to the existing strokes) is never "far".
+     */
+    private fun farChange(s: Seg, m: TextMask, c: MaskCmp): Boolean {
+        if (!s.isText || (c.gained < 0.02 && c.lost < 0.02)) return false
+        if (frameIdx - s.startFrame <= 3 || s.n < 3) return false
+        val minFar = maxOf(p.minTextPixels * 2, (0.05 * maxOf(s.stableCount, m.count)).toInt())
+        if (s.stableCount < minFar) return false
+        val r = maxOf(2, gh / 40)
+        if (farCount(m.bits, s.stable, r, minFar) >= minFar) return true
+        return m.count >= minFar && farCount(s.stable, m.bits, r, minFar) >= minFar
+    }
+
+    /** Pixels of [a] with no pixel of [b] within [r] (square window); stops counting at [stopAt]. */
+    private fun farCount(a: BooleanArray, b: BooleanArray, r: Int, stopAt: Int): Int {
+        val w = gw
+        val h = gh
+        val stride = w + 1
+        if (integral.size != stride * (h + 1)) integral = IntArray(stride * (h + 1))
+        val ii = integral
+        for (y in 0 until h) {
+            var run = 0
+            val row = y * w
+            val o = (y + 1) * stride
+            for (x in 0 until w) {
+                if (b[row + x]) run++
+                ii[o + x + 1] = ii[o - stride + x + 1] + run
+            }
+        }
+        var n = 0
+        for (y in 0 until h) {
+            val y0 = maxOf(0, y - r)
+            val y1 = minOf(h, y + r + 1)
+            val row = y * w
+            for (x in 0 until w) {
+                if (!a[row + x] || b[row + x]) continue
+                val x0 = maxOf(0, x - r)
+                val x1 = minOf(w, x + r + 1)
+                val sum = ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0]
+                if (sum == 0) {
+                    n++
+                    if (n >= stopAt) return n
+                }
+            }
+        }
+        return n
+    }
+
+    private fun planCaptures(s: Seg, ptsUs: Long, m: TextMask, c: MaskCmp, out: MutableList<Capture>) {
+        // quality = text that agrees with the reference minus text that does not
+        val score = m.count * (1.0 - 2.0 * c.gained) - s.stableCount * c.lost
+        if (score > s.bestScore * 1.04 + 1) {
+            s.bestScore = score
+            out.add(Capture(s.id, CaptureKind.BEST))
+        }
+        if (p.compositeFrames > 1 && s.pool < p.compositeFrames && c.lost <= 0.15 && c.gained <= 0.15 &&
+            ptsUs - s.lastPoolUs >= p.captureSpacingMs * 1000
+        ) {
+            s.pool++
+            s.lastPoolUs = ptsUs
+            out.add(Capture(s.id, CaptureKind.POOL))
+        }
+    }
+
+    private fun hold(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        val h = held
+        if (h != null) emit(h, closed, discarded)
+        if (p.repairSplits) held = s else {
+            held = null; emit(s, closed, discarded)
+        }
+    }
+
+    private fun expireHeld(ptsUs: Long, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        val h = held ?: return
+        if (ptsUs - h.endUs > p.bridgeMs * 1000) {
+            held = null
+            emit(h, closed, discarded)
+        }
+    }
+
+    private fun emit(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        if (s.endUs - s.startUs >= p.minDurationMs * 1000 && s.stableCount > 0) {
+            closed.add(ScanSegment(s.id, s.startUs, s.endUs, s.mask(gw, gh)))
+        } else discarded.add(s.id)
+    }
+
+    /** Call once after the last frame. [endUs] = pts of the last frame + one frame. */
+    fun finish(endUs: Long): ScanDecision {
+        val closed = ArrayList<ScanSegment>(2)
+        val discarded = ArrayList<Int>(1)
+        val cur = current
+        current = null
+        cand = null
+        if (cur != null && cur.isText) {
+            cur.endUs = if (firstMismatchUs >= 0) firstMismatchUs else endUs
+            val h = held
+            held = null
+            if (h != null) emit(h, closed, discarded)
+            emit(cur, closed, discarded)
+        } else {
+            val h = held
+            held = null
+            if (h != null) emit(h, closed, discarded)
+        }
+        firstMismatchUs = -1
+        return ScanDecision(emptyList(), closed, discarded)
+    }
+
+    private companion object {
+        /** Burned-in text does not move: pixel-exact comparison separates different sentences best. */
+        const val DIL = 0
+    }
+}

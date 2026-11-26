@@ -1,0 +1,93 @@
+End-to-end SRT benchmark (final lines after reading + 'merge splits'), synthetic hard-sub videos.
+OCR is simulated: SubScan composites keep a line only if it is on >= 3 of 5 frames spread over the piece; 2.0 = middle frame;
+2.1's best frame = most text pixels. NOISE = share of reads garbled (~70% alike) and the same share reading nothing.
+found = a line with the right text overlaps the subtitle; correct = and time IoU >= 0.5; wrong = line whose text matches no subtitle there; dup = extra lines for one subtitle.
+ar6 = credits that appear before a subtitle and stay after it (the user's «أبي» / «حبيبي» scene).
+
+######## NOISE 0
+=== ar  (56 subtitles)
+  2.0 alone                  lines found  78.6%  correct(IoU>=.5)  62.5%  missing 12  wrong  0  dup  6  mean err 3.81 f  OCR 54
+  2.1 alone                  lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.21 f  OCR 57
+  2.2 alone                  lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.23 f  OCR 57
+  2.3 voting (shipped)       lines found  94.6%  correct(IoU>=.5)  92.9%  missing  3  wrong  0  dup  0  mean err 0.69 f  OCR 60
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.21 f  OCR 87
+=== ar2  (56 subtitles)
+  2.0 alone                  lines found  71.4%  correct(IoU>=.5)  48.2%  missing 16  wrong  0  dup  9  mean err 1.37 f  OCR 54
+  2.1 alone                  lines found  92.9%  correct(IoU>=.5)  89.3%  missing  4  wrong  0  dup  0  mean err 0.30 f  OCR 57
+  2.2 alone                  lines found  94.6%  correct(IoU>=.5)  94.6%  missing  3  wrong  0  dup  0  mean err 0.32 f  OCR 55
+  2.3 voting (shipped)       lines found  89.3%  correct(IoU>=.5)  87.5%  missing  6  wrong  2  dup  0  mean err 0.53 f  OCR 57
+  2.4 arbiter (2.1 base)     lines found  98.2%  correct(IoU>=.5)  98.2%  missing  1  wrong  1  dup  0  mean err 0.34 f  OCR 99
+=== ar3  (39 subtitles)
+  2.0 alone                  lines found  94.9%  correct(IoU>=.5)  84.6%  missing  2  wrong  0  dup  0  mean err 4.59 f  OCR 45
+  2.1 alone                  lines found  94.9%  correct(IoU>=.5)  92.3%  missing  2  wrong  0  dup  0  mean err 2.10 f  OCR 48
+  2.2 alone                  lines found  94.9%  correct(IoU>=.5)  92.3%  missing  2  wrong  0  dup  0  mean err 1.89 f  OCR 43
+  2.3 voting (shipped)       lines found  97.4%  correct(IoU>=.5)  97.4%  missing  1  wrong  0  dup  0  mean err 2.29 f  OCR 47
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5)  97.4%  missing  0  wrong  0  dup  1  mean err 2.51 f  OCR 90
+=== ar4  (39 subtitles)
+  2.0 alone                  lines found  92.3%  correct(IoU>=.5)  79.5%  missing  3  wrong  0  dup  2  mean err 7.05 f  OCR 68
+  2.1 alone                  lines found 100.0%  correct(IoU>=.5)  74.4%  missing  0  wrong  0  dup 19  mean err 3.98 f  OCR 98
+  2.2 alone                  lines found  94.9%  correct(IoU>=.5)  89.7%  missing  2  wrong  0  dup  4  mean err 3.20 f  OCR 56
+  2.3 voting (shipped)       lines found  97.4%  correct(IoU>=.5)  94.9%  missing  1  wrong  1  dup  3  mean err 2.55 f  OCR 90
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5)  94.9%  missing  0  wrong  0  dup  1  mean err 2.84 f  OCR 188
+=== ar5  (39 subtitles)
+  2.0 alone                  lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  1  mean err 2.01 f  OCR 67
+  2.1 alone                  lines found 100.0%  correct(IoU>=.5)  89.7%  missing  0  wrong  0  dup 13  mean err 1.13 f  OCR 89
+  2.2 alone                  lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  2  mean err 1.28 f  OCR 59
+  2.3 voting (shipped)       lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  1  dup  0  mean err 0.69 f  OCR 71
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.83 f  OCR 177
+=== ar6  (39 subtitles)
+  2.0 alone                  lines found  89.7%  correct(IoU>=.5)  76.9%  missing  4  wrong  0  dup  0  mean err 14.73 f  OCR 36
+  2.1 alone                  lines found  84.6%  correct(IoU>=.5)  82.1%  missing  6  wrong  0  dup  1  mean err 8.00 f  OCR 53
+  2.2 alone                  lines found  82.1%  correct(IoU>=.5)  79.5%  missing  7  wrong  0  dup  2  mean err 6.16 f  OCR 54
+  2.3 voting (shipped)       lines found  92.3%  correct(IoU>=.5)  92.3%  missing  3  wrong  1  dup  0  mean err 7.90 f  OCR 55
+  2.4 arbiter (2.1 base)     lines found  97.4%  correct(IoU>=.5)  94.9%  missing  1  wrong  0  dup  1  mean err 7.35 f  OCR 126
+=== en  (48 subtitles)
+  2.0 alone                  lines found  75.0%  correct(IoU>=.5)  64.6%  missing 12  wrong  0  dup  3  mean err 3.92 f  OCR 39
+  2.1 alone                  lines found 100.0%  correct(IoU>=.5)  97.9%  missing  0  wrong  0  dup  0  mean err 0.19 f  OCR 50
+  2.2 alone                  lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.26 f  OCR 49
+  2.3 voting (shipped)       lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  1  dup  0  mean err 0.45 f  OCR 53
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.22 f  OCR 65
+
+######## NOISE 0.05
+=== ar  (56 subtitles)
+  2.0 alone                  lines found  69.6%  correct(IoU>=.5)  57.1%  missing 17  wrong  6  dup  3  mean err 4.08 f  OCR 54
+  2.1 alone                  lines found  89.3%  correct(IoU>=.5)  89.3%  missing  6  wrong  1  dup  0  mean err 0.21 f  OCR 57
+  2.2 alone                  lines found  89.3%  correct(IoU>=.5)  89.3%  missing  6  wrong  2  dup  0  mean err 0.23 f  OCR 57
+  2.3 voting (shipped)       lines found  82.1%  correct(IoU>=.5)  82.1%  missing 10  wrong  3  dup  0  mean err 0.74 f  OCR 60
+  2.4 arbiter (2.1 base)     lines found  92.9%  correct(IoU>=.5)  92.9%  missing  4  wrong  4  dup  0  mean err 0.87 f  OCR 100
+=== ar2  (56 subtitles)
+  2.0 alone                  lines found  66.1%  correct(IoU>=.5)  42.9%  missing 19  wrong  1  dup  7  mean err 1.33 f  OCR 54
+  2.1 alone                  lines found  85.7%  correct(IoU>=.5)  82.1%  missing  8  wrong  2  dup  0  mean err 0.33 f  OCR 57
+  2.2 alone                  lines found  82.1%  correct(IoU>=.5)  82.1%  missing 10  wrong  4  dup  0  mean err 0.33 f  OCR 55
+  2.3 voting (shipped)       lines found  78.6%  correct(IoU>=.5)  76.8%  missing 12  wrong  5  dup  0  mean err 0.57 f  OCR 57
+  2.4 arbiter (2.1 base)     lines found  92.9%  correct(IoU>=.5)  89.3%  missing  4  wrong  3  dup  0  mean err 0.37 f  OCR 104
+=== ar3  (39 subtitles)
+  2.0 alone                  lines found  92.3%  correct(IoU>=.5)  82.1%  missing  3  wrong  2  dup  0  mean err 4.47 f  OCR 45
+  2.1 alone                  lines found  89.7%  correct(IoU>=.5)  84.6%  missing  4  wrong  1  dup  0  mean err 1.76 f  OCR 48
+  2.2 alone                  lines found  89.7%  correct(IoU>=.5)  87.2%  missing  4  wrong  0  dup  0  mean err 2.00 f  OCR 43
+  2.3 voting (shipped)       lines found  92.3%  correct(IoU>=.5)  89.7%  missing  3  wrong  1  dup  0  mean err 2.01 f  OCR 47
+  2.4 arbiter (2.1 base)     lines found 100.0%  correct(IoU>=.5)  94.9%  missing  0  wrong  1  dup  1  mean err 2.14 f  OCR 95
+=== ar4  (39 subtitles)
+  2.0 alone                  lines found  87.2%  correct(IoU>=.5)  71.8%  missing  5  wrong  0  dup  3  mean err 7.34 f  OCR 68
+  2.1 alone                  lines found  94.9%  correct(IoU>=.5)  69.2%  missing  2  wrong  0  dup 17  mean err 4.26 f  OCR 98
+  2.2 alone                  lines found  84.6%  correct(IoU>=.5)  76.9%  missing  6  wrong  3  dup  4  mean err 3.15 f  OCR 56
+  2.3 voting (shipped)       lines found  89.7%  correct(IoU>=.5)  82.1%  missing  4  wrong  4  dup  2  mean err 2.56 f  OCR 90
+  2.4 arbiter (2.1 base)     lines found  97.4%  correct(IoU>=.5)  92.3%  missing  1  wrong  3  dup  4  mean err 3.78 f  OCR 196
+=== ar5  (39 subtitles)
+  2.0 alone                  lines found  92.3%  correct(IoU>=.5)  89.7%  missing  3  wrong  3  dup  1  mean err 1.69 f  OCR 67
+  2.1 alone                  lines found  94.9%  correct(IoU>=.5)  84.6%  missing  2  wrong  2  dup 11  mean err 1.18 f  OCR 89
+  2.2 alone                  lines found  97.4%  correct(IoU>=.5)  97.4%  missing  1  wrong  1  dup  1  mean err 1.32 f  OCR 59
+  2.3 voting (shipped)       lines found  94.9%  correct(IoU>=.5)  94.9%  missing  2  wrong  3  dup  0  mean err 0.47 f  OCR 71
+  2.4 arbiter (2.1 base)     lines found  94.9%  correct(IoU>=.5)  92.3%  missing  2  wrong  3  dup  0  mean err 0.71 f  OCR 180
+=== ar6  (39 subtitles)
+  2.0 alone                  lines found  82.1%  correct(IoU>=.5)  71.8%  missing  7  wrong  0  dup  0  mean err 15.32 f  OCR 36
+  2.1 alone                  lines found  84.6%  correct(IoU>=.5)  82.1%  missing  6  wrong  0  dup  1  mean err 8.00 f  OCR 53
+  2.2 alone                  lines found  76.9%  correct(IoU>=.5)  74.4%  missing  9  wrong  0  dup  2  mean err 6.16 f  OCR 54
+  2.3 voting (shipped)       lines found  84.6%  correct(IoU>=.5)  84.6%  missing  6  wrong  1  dup  0  mean err 7.94 f  OCR 55
+  2.4 arbiter (2.1 base)     lines found  94.9%  correct(IoU>=.5)  92.3%  missing  2  wrong  0  dup  1  mean err 7.38 f  OCR 126
+=== en  (48 subtitles)
+  2.0 alone                  lines found  72.9%  correct(IoU>=.5)  62.5%  missing 13  wrong  1  dup  3  mean err 3.38 f  OCR 39
+  2.1 alone                  lines found  93.8%  correct(IoU>=.5)  91.7%  missing  3  wrong  3  dup  0  mean err 0.18 f  OCR 50
+  2.2 alone                  lines found  93.8%  correct(IoU>=.5)  93.8%  missing  3  wrong  3  dup  0  mean err 0.23 f  OCR 49
+  2.3 voting (shipped)       lines found  93.8%  correct(IoU>=.5)  93.8%  missing  3  wrong  4  dup  0  mean err 0.44 f  OCR 53
+  2.4 arbiter (2.1 base)     lines found  93.8%  correct(IoU>=.5)  93.8%  missing  3  wrong  3  dup  0  mean err 0.21 f  OCR 65

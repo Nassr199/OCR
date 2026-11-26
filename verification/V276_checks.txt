@@ -1,0 +1,27 @@
+2.7.6 — checks
+
+1) Live Google Lens (GitHub Actions, workflow ocr-bench.yml, report in branch ocr-bench-results):
+   19 synthetic crops shaped like the real ones (1230x201, white Arabic in a black box, Latin crew
+   credits on the same rows). Copy of the run: classic/lens_bench_live.md
+     Lens, one look (old path)          14/19 exact, CER 6.9 %
+     Lens, the app (multi-view + vote)  17/19 exact, CER 2.5 %
+   No picture read right by one look was read wrong by the app.
+   Measured failures of one look: a short subtitle in a small box over credits missed («أبي», «حسنًا»)
+   or clipped («أبي» → «بي», «أمي» → «ي»), and credit letters hidden by the box read as phantom
+   letters («- لماذا؟ و»).
+
+2) classic/ClassicTest.kt (JVM, offline): key / extends / vote on the live cases, background
+   fragments dropped, reading order in pixels (1230x201), plan of the looks, LensEngine with a fake
+   server (missed word found by the looks, a clear sentence read once, English never gets the Arabic
+   looks, failing looks leave the first reading, cache id).                         ALL PASSED
+
+3) cache/CacheTest.kt: resume memory per engine, forget after a finished Lens/Vision job, Gemini's
+   readings kept, nothing written after forget, empty file deleted.                ALL PASSED
+
+4) vision/VisionTest.kt: model field only when chosen; Google refusing the model (HTTP 400 or the
+   image's INVALID_ARGUMENT) → the same image again with the default model, and every later image;
+   another 400 is not taken for a refusal; report names the model; cache ids.       ALL PASSED
+
+5) Unchanged and still passing: CoreTest (11,432 vectors, 0 diffs), Core26Test (9,898 vectors),
+   MergeTest, PipeTest, ApiTest (Gemini/OpenRouter untouched), LensTest, lens/LensOrderTest,
+   vision/FocusTest, vision/LayoutTest (+ fuzz, same numbers as 2.7.5).

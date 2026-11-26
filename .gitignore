@@ -1,0 +1,14 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# built in CI (native/build_android.sh)
+app/src/main/jniLibs/
+native/classify.spv.inc
