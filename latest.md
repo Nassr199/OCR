@@ -1,4 +1,4 @@
-# OCR bench — commit 5e295448df7f4e135285703050701c1b6a6631f2 — 2026-11-23T23:14:43.290008897Z
+# OCR bench — commit ad066455f2e6f24270f1523c6fbc5723ae2d4790 — 2026-11-26T00:01:00.167626302Z
 
 Vision: no VISION_API_KEY secret — Lens only
 
@@ -205,16 +205,64 @@ truth: «- هل أنت بخير؟ ⏎ - نعم، أنا بخير»
     lines - هل أنت بخير؟[0.500,0.396,0.268,0.239 p0] - نعم، أنا بخير[0.497,0.679,0.248,0.257 p1]
 - Lens app ✓ shape ✓ «هل أنت بخير؟ نعم، أنا بخير»
 
+## 13_dialogue_box.jpg — two-line subtitle in the box, second line wider
+truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
+
+- Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
+    full «هوليا ⏎ - ابتعدي يا جوليزار»
+    lines هوليا[0.491,0.530,0.069,0.154 p0] - ابتعدي يا جوليزار[0.497,0.775,0.251,0.179 p1]
+- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+
+## 14_dialogue_box_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
+truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
+
+- Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
+    full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ هوليا ⏎ - ابتعدي يا جوليزار ⏎ Kurgu ⏎ Ali Kaya»
+    lines Görüntü Yönetmeni[0.140,0.402,0.136,0.075 p0] Selin Aydın[0.142,0.599,0.171,0.169 p1] هوليا[0.491,0.530,0.069,0.154 p2] - ابتعدي يا جوليزار[0.498,0.770,0.250,0.179 p3] Kurgu[0.860,0.412,0.048,0.095 p4] Ali Kaya[0.859,0.594,0.128,0.154 p5]
+- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+
+## 15_dialogue_box_thin_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
+truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
+
+- Lens one look ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار» strays 0
+    full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ هوليا ⏎ - ابتعدي يا جوليزار ⏎ Kurgu ⏎ Ali Kaya»
+    lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.143,0.596,0.172,0.164 p1] هوليا[0.492,0.550,0.050,0.144 p2] - ابتعدي يا جوليزار[0.498,0.785,0.193,0.169 p3] Kurgu[0.859,0.419,0.047,0.090 p4] Ali Kaya[0.860,0.594,0.127,0.154 p5]
+- Lens app ✓ shape ✗ «هوليا ⏎ - ابتعدي يا جوليزار» «هوليا ابتعدي يا جوليزار»
+
+## 16_dialogue_box_long2_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
+truth: «- ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن»
+
+- Lens one look ✓ shape ✓ «ماذا؟ لا شيء، عودي إلى البيت الآن» strays 0
+    full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ - ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن ⏎ Kurgu ⏎ Ali Kaya»
+    lines Görüntü Yönetmeni[0.140,0.402,0.136,0.075 p0] Selin Aydın[0.143,0.597,0.172,0.164 p1] - ماذا؟[0.500,0.475,0.089,0.134 p2] - لا شيء، عودي إلى البيت الآن[0.500,0.752,0.415,0.194 p3] Kurgu[0.860,0.414,0.048,0.090 p4] Ali Kaya[0.860,0.600,0.127,0.164 p5]
+- Lens app ✓ shape ✓ «ماذا؟ لا شيء، عودي إلى البيت الآن»
+
+## 17_dialogue_box_nospace_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
+truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
+
+- Lens one look ✓ shape ✓ «هوليا ابتعدي يا جوليزار» strays 0
+    full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ -هوليا ⏎ -ابتعدي يا جوليزار ⏎ Kurgu ⏎ Ali Kaya»
+    lines Görüntü Yönetmeni[0.140,0.402,0.136,0.075 p0] Selin Aydın[0.142,0.601,0.172,0.164 p1] -هوليا[0.501,0.522,0.080,0.179 p2] -ابتعدي يا جوليزار[0.498,0.770,0.242,0.179 p2] Kurgu[0.860,0.414,0.048,0.090 p3] Ali Kaya[0.860,0.598,0.127,0.164 p4]
+- Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
+
+## 18_one_speaker_wrap_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
+truth: «- لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث»
+
+- Lens one look ✓ shape ✓ «لا أعرف ماذا سأفعل بعد كل ما حدث» strays 0
+    full «Görüntü Yönetmeni ⏎ Selin Aydın ⏎ - لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث ⏎ Kurgu ⏎ Ali Kaya»
+    lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.142,0.598,0.171,0.169 p1] - لا أعرف ماذا سأفعل[0.498,0.443,0.293,0.209 p2] بعد كل ما حدث[0.500,0.746,0.200,0.159 p2] Kurgu[0.860,0.416,0.048,0.095 p3] Ali Kaya[0.860,0.595,0.128,0.159 p4]
+- Lens app ✓ shape ✓ «لا أعرف ماذا سأفعل بعد كل ما حدث»
+
 ## Summary (after the app's classic cleaning; errors = edit distance to the truth)
 
 | engine | exact | char errors | CER |
 |---|---|---|---|
-| lens one look | 19/24 | 14 | 4.7% |
-| lens app (multi-view) | 22/24 | 5 | 1.7% |
+| lens one look | 25/30 | 14 | 3.1% |
+| lens app (multi-view) | 28/30 | 5 | 1.1% |
 
 ## Shape kept (lines, dialogue dashes, punctuation — after the app's Lens/Vision cleaning)
 
 | engine | exact shape |
 |---|---|
-| lens one look | 18/24 |
-| lens app (multi-view) | 21/24 |
+| lens one look | 21/30 |
+| lens app (multi-view) | 24/30 |
