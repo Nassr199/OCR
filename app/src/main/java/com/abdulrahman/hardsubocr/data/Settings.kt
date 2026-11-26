@@ -300,11 +300,6 @@ class Settings(context: Context) {
      */
     fun enhanceFor(kind: EngineKind): Boolean = !kind.isClassicOcr
 
-    /** Gemini/OpenRouter: Google Lens reads the picture again when the AI repeats a word or is cut ([AiCheck]). */
-    var aiLensCheck: Boolean
-        get() = sp.getBoolean("ai_lens_check", true)
-        set(v) = putBool("ai_lens_check", v)
-
     fun stabilizeFor(kind: EngineKind): Boolean = !kind.isClassicOcr && subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
         (profileFor(kind)?.stabilize ?: false)
 

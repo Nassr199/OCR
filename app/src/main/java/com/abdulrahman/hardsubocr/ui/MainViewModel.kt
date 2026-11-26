@@ -350,16 +350,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EngineKind.LENS, EngineKind.VISION -> emptyList()
     }
 
-    /** The same text form for Gemini and OpenRouter. */
-    /** Gemini/OpenRouter: Google Lens reads the picture again when the AI repeats a word or is cut. */
-    var aiLensCheck by mutableStateOf(s.aiLensCheck)
-        private set
-
-    fun chooseAiLensCheck(on: Boolean) {
-        aiLensCheck = on; s.aiLensCheck = on
-    }
-
-
     fun dismissErrorReport() {
         lastErrorReport = null; s.lastErrorReport = null
     }
@@ -667,8 +657,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             profile = s.profileFor(e),
             enhance = s.enhanceFor(e),
             mediaHigh = true,
-            stabilize = s.stabilizeFor(e),
-            aiLensCheck = aiLensCheck
+            stabilize = s.stabilizeFor(e)
         )
         JobManager.start(ctx, req)
     }

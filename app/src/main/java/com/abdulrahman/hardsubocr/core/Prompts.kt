@@ -107,22 +107,26 @@ object Prompts {
 
     /** OCR_SYSTEM_PROMPT of ocr_windows_v2.6.py (single-pass conservative OCR, diacritics optional). */
     /**
-     * The AI engines' prompt (2.8.0): ocr_windows_v2.6.py's OCR_SYSTEM_PROMPT ([GEMINI_V26_PROMPT]) with
-     * two lines changed for faults seen on the user's frames — nothing else touched:
-     * - watermarks: a website, channel or watermark name is not dialogue even in Arabic and next to
-     *   the subtitle (v2.6 named watermarks but not Arabic ones);
-     * - repeats: «بخير بخير أجل أنا بخير» was read with a third «بخير» (models miscount repeated words).
+     * The AI engines' prompt: ocr_windows_v2.6.py's OCR_SYSTEM_PROMPT ([GEMINI_V26_PROMPT]) with lines
+     * added for faults seen on the user's frames — nothing else touched:
+     * - watermarks (2.8.0): a website, channel or watermark name is not dialogue even in Arabic and next
+     *   to the subtitle (v2.6 named watermarks but not Arabic ones);
+     * - repeats (2.8.0): «بخير بخير أجل أنا بخير» was read with a third «بخير»;
+     * - every line (2.9.0): v2.6 asked for "only the main" dialogue, and «- هوليا» above «- ابتعدي يا
+     *   جوليزار» was left out;
+     * - names (2.9.0): «هوليا» was written «خوليا», a more familiar name;
+     * - punctuation (2.9.0): «هوليا. ساعدوني» came back with a dot added at the start of the line.
      */
     const val SUBTITLE_PROMPT: String =
         "You are performing ULTRA-PRECISE Optical Character Recognition (OCR) on Arabic subtitle images.\n" +
         "This is PURE PIXEL EXTRACTION - you are a high-precision scanner, NOT an editor or interpreter.\n" +
         "\n" +
         "CRITICAL RULES:\n" +
-        "- Extract only the main Arabic subtitle dialogue.\n" +
+        "- Extract the Arabic subtitle dialogue: every one of its lines, top to bottom, including a short line such as a single name.\n" +
         "- Ignore watermarks, logos, channel names, static overlays, and all non-Arabic text. A website, channel or watermark name is never subtitle dialogue, even when it is written in Arabic or placed near the subtitle.\n" +
-        "- Read the base Arabic letters first. Never invent or repair letters.\n" +
+        "- Read the base Arabic letters first. Never invent or repair letters. Copy names letter by letter as they are drawn, even unfamiliar foreign names; never replace a name with a more familiar one.\n" +
         "- Write every word exactly as many times as it appears in the image. Dialogue often repeats a word or a phrase: count the repetitions in the image and never add or drop one.\n" +
-        "- Preserve punctuation, numbers, brackets, spacing, and line breaks exactly when visible.\n" +
+        "- Preserve punctuation, numbers, brackets, spacing, and line breaks exactly when visible. Never add a punctuation mark that is not drawn, at the start or at the end of a line.\n" +
         "- Arabic diacritics are OPTIONAL, not required.\n" +
         "- Add a diacritic only if it is unmistakably visible in the pixels and clearly attached to a specific letter.\n" +
         "- If a diacritic is faint, blurred, stylized, tiny, partially cut, or uncertain, OMIT it.\n" +

@@ -6,7 +6,6 @@ import com.abdulrahman.hardsubocr.core.AiUsage
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ItemOutcome
-import com.abdulrahman.hardsubocr.core.LensCheck
 import com.abdulrahman.hardsubocr.core.LensEngine
 import com.abdulrahman.hardsubocr.core.OcrEngine
 import com.abdulrahman.hardsubocr.core.OcrError
@@ -153,15 +152,6 @@ class JobRunner(
     /** Tokens (and OpenRouter's cost) of the AI engines, summed over the job. */
     private val aiUsage = AiUsage()
 
-    /** Gemini/OpenRouter: Google Lens reads the original picture when the AI repeats a word or is cut ([AiCheck]). */
-    private val lensCheck: LensCheck? =
-        if (!req.engine.isClassicOcr && req.aiLensCheck) LensCheck(
-            LensEngine(Net.transport, req.lang.code, req.lensRegion, views = if (req.lensMultiView) AndroidResampler else null),
-            req.stripDiacritics
-        ) else null
-    private val lensFixed = java.util.concurrent.atomic.AtomicInteger()
-    private val lensForCut = java.util.concurrent.atomic.AtomicInteger()
-
     /**
      * Image enhancement is part of what an AI engine reads; it enters the resume-memory key only when
      * it differs from the profile's own choice, so the keys of existing Gemini/OpenRouter memories stay
@@ -200,12 +190,7 @@ class JobRunner(
         retry = RetryPolicy(maxRetries = req.retries),
         cache = cache,
         keySuffix = keySuffix,
-        secondReader = lensCheck,
         listener = object : PipelineListener {
-            override fun onNote(item: OcrItem, note: String) {
-                if (note.startsWith("عدد التكرار")) lensFixed.incrementAndGet() else lensForCut.incrementAndGet()
-                addLog("🔍 " + item.name.take(28) + "  —  " + note.take(140))
-            }
             override fun onItem(item: OcrItem, outcome: ItemOutcome) {
                 when (outcome) {
                     is ItemOutcome.Text -> addLog((if (outcome.cached) "♻ " else "✓ ") + item.name.take(28) + "  ←  " + outcome.text.replace('\n', ' ').take(60))
@@ -374,9 +359,6 @@ class JobRunner(
 
     private fun endLog(how: String, outputs: List<JobOutput>) {
         aiUsage.summary()?.let { addLog("🧮 ${if (req.engine == EngineKind.OPENROUTER) "OpenRouter" else "Gemini"}: $it") }
-        if (lensFixed.get() + lensForCut.get() > 0) {
-            addLog("🔍 المراجعة بـ Google Lens: صُحّح عدد التكرار في ${lensFixed.get()} صورة، وأُخذت قراءته بدل إجابة ناقصة في ${lensForCut.get()} صورة")
-        }
         val st = pipeline?.stats
         DiagLog.i(
             "Job",

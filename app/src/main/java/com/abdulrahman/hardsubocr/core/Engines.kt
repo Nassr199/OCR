@@ -515,8 +515,16 @@ object AiRecipe {
         return if (level == ThinkingLevel.MINIMAL && (id.startsWith("gemini-4") || id.startsWith("gemini-3.8"))) "low" else level.api
     }
 
+    /**
+     * Version of what the AI reads (picture and instructions). Part of the resume-memory key: readings
+     * made by an older recipe are not taken again. 2 = 2.9.0 (the subtitle framed, instructions for
+     * every line, names and punctuation as drawn).
+     */
+    const val READING_VERSION = 2
+
     fun cacheId(engine: String, model: String, profile: AiProfile, thinking: ThinkingLevel, high: Boolean, lang: SubLang): String =
-        "$engine:$model:${profile.id}:t=${thinking.api ?: "auto"}:${if (high) "hi" else "def"}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}")
+        "$engine:$model:${profile.id}:t=${thinking.api ?: "auto"}:${if (high) "hi" else "def"}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}") +
+            ":r$READING_VERSION"
 }
 
 class GeminiEngine(
@@ -528,12 +536,14 @@ class GeminiEngine(
     highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens used, for the job's log (optional). */
-    val usage: AiUsage = AiUsage()
+    val usage: AiUsage = AiUsage(),
+    /** Other instructions than the recipe's (the live bench compares versions); null in the app. */
+    promptOverride: String? = null
 ) : OcrEngine {
     val model: String = model.trim().removePrefix("models/")
     override val kind = EngineKind.GEMINI
     override val cacheId = AiRecipe.cacheId("gemini", this.model, profile, thinking, highResolution, lang)
-    private val prompt = AiRecipe.prompt(profile, lang)
+    private val prompt = promptOverride ?: AiRecipe.prompt(profile, lang)
 
     /** Lowered automatically when a model rejects it (Gemini 4 and 3.8 have no "minimal": sent as "low"). */
     @Volatile
@@ -761,9 +771,11 @@ class OpenRouterEngine(
     private val highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens and cost, for the job's log (optional). */
-    val usage: AiUsage = AiUsage()
+    val usage: AiUsage = AiUsage(),
+    /** Other instructions than the recipe's (the live bench compares versions); null in the app. */
+    promptOverride: String? = null
 ) : OcrEngine {
-    private val prompt = AiRecipe.prompt(profile, lang)
+    private val prompt = promptOverride ?: AiRecipe.prompt(profile, lang)
     val model: String = model.trim().ifBlank { DEFAULT_MODEL }
     override val kind = EngineKind.OPENROUTER
     override val cacheId = AiRecipe.cacheId("openrouter", this.model, profile, thinking, highResolution, lang)

@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
  * - enhance = false: Vision gets PNG ≤ 1500 px; Gemini/OpenRouter get the original PNG/JPEG/WebP bytes.
  * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
  *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
+ *   For Gemini/OpenRouter the picture is then framed on the subtitle itself ([SubtitleFrame], 2.9.0).
  */
 class AndroidImagePreparer(
     private val enhance: Boolean = false,
@@ -85,8 +86,14 @@ class AndroidImagePreparer(
                 cropBand = cropBand,
                 maxDimension = if (kind.isClassicOcr) LensProtocol.MAX_DIMENSION else 0,
                 // the subtitle band never cuts a line of the subtitle (ImageV26.textSafeBand)
-                keepText = true
+                keepText = true,
+                // the AI engines: the subtitle itself, with generous margins (SubtitleFrame)
+                frame = !kind.isClassicOcr
             )
+        )
+        com.abdulrahman.hardsubocr.core.DiagLog.i(
+            "image",
+            "AI picture ${w}×$h → ${out.width}×${out.height}" + (ImageV26.lastFrame.get()?.let { " · subtitle $it" } ?: " · whole picture")
         )
         return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)
     }

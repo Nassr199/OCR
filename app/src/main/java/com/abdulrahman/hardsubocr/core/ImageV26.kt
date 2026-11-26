@@ -29,8 +29,17 @@ object ImageV26 {
          * The band never cuts through the subtitle ([textSafeBand]). Off = v2.6's fixed band exactly
          * (what the Pillow comparison checks); the app turns it on.
          */
-        val keepText: Boolean = false
+        val keepText: Boolean = false,
+        /**
+         * Then keep only the subtitle itself with generous margins ([SubtitleFrame], 2.9.0): the AI
+         * engines see the whole picture through a fixed number of tokens, so the letters get more of
+         * them, and the scene and watermarks less. Nothing is cut when the subtitle is not clear.
+         */
+        val frame: Boolean = false
     )
+
+    /** The subtitle's area found by [Options.frame] in the last [prepare] of this thread (diagnostics). */
+    val lastFrame = ThreadLocal<SubtitleFrame.Box?>()
 
     fun prepare(argb: IntArray, width: Int, height: Int, opt: Options = Options()): GrayImage {
         var px = argb
@@ -49,6 +58,15 @@ object ImageV26 {
                 px = crop(px, w, left, top, right, bottom)
                 w = right - left
                 h = bottom - top
+            }
+        }
+        lastFrame.set(null)
+        if (opt.frame) {
+            SubtitleFrame.find(px, w, h)?.let { b ->
+                lastFrame.set(b)
+                px = crop(px, w, b.left, b.top, b.right, b.bottom)
+                w = b.width
+                h = b.height
             }
         }
         if (opt.upscale) {
