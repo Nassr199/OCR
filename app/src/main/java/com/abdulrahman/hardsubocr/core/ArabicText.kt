@@ -331,8 +331,17 @@ object ArabicText {
             c in 'ﭐ'..'﷏' || c in 'ﷰ'..'﷿' || c in 'ﹰ'..'﻿' ||
             c in '0'..'9' || pyIsSpace(c) || ".,!?:؛،؟\"()%[]-/#".indexOf(c) >= 0
 
+    /**
+     * The exact reading (AiProfile.EXACT) also keeps the punctuation Arabic subtitles use that v2.1/v2.6
+     * dropped: «…» (one character), «» quotes, the en/em dash of a dialogue, the apostrophe and «;».
+     */
+    fun isAllowedExact(c: Char): Boolean = isAllowedPrecise(c) || "…«»–—';".indexOf(c) >= 0
+
     /** clean_ocr_output(): keeps diacritics and line breaks exactly as the model returned them. */
-    fun cleanOcrOutput(input: String?): String {
+    fun cleanOcrOutput(input: String?): String = cleanOcrOutput(input) { isAllowedPrecise(it) }
+
+    /** clean_ocr_output() with another set of kept characters ([allowed]). */
+    fun cleanOcrOutput(input: String?, allowed: (Char) -> Boolean): String {
         var text = input ?: ""
         for (phrase in NO_TEXT_PHRASES) if (text.contains(phrase)) return ""
 
@@ -365,7 +374,7 @@ object ArabicText {
         text = removeCodeBlocks(text)
         text = text.replace("﻿", "").replace("￾", "")
         val cleaned = StringBuilder(text.length)
-        for (c in text) if (isAllowedPrecise(c)) cleaned.append(c)
+        for (c in text) if (allowed(c)) cleaned.append(c)
         val lines = ArrayList<String>()
         for (line in cleaned.split('\n')) {
             val l = pyStrip(line).replace("\r", "")

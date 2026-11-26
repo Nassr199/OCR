@@ -101,8 +101,12 @@ class Settings(context: Context) {
         get() = str("openrouter_model", OpenRouterEngine.DEFAULT_MODEL)
         set(v) = put("openrouter_model", v.trim())
 
+    /**
+     * Thinking level of Gemini and OpenRouter (the same for both). «minimal» is no longer offered (Gemini 4
+     * and 3.8 refuse it); a saved «minimal» reads as «low».
+     */
     var thinking: ThinkingLevel
-        get() = enumOf("thinking", ThinkingLevel.LOW)
+        get() = enumOf("thinking", ThinkingLevel.LOW).let { if (it == ThinkingLevel.MINIMAL) ThinkingLevel.LOW else it }
         set(v) = put("thinking", v.name)
 
     var workersLens: Int
@@ -125,22 +129,19 @@ class Settings(context: Context) {
         get() = enumOf("clean_choice", CleanChoice.AUTO)
         set(v) = put("clean_choice", v.name)
 
-    var profileGemini: AiProfile
-        get() = enumOf("profile_gemini", AiProfile.V26)
-        set(v) = put("profile_gemini", v.name)
-
-    var profileOpenRouter: AiProfile
-        get() = enumOf("profile_openrouter", AiProfile.PRO)
-        set(v) = put("profile_openrouter", v.name)
+    /**
+     * Reading style of Gemini AND OpenRouter — one setting, so the same model reads the same way through
+     * either (before 2.7.8 each engine had its own, and OpenRouter defaulted to the one-line style). A new
+     * key: everyone starts on the exact reading; the old per-engine keys are no longer read.
+     */
+    var aiProfile: AiProfile
+        get() = enumOf("ai_style", AiProfile.EXACT).let { if (it == AiProfile.V26) AiProfile.EXACT else it }
+        set(v) = put("ai_style", v.name)
 
     var enhanceChoice: EnhanceChoice
         get() = enumOf("enhance_choice", EnhanceChoice.AUTO)
         set(v) = put("enhance_choice", v.name)
 
-    /** Gemini generationConfig.mediaResolution = HIGH (sharper small text / diacritics). */
-    var mediaHigh: Boolean
-        get() = sp.getBoolean("media_high", true)
-        set(v) = putBool("media_high", v)
 
     /** Last crash/error report shown on the next start (for screenshots). */
     var lastErrorReport: String?
@@ -272,8 +273,7 @@ class Settings(context: Context) {
 
     // ---------------------------------------------------------------- derived
     fun profileFor(kind: EngineKind): AiProfile? = when (kind) {
-        EngineKind.GEMINI -> profileGemini
-        EngineKind.OPENROUTER -> profileOpenRouter
+        EngineKind.GEMINI, EngineKind.OPENROUTER -> aiProfile
         EngineKind.LENS, EngineKind.VISION -> null
     }
 

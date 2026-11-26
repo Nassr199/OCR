@@ -69,6 +69,14 @@ object JvmResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
     }
 }
 
+/** The app's ImageCropper (Vision's focused second look), on the JVM: the same pixels, cropped. */
+object JvmCropper : com.abdulrahman.hardsubocr.core.ImageCropper {
+    override fun crop(image: com.abdulrahman.hardsubocr.core.PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int): com.abdulrahman.hardsubocr.core.PreparedImage? {
+        val p = transform(image.bytes, x0, y0, x1, y1, 1.0)
+        return com.abdulrahman.hardsubocr.core.PreparedImage(p.bytes, "image/png", p.w, p.h, image.name)
+    }
+}
+
 private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale: Double): Png {
     val img = ImageIO.read(src.inputStream())
     val l = x0.coerceIn(0, img.width - 1); val t = y0.coerceIn(0, img.height - 1)
@@ -84,6 +92,14 @@ private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale:
 }
 
 private fun one(s: String) = s.replace("\n", " ⏎ ")
+
+/** The app's picture for Gemini/OpenRouter: v2.6 enhancement with the text-safe band (AndroidImagePreparer). */
+private fun aiPicture(jpeg: ByteArray, name: String): com.abdulrahman.hardsubocr.core.PreparedImage {
+    val img = ImageIO.read(jpeg.inputStream())
+    val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
+    val out = com.abdulrahman.hardsubocr.core.ImageV26.prepare(px, img.width, img.height, com.abdulrahman.hardsubocr.core.ImageV26.Options(keepText = true))
+    return com.abdulrahman.hardsubocr.core.PreparedImage(com.abdulrahman.hardsubocr.core.PngGray.encode(out), "image/png", out.width, out.height, name)
+}
 
 /** One-line, no tashkeel — the comparison form (the app's classic cleaning). */
 private fun norm(s: String) = Cleaner.clean(s, CleanMode.PRO)
@@ -155,10 +171,19 @@ fun main(args: Array<String>) = runBlocking {
     val outFile = File(args[1])
     val http = JvmTransport()
     val visionKey = System.getenv("VISION_API_KEY")?.trim().orEmpty()
+    // AI engines: only when the secrets exist and the push asked for it ([bench-ai]) — they cost money
+    val geminiKey = System.getenv("GEMINI_API_KEY")?.trim().orEmpty()
+    val openRouterKey = System.getenv("OPENROUTER_API_KEY")?.trim().orEmpty()
+    val geminiModel = System.getenv("BENCH_GEMINI_MODEL")?.trim()?.ifEmpty { null } ?: com.abdulrahman.hardsubocr.core.GeminiEngine.DEFAULT_MODEL
+    val openRouterModel = System.getenv("BENCH_OPENROUTER_MODEL")?.trim()?.ifEmpty { null } ?: ("google/" + geminiModel)
+    val gemini = if (geminiKey.isBlank()) null else com.abdulrahman.hardsubocr.core.GeminiEngine(http, geminiKey, geminiModel)
+    val openRouter = if (openRouterKey.isBlank()) null else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, openRouterKey, openRouterModel)
     val cases = Json.parseToJsonElement(File(dir, "truth.json").readText()).jsonArray
     val sb = StringBuilder()
     sb.append("# OCR bench — commit ").append(System.getenv("GITHUB_SHA") ?: "local").append(" — ").append(java.time.Instant.now()).append("\n\n")
-    sb.append("Vision: ").append(if (visionKey.isBlank()) "no VISION_API_KEY secret — Lens only" else "key present (not shown)").append("\n\n")
+    sb.append("Vision: ").append(if (visionKey.isBlank()) "no VISION_API_KEY secret — Lens only" else "key present (not shown)").append("\n")
+    sb.append("AI: ").append(listOfNotNull(gemini?.let { "Gemini $geminiModel" }, openRouter?.let { "OpenRouter $openRouterModel" }).ifEmpty { listOf("not run (needs the secrets and [bench-ai] in the commit message)") }.joinToString(", "))
+        .append(" — the app's exact reading (picture enhanced as in the app, thinking low)\n\n")
     val scores = LinkedHashMap<String, Score>()
     val shapes = LinkedHashMap<String, IntArray>()
     /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
@@ -205,6 +230,38 @@ fun main(args: Array<String>) = runBlocking {
                 sb.append("- Lens app ").append(score("lens app (multi-view)", text, truth)).append(' ').append(shape("lens app (multi-view)", text, truth))
                     .append(" «").append(one(norm(text))).append("»\n")
                 if (looks.isNotEmpty()) sb.append("    looks: ").append(looks).append('\n')
+            }
+        }
+
+        // ---------------------------------------------------------------- Gemini / OpenRouter: the app's exact reading
+        for ((label, engine) in listOf("gemini" to gemini, "openrouter" to openRouter)) {
+            if (engine == null) continue
+            val prepared = aiPicture(File(dir, file).readBytes(), file)
+            val t = runCatching { engine.recognize(prepared) }
+            val raw = t.getOrNull()
+            if (raw == null) {
+                sb.append("- ").append(label).append(": ").append((t.exceptionOrNull()?.message ?: "").replace(geminiKey.ifEmpty { "\u0000" }, "***").replace(openRouterKey.ifEmpty { "\u0000" }, "***")).append('\n')
+                continue
+            }
+            val text = Cleaner.clean(raw, CleanMode.EXACT)
+            sb.append("- ").append(label).append(' ').append(score("$label exact", text, truth)).append(' ').append(shape("$label exact (with tashkeel)", text, truth))
+                .append(" «").append(one(text)).append("»\n")
+        }
+
+        // ---------------------------------------------------------------- Google Cloud Vision: the app
+        if (visionKey.isNotBlank()) {
+            var trace: com.abdulrahman.hardsubocr.core.VisionEngine.Trace? = null
+            val engine = VisionEngine(http, visionKey, "ar", document = true, cropper = JvmCropper, trace = { trace = it })
+            val img = com.abdulrahman.hardsubocr.core.PreparedImage(png.bytes, "image/png", png.w, png.h, file)
+            val t = runCatching { engine.recognize(img) }
+            val text = t.getOrNull()
+            if (text == null) sb.append("- Vision app: ").append((t.exceptionOrNull()?.message ?: "").replace(visionKey, "***")).append('\n')
+            else {
+                sb.append("- Vision app ").append(score("vision app (focus look)", text, truth)).append(' ').append(shape("vision app (focus look)", text, truth))
+                    .append(" «").append(one(com.abdulrahman.hardsubocr.core.ClassicText.clean(text))).append("»\n")
+                trace?.second?.let { s ->
+                    sb.append("    focus look «").append(one(s)).append("» → ").append(if (trace?.secondChosen == true) "focus" else "first").append('\n')
+                }
             }
         }
 

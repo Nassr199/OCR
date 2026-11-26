@@ -17,5 +17,9 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `lens/LensOrderTest.kt` | Google Lens lines in reading order (rows top to bottom, right to left in Arabic) and the same place read twice. |
 | `vision/LayoutTest.kt` + `LayoutCommon.kt` + `LayoutFuzz.kt` | Vision text rebuilt from word boxes: same place read twice, blocks laid out left to right, punctuation, two lines, credits, Latin runs; 14,000 random lines (clean reads unchanged, copies removed). |
 
+| `classic/DashTest.kt` | 2.7.8: dialogue dashes — a dash lost on one line restored only from a look that read the same line with it (Lens extra looks, Vision focused look); Vision's focus area keeps a line's own marks (measured geometry); the wrapped single-speaker sentence untouched. |
+| `ai/AiTest.kt` | 2.7.8: Gemini and OpenRouter send the same request for every style; OpenRouter errors in plain words (provider 429 vs credit vs free-model limits), key check, refused parameters; adaptive requests in flight under 429; the exact reading's cleaning. |
+| `img/BandTest.kt` | 2.7.8: the image enhancement's subtitle band never cuts a line of the subtitle; v2.6's band unchanged where it cut nothing. Run: `java … BandTestKt ../bench/images`. |
+
 `kc.sh` compiles Kotlin with the compiler embedded in a Gradle distribution:
 `./kc.sh out ../app/src/main/java/com/abdulrahman/hardsubocr/core/*.kt CoreTest.kt`

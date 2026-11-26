@@ -75,7 +75,9 @@ class AndroidImagePreparer(
             px, bw, bh,
             ImageV26.Options(
                 cropBand = cropBand,
-                maxDimension = if (kind.isClassicOcr) LensProtocol.MAX_DIMENSION else 0
+                maxDimension = if (kind.isClassicOcr) LensProtocol.MAX_DIMENSION else 0,
+                // the subtitle band never cuts a line of the subtitle (ImageV26.textSafeBand)
+                keepText = true
             )
         )
         return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)

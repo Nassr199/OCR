@@ -15,8 +15,10 @@ fun main() = runBlocking {
     val g = GeminiEngine(h, "KEY", "models/gemini-3-flash-preview", ThinkingLevel.LOW)
     println("gemini text=" + g.recognize(img).replace("\n","|") + " url=" + h.seen[0].url)
     val body = Json.parseToJsonElement(String(h.seen[0].body!!)).jsonObject
-    println("  sys len=" + body["systemInstruction"]!!.jsonObject["parts"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content.length +
-        " gen=" + body["generationConfig"] + " safety=" + body["safetySettings"]!!.jsonArray.size)
+    // 2.7.8: one user message — the picture, then the prompt (no systemInstruction)
+    val parts = body["contents"]!!.jsonArray[0].jsonObject["parts"]!!.jsonArray
+    println("  parts=" + parts.map { it.jsonObject.keys.first() } + " prompt len=" + parts[1].jsonObject["text"]!!.jsonPrimitive.content.length +
+        " gen=" + body["generationConfig"] + " safety=" + body["safetySettings"]!!.jsonArray.size + " system=" + body.containsKey("systemInstruction"))
     // thinking unsupported -> retryable once then body without thinking
     val h2 = FakeHttp(mutableListOf(r(400, """{"error":{"code":400,"message":"Thinking level is not supported for this model.","status":"INVALID_ARGUMENT"}}"""),
                                      r(200, """{"candidates":[{"content":{"parts":[{"text":"نص"}]}}]}""")))
@@ -43,7 +45,7 @@ fun main() = runBlocking {
     try { o.recognize(img) } catch (e: OcrError) { println("  200+error -> ${e.javaClass.simpleName}: ${e.message}") }
     try { o.recognize(img) } catch (e: OcrError) { println("  402 -> ${e.javaClass.simpleName}: ${e.message}") }
     val content = Json.parseToJsonElement(String(h3.seen[0].body!!)).jsonObject["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray
-    println("  img url prefix=" + content[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content.take(30))
+    println("  img url prefix=" + content[0].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content.take(30) + " then " + content[1].jsonObject["type"])
     // Lens HTTP mapping
     val h4 = FakeHttp(mutableListOf(r(429, "", mapOf("Retry-After" to "3"))))
     try { LensEngine(h4).recognize(img) } catch (e: OcrError.Retryable) { println("lens 429 -> after=${e.retryAfterMs} rl=${e.rateLimited} ct=${h4.seen[0].contentType} key=${h4.seen[0].headers["X-Goog-Api-Key"]?.take(6)}") }

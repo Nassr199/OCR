@@ -139,7 +139,7 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
 private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean) {
     SwitchRow(
         "تحسين الصور قبل القراءة",
-        "يقصّ شريط الترجمة ويكبّره ويزيد وضوحه قبل الإرسال، فتُقرأ الحروف الصغيرة والتشكيل بدقة أكبر.",
+        "يُبقي شريط الترجمة وحده دون أن يقطع منها شيئًا، ويكبّر الصور الصغيرة، ويحوّلها إلى رمادي بتباين ووضوح أعلى قبل الإرسال.",
         vm.enhanceEffective(),
         enabled
     ) { vm.setEnhance(it) }
@@ -200,20 +200,34 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
 
 // ============================================================================ Gemini / OpenRouter
 
+/** What each reading style does — every claim is what the code does (AiProfile, Cleaner, Merge). */
 private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.V26 -> "يحسّن الصورة قبل الإرسال، ويحذف التشكيل الخاطئ ويُبقي الصحيح، ويوحّد تشكيل الجملة نفسها في الإطارات المتتالية."
-    AiProfile.V21 -> "تعليمات مفصّلة، ويُبقي الأسطر والتشكيل كما قرأها النموذج، ولا يدمج إلا المقطع المنقسم."
-    AiProfile.PRO -> "تعليمات مختصرة: سطر واحد بلا تشكيل، ويدمج المقاطع المتكررة. الأسرع."
+    AiProfile.EXACT, AiProfile.V26 ->
+        "ينسخ الترجمة كما تظهر في الصورة: أسطرها وشرطات الحوار وعلامات الترقيم والتشكيل الواضح، ولا يُضاف تشكيل غير مرسوم. " +
+            "يُحذف تشكيل الكلمة إذا جاء كثيفًا على أغلب حروفها (علامة تشكيل مختلق)، وتُوحَّد حركات الجملة نفسها في الصور المتتالية على ما تتفق عليه."
+    AiProfile.V21 -> "تعليمات مفصّلة جدًا، ويُبقي الأسطر والتشكيل كما كتبها النموذج دون حذف شيء منه، ولا يدمج إلا الترجمة التي انقسمت إلى صورتين."
+    AiProfile.PRO -> "تعليمات مختصرة بالعربية: النص العربي فقط في سطر واحد، بلا تشكيل ولا شرطات حوار، وتُدمج المقاطع المتتالية المتشابهة."
 }
 
+/** «minimal» is not offered: Gemini 4 and 3.8 refuse it (a saved one reads as «low»). */
 private val thinkingOptions = listOf(
-    ThinkingLevel.DEFAULT to "تلقائي",
-    ThinkingLevel.MINIMAL to "أدنى",
     ThinkingLevel.LOW to "منخفض",
     ThinkingLevel.MEDIUM to "متوسط",
-    ThinkingLevel.HIGH to "عالٍ"
+    ThinkingLevel.HIGH to "عالٍ",
+    ThinkingLevel.DEFAULT to "تلقائي"
 )
 
+private fun thinkingHint(t: ThinkingLevel): String = when (t) {
+    ThinkingLevel.LOW, ThinkingLevel.MINIMAL -> "الأسرع والأقل تكلفة (موصى به لنسخ الترجمة)."
+    ThinkingLevel.MEDIUM -> "يفكّر النموذج أكثر قبل الإجابة: أبطأ وأغلى من «منخفض»."
+    ThinkingLevel.HIGH -> "أطول تفكير: الأبطأ والأغلى."
+    ThinkingLevel.DEFAULT -> "يُترك المستوى للنموذج نفسه — في Gemini 4 Hydrogen وNeon هو «عالٍ»، فتصبح القراءة أبطأ بكثير."
+}
+
+/**
+ * Gemini and OpenRouter: the same panel and the same settings (style, thinking, image enhancement) —
+ * only the key and the model list differ, and the request is the same (AiRecipe).
+ */
 @Composable
 private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
     if (gemini) {
@@ -236,11 +250,11 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
             steps = listOf(
                 "افتح openrouter.ai وسجّل الدخول.",
                 "من Keys اضغط «Create Key».",
-                "الصق المفتاح هنا ثم اضغط «حفظ»."
+                "الصق المفتاح هنا ثم اضغط «اختبار» لمعرفة حالة المفتاح ورصيده."
             ),
             linkLabel = "فتح OpenRouter Keys",
             linkUrl = "https://openrouter.ai/keys",
-            testable = false
+            testable = true
         )
     }
 
@@ -252,31 +266,33 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
     )
 
     Spacer(Modifier.height(10.dp))
-    SectionLabel("الأسلوب")
+    SectionLabel("طريقة القراءة")
     Segmented(
-        listOf(AiProfile.V26 to "مع التشكيل", AiProfile.V21 to "حرفي", AiProfile.PRO to "سريع"),
+        listOf(AiProfile.EXACT to "كما في الصورة", AiProfile.V21 to "حرفي", AiProfile.PRO to "سطر واحد"),
         vm.currentProfile(),
         enabled
     ) { vm.chooseProfile(it) }
     Hint(profileHint(vm.currentProfile()), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
 
-    if (gemini) {
-        Spacer(Modifier.height(12.dp))
-        SectionLabel("مستوى التفكير")
-        Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
+    Spacer(Modifier.height(12.dp))
+    SectionLabel("مستوى التفكير")
+    Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
+    Hint(
+        thinkingHint(vm.thinking) + " إن لم يدعم النموذج المستوى المختار يُعدَّل تلقائيًا.",
+        Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
+    )
+    Spacer(Modifier.height(6.dp))
+    EnhanceSwitch(vm, enabled)
+    Spacer(Modifier.height(4.dp))
+    CheckLine("Gemini وOpenRouter يرسلان الطلب نفسه: الصورة بالدقة العالية، والتعليمات نفسها، ومستوى التفكير نفسه")
+    if (!gemini) {
         Hint(
-            "«منخفض» مناسب لقراءة الترجمة. إن لم يدعم النموذج المستوى المختار يُعدَّل تلقائيًا.",
+            "إن ظهر «مزوّد النموذج مزدحم الآن (429)» فهو ازدحام عند الجهة التي تشغّل النموذج لدى OpenRouter (Google لنماذج Gemini)، لا نقص في رصيدك: " +
+                "يقلّل التطبيق عدد الصور المرسلة معًا تلقائيًا ويعيد المحاولة. لتجنّبه: اختر Gemini بمفتاحك مباشرة، " +
+                "أو أضف مفتاح Google الخاص بك في إعدادات OpenRouter (BYOK) فتُحسب الحدود على حسابك.",
             Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
         )
-        Spacer(Modifier.height(6.dp))
-        SwitchRow(
-            "دقة عالية للصور",
-            "يرسل الصورة بدقة أعلى: قراءة أدق للحروف الصغيرة والتشكيل، وتكلفة أعلى.",
-            vm.mediaHigh,
-            enabled
-        ) { vm.chooseMediaHigh(it) }
     }
-    EnhanceSwitch(vm, enabled)
 }
 
 // ============================================================================ API key

@@ -24,7 +24,12 @@ object ImageV26 {
         /** grayscale + autocontrast + contrast + sharpen. */
         val enhance: Boolean = true,
         /** Optional final limit of the longest side (Lens accepts at most 1500 px). 0 = none. */
-        val maxDimension: Int = 0
+        val maxDimension: Int = 0,
+        /**
+         * The band never cuts through the subtitle ([textSafeBand]). Off = v2.6's fixed band exactly
+         * (what the Pillow comparison checks); the app turns it on.
+         */
+        val keepText: Boolean = false
     )
 
     fun prepare(argb: IntArray, width: Int, height: Int, opt: Options = Options()): GrayImage {
@@ -34,8 +39,12 @@ object ImageV26 {
         if (opt.cropBand) {
             val left = (w * 0.06).toInt()
             val right = (w * 0.94).toInt()
-            val top = (h * 0.35).toInt()
-            val bottom = (h * 0.96).toInt()
+            var top = (h * 0.35).toInt()
+            var bottom = (h * 0.96).toInt()
+            if (opt.keepText && right - left >= 64 && bottom - top >= 32) {
+                val band = textSafeBand(px, w, h, left, right, top, bottom)
+                top = band[0]; bottom = band[1]
+            }
             if (right - left >= 64 && bottom - top >= 32) {
                 px = crop(px, w, left, top, right, bottom)
                 w = right - left
@@ -70,6 +79,73 @@ object ImageV26 {
         }
         return img
     }
+
+    /**
+     * v2.6's band (35–96 % of the height), widened so it never cuts through the subtitle: v2.6 was
+     * written for whole video frames, where the subtitle sits low, but the picture is often a band
+     * already (a VideoSubFinder crop, ~6:1) with a two-line subtitle starting in its upper third, and
+     * the fixed cut went through the first line. Text rows are found by their sharp light/dark steps
+     * (white letters with a dark outline or box; soft scene rows have few) and grouped into blocks —
+     * the lines of one subtitle are closer to each other than an eighth of the picture. Every block
+     * that reaches into v2.6's band is kept whole; text far above it (a logo, a sign in the scene)
+     * stays outside as in v2.6. A band-shaped picture with nothing in v2.6's band keeps its strongest
+     * block. Returns [top, bottom] — v2.6's own when no text crosses its edges.
+     */
+    fun textSafeBand(px: IntArray, w: Int, h: Int, left: Int, right: Int, top0: Int, bottom0: Int): IntArray {
+        val steps = IntArray(h)
+        for (y in 0 until h) {
+            val o = y * w
+            var n = 0
+            var prev = lum(px[o + left])
+            for (x in left + 1 until right) {
+                val l = lum(px[o + x])
+                if (Math.abs(l - prev) >= 64) n++
+                prev = l
+            }
+            steps[y] = n
+        }
+        val strongest = steps.max()
+        // a line of subtitle text has dozens of steps across the band; under 1 % of its width is no text
+        if (strongest < maxOf(6, (right - left) / 100)) return intArrayOf(top0, bottom0)
+        val textual = maxOf(4, strongest / 4)
+        val gapMax = maxOf(3, h / 8)
+        // blocks of text rows: [first row, last row + 1, weight]
+        val blocks = ArrayList<IntArray>()
+        var y = 0
+        while (y < h) {
+            if (steps[y] < textual) { y++; continue }
+            var lastText = y
+            var weight = steps[y]
+            var k = y + 1
+            while (k < h && k - lastText <= gapMax) {
+                if (steps[k] >= textual) { lastText = k; weight += steps[k] }
+                k++
+            }
+            blocks.add(intArrayOf(y, lastText + 1, weight))
+            y = lastText + 1
+        }
+        var keep = blocks.filter { it[1] > top0 && it[0] < bottom0 }
+        if (keep.isEmpty() && w * 2 >= h * 5) keep = listOfNotNull(blocks.maxByOrNull { it[2] })
+        if (keep.isEmpty()) return intArrayOf(top0, bottom0)
+        var first = keep.minOf { it[0] }
+        var last = keep.maxOf { it[1] }
+        // the letters' tops and tails (alef and lam, dots, tashkeel above, descenders) have far fewer
+        // steps than the body of the line: followed while rows still have some
+        val low = maxOf(3, strongest / 20)
+        var gap = 0
+        var r = first - 1
+        while (r >= 0 && gap <= 2) { if (steps[r] >= low) { first = r; gap = 0 } else gap++; r-- }
+        gap = 0
+        r = last
+        while (r < h && gap <= 2) { if (steps[r] >= low) { last = r + 1; gap = 0 } else gap++; r++ }
+        val margin = maxOf(2, h / 25)
+        return intArrayOf(
+            if (first < top0) maxOf(0, first - margin) else top0,
+            if (last > bottom0) minOf(h, last + margin) else bottom0
+        )
+    }
+
+    private fun lum(c: Int): Int = (((c shr 16) and 255) * 299 + ((c shr 8) and 255) * 587 + (c and 255) * 114) / 1000
 
     fun crop(px: IntArray, w: Int, l: Int, t: Int, r: Int, b: Int): IntArray {
         val cw = r - l

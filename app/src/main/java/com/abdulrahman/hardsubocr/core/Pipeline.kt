@@ -24,6 +24,12 @@ enum class CleanMode {
     /** v2.6: clean_ocr_output() + conservative_clean_diacritics() (fragmented words, over-marked words). */
     V26,
 
+    /**
+     * Gemini / OpenRouter default (AiProfile.EXACT): V26's cleaning that also keeps «…», «» and the
+     * en/em dash, and spaces a dialogue dash as on screen (ArabicV26.cleanExact).
+     */
+    EXACT,
+
     /** English / Latin subtitles: Arabic filters would delete every line. */
     ENGLISH,
 
@@ -45,6 +51,7 @@ object Cleaner {
             CleanMode.PRECISE -> ArabicText.cleanOcrOutput(raw).let { if (ArabicText.isSymbolsOnly(it)) "" else it }
             CleanMode.V26 -> ArabicV26.conservativeCleanDiacritics(ArabicText.cleanOcrOutput(raw))
                 .let { if (it.isEmpty() || ArabicText.isSymbolsOnly(it)) "" else it }
+            CleanMode.EXACT -> ArabicV26.cleanExact(raw)
             CleanMode.ENGLISH -> EnglishText.clean(raw)
             CleanMode.CLASSIC -> ClassicText.clean(raw, stripDiacritics)
         }
@@ -63,6 +70,61 @@ class RetryPolicy(val maxRetries: Int = 6, val minDelayMs: Long = 2_000, val max
         if (hintMs != null) return if (hintMs <= 0) 0 else hintMs + Random.nextLong(0, 750)
         val exp = (1000L shl (attempt - 1).coerceIn(0, 20)).coerceIn(minDelayMs, maxDelayMs)
         return if (exp <= minDelayMs) minDelayMs else Random.nextLong(minDelayMs, exp + 1)
+    }
+
+    /**
+     * "Too many requests" with no wait given by the service: 4 s, then a random wait growing up to 45 s
+     * (OpenRouter's advice: exponential back-off with jitter). The service's own wait is used when given.
+     */
+    fun rateLimitDelay(attempt: Int, hintMs: Long?): Long {
+        if (hintMs != null) return delayFor(attempt, hintMs)
+        val cap = (4_000L shl (attempt - 1).coerceIn(0, 10)).coerceAtMost(45_000)
+        return if (cap <= 4_000) 4_000 else Random.nextLong(4_000, cap + 1)
+    }
+
+    /** A busy service is waited out longer than other errors: an image is not lost to a crowded minute. */
+    val rateLimitRetries: Int get() = maxOf(maxRetries * 2, 8)
+}
+
+/**
+ * How many requests are in flight at once. Starts at the number of workers; each "too many requests"
+ * (429) halves it, and a run of answers without one gives one back. On a shared capacity — the
+ * providers behind OpenRouter, Gemini's per-minute quota — the job settles at what the service accepts
+ * instead of losing images to retries that all hit the wall together.
+ */
+class AdaptiveLimit(val max: Int, private val onChange: (Int) -> Unit = {}) {
+    private val lock = Any()
+    private var limit = max
+    private var inFlight = 0
+    private var okRun = 0
+
+    val current: Int get() = synchronized(lock) { limit }
+
+    suspend fun acquire() {
+        while (true) {
+            synchronized(lock) {
+                if (inFlight < limit) {
+                    inFlight++; return
+                }
+            }
+            delay(150)
+        }
+    }
+
+    fun release(rateLimited: Boolean) {
+        var changed = -1
+        synchronized(lock) {
+            inFlight--
+            if (rateLimited) {
+                okRun = 0
+                val next = maxOf(1, limit / 2)
+                if (next != limit) { limit = next; changed = next }
+            } else if (limit < max && ++okRun >= limit * 4) {
+                okRun = 0
+                limit++; changed = limit
+            }
+        }
+        if (changed > 0) onChange(changed)
     }
 }
 
@@ -86,6 +148,9 @@ sealed class ItemOutcome {
 interface PipelineListener {
     fun onItem(item: OcrItem, outcome: ItemOutcome) {}
     fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {}
+
+    /** The number of requests sent at once changed ([AdaptiveLimit]): [limit] of [workers]. */
+    fun onLimit(limit: Int, workers: Int) {}
 }
 
 interface OcrCache {
@@ -118,6 +183,9 @@ class OcrPipeline(
     private val keySuffix: String = ""
 ) {
     private val workers = concurrency.coerceIn(1, 16)
+
+    /** Requests in flight: lowered on 429 answers, raised back after calm (see [AdaptiveLimit]). */
+    val limit = AdaptiveLimit(workers) { listener.onLimit(it, workers) }
     val results = ConcurrentLinkedQueue<SubEntry>()
     /** Texts of tagged items ("" = read nothing); failed items are absent. */
     val tagged = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -231,31 +299,51 @@ class OcrPipeline(
 
     private suspend fun recognizeWithRetry(item: OcrItem, img: PreparedImage): String {
         var attempt = 0
+        var busy = 0
         while (true) {
             val wait = cooldownUntil.get() - System.currentTimeMillis()
             if (wait > 0) delay(wait)
-            try {
-                return engine.recognize(img)
+            // one request of the allowed number in flight; given back before any waiting
+            limit.acquire()
+            val answer: Result<String> = try {
+                Result.success(engine.recognize(img))
             } catch (e: CancellationException) {
+                limit.release(false)
                 throw e
-            } catch (e: OcrError.Retryable) {
-                attempt++
-                if (attempt > retry.maxRetries) throw OcrError.Failed("${e.message} (بعد ${retry.maxRetries} محاولات)")
-                val d = retry.delayFor(attempt, e.retryAfterMs)
-                if (e.rateLimited) {
-                    val until = System.currentTimeMillis() + d
-                    cooldownUntil.updateAndGet { maxOf(it, until) }
+            } catch (e: Throwable) {
+                Result.failure(e)
+            }
+            val error = answer.exceptionOrNull()
+            limit.release(rateLimited = (error as? OcrError.Retryable)?.rateLimited == true)
+            if (error == null) return answer.getOrThrow()
+            when (error) {
+                is OcrError.Retryable -> {
+                    val d: Long
+                    if (error.rateLimited) {
+                        // a crowded service: waited out longer, and all workers pause together
+                        busy++
+                        if (busy > retry.rateLimitRetries) throw OcrError.Failed("${error.message} (بعد ${retry.rateLimitRetries} محاولات)")
+                        d = retry.rateLimitDelay(busy, error.retryAfterMs)
+                        val until = System.currentTimeMillis() + d
+                        cooldownUntil.updateAndGet { maxOf(it, until) }
+                    } else {
+                        attempt++
+                        if (attempt > retry.maxRetries) throw OcrError.Failed("${error.message} (بعد ${retry.maxRetries} محاولات)")
+                        d = retry.delayFor(attempt, error.retryAfterMs)
+                    }
+                    stats.retries.incrementAndGet()
+                    listener.onRetry(item, attempt + busy, d, error.message ?: "")
+                    delay(d)
                 }
-                stats.retries.incrementAndGet()
-                listener.onRetry(item, attempt, d, e.message ?: "")
-                delay(d)
-            } catch (e: java.io.IOException) {
-                attempt++
-                if (attempt > retry.maxRetries) throw OcrError.Failed("انقطاع الشبكة: ${e.message}")
-                val d = retry.delayFor(attempt, null)
-                stats.retries.incrementAndGet()
-                listener.onRetry(item, attempt, d, "الشبكة: ${e.message}")
-                delay(d)
+                is java.io.IOException -> {
+                    attempt++
+                    if (attempt > retry.maxRetries) throw OcrError.Failed("انقطاع الشبكة: ${error.message}")
+                    val d = retry.delayFor(attempt, null)
+                    stats.retries.incrementAndGet()
+                    listener.onRetry(item, attempt, d, "الشبكة: ${error.message}")
+                    delay(d)
+                }
+                else -> throw error
             }
         }
     }

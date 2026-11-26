@@ -34,6 +34,9 @@ object VisionReport {
             t.second?.let {
                 sb.append("  الترجمة وحدها: «").append(one(it)).append("» ← ").append(if (t.secondChosen) "اختيرت" else "بقيت الأولى").append('\n')
             }
+            t.restored?.let {
+                sb.append("  شرطة حوار قرأتها القراءة الأخرى في السطر نفسه أُعيدت: «").append(one(it)).append("»\n")
+            }
         }
         return sb.toString()
     }

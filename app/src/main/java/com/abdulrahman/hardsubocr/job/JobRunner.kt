@@ -2,6 +2,7 @@ package com.abdulrahman.hardsubocr.job
 
 import android.content.Context
 import com.abdulrahman.hardsubocr.core.AiProfile
+import com.abdulrahman.hardsubocr.core.AiUsage
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ItemOutcome
@@ -97,13 +98,14 @@ class JobRunner(
         append("المحرك: ").append(req.engine)
         when (req.engine) {
             EngineKind.GEMINI -> append(" • ").append(req.geminiModel).append(" • تفكير ").append(req.thinking)
-                .append(" • دقة عالية ").append(req.mediaHigh)
-            EngineKind.OPENROUTER -> append(" • ").append(req.openRouterModel)
+                .append(" • دقة الصورة ").append(if (req.mediaHigh) "عالية" else "افتراضية")
+            EngineKind.OPENROUTER -> append(" • ").append(req.openRouterModel).append(" • تفكير ").append(req.thinking)
+                .append(" • دقة الصورة ").append(if (req.mediaHigh) "عالية" else "افتراضية")
             EngineKind.LENS -> append(" • منطقة ").append(req.lensRegion).append(" • نظرات إضافية ").append(req.lensMultiView)
             EngineKind.VISION -> append(if (req.visionDocument) " • DOCUMENT_TEXT_DETECTION" else " • TEXT_DETECTION")
                 .append(" • نموذج ").append(req.visionModel.ifEmpty { "builtin/stable" })
         }
-        append(" • لغة ").append(req.lang).append(" • أسلوب ").append(req.profile ?: "—").append('\n')
+        append(" • لغة ").append(req.lang).append(" • طريقة القراءة ").append(req.profile ?: "—").append('\n')
         append("المصدر: ").append(
             when (val s = req.source) {
                 is Source.Image -> "صورة ${s.name}"
@@ -127,11 +129,14 @@ class JobRunner(
             Net.transport, req.lang.code, req.lensRegion,
             views = if (req.lensMultiView) AndroidResampler else null
         )
+        // Gemini and OpenRouter: the same request recipe, style and thinking level (AiRecipe)
         EngineKind.GEMINI -> GeminiEngine(
-            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh, req.lang
+            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.EXACT, req.mediaHigh, req.lang,
+            usage = aiUsage
         )
         EngineKind.OPENROUTER -> OpenRouterEngine(
-            Net.transport, req.openRouterKey, req.openRouterModel, req.profile ?: AiProfile.PRO, req.lang
+            Net.transport, req.openRouterKey, req.openRouterModel, req.thinking, req.profile ?: AiProfile.EXACT, req.mediaHigh, req.lang,
+            usage = aiUsage
         )
         EngineKind.VISION -> VisionEngine(
             Net.transport, req.visionKey, req.lang.code,
@@ -143,6 +148,9 @@ class JobRunner(
     }
 
     @Volatile private var visionEngine: VisionEngine? = null
+
+    /** Tokens (and OpenRouter's cost) of the AI engines, summed over the job. */
+    private val aiUsage = AiUsage()
 
     /**
      * Image enhancement is part of what an AI engine reads; it enters the resume-memory key only when
@@ -192,7 +200,14 @@ class JobRunner(
             }
 
             override fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {
-                addLog("↻ إعادة ($attempt) بعد ${delayMs / 1000.0} ث — ${reason.take(60)}")
+                addLog("↻ إعادة ($attempt) بعد ${"%.1f".format(java.util.Locale.US, delayMs / 1000.0)} ث — ${reason.take(80)}")
+            }
+
+            override fun onLimit(limit: Int, workers: Int) {
+                addLog(
+                    if (limit < workers) "⇣ الخدمة مزدحمة: تُرسل الآن $limit صورة في الوقت نفسه بدل $workers، ويعود العدد تدريجيًا"
+                    else "⇡ عادت الطلبات المتزامنة إلى $workers"
+                )
             }
         }
     )
@@ -343,6 +358,7 @@ class JobRunner(
     }
 
     private fun endLog(how: String, outputs: List<JobOutput>) {
+        aiUsage.summary()?.let { addLog("🧮 ${if (req.engine == EngineKind.OPENROUTER) "OpenRouter" else "Gemini"}: $it") }
         val st = pipeline?.stats
         DiagLog.i(
             "Job",

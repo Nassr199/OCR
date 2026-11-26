@@ -90,6 +90,18 @@ object ArabicV26 {
         }
     }
 
+    /**
+     * Cleaning of the exact reading (AiProfile.EXACT, the default of Gemini and OpenRouter): v2.6's
+     * clean_ocr_output + conservative_clean_diacritics unchanged — model replies, JSON and code
+     * blocks removed, fragmented words joined, over-marked words stripped, tatweel removed — keeping
+     * also «…», «» and the en/em dash, and a dialogue dash written against its word spaced as on screen.
+     */
+    fun cleanExact(raw: String): String {
+        val t = conservativeCleanDiacritics(ArabicText.cleanOcrOutput(raw) { ArabicText.isAllowedExact(it) })
+        if (t.isEmpty() || ArabicText.isSymbolsOnly(t)) return ""
+        return t.split('\n').joinToString("\n") { ClassicShape.spaceAfterDash(it) }
+    }
+
     private class Part(val ch: Char, var marks: String)
 
     private fun decompose(text: String): List<Part> {

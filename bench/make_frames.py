@@ -160,6 +160,28 @@ for i, (name, lines) in enumerate(DIALOGUE):
     outlined(img, lines)
     save(name, img, '\n'.join(lines), 'outlined white text, the shape (lines, dashes, punctuation) must be kept')
 
+# 13-18: a two-line dialogue in the black box like the real frames — the second line is the wider one,
+# so its dash is the outermost mark of the subtitle (the one a tight crop or a missed look loses)
+AR_THIN = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 31)
+DIALOGUE_BOX = [
+    ('13_dialogue_box', ['- هوليا', '- ابتعدي يا جوليزار'], False, AR_SMALL),
+    ('14_dialogue_box_credits', ['- هوليا', '- ابتعدي يا جوليزار'], True, AR_SMALL),
+    ('15_dialogue_box_thin_credits', ['- هوليا', '- ابتعدي يا جوليزار'], True, AR_THIN),
+    ('16_dialogue_box_long2_credits', ['- ماذا؟', '- لا شيء، عودي إلى البيت الآن'], True, AR_SMALL),
+    ('17_dialogue_box_nospace_credits', ['-هوليا', '-ابتعدي يا جوليزار'], True, AR_SMALL),
+    # one speaker, a sentence wrapped on two lines: the dash belongs to the first line only
+    ('18_one_speaker_wrap_credits', ['- لا أعرف ماذا سأفعل', 'بعد كل ما حدث'], True, AR_SMALL),
+]
+for i, (name, lines, credits, font) in enumerate(DIALOGUE_BOX):
+    img = background(300 + i)
+    if credits:
+        d = ImageDraw.Draw(img)
+        credit(d, 175, 'Görüntü Yönetmeni', 'Selin Aydın')
+        credit(d, 1060, 'Kurgu', 'Ali Kaya')
+    subtitle(img, lines, font=font)
+    truth = '\n'.join('- ' + l[1:] if l.startswith('-') and not l.startswith('- ') else l for l in lines)
+    save(name, img, truth, 'two-line subtitle in the box, second line wider' + (', credits on its rows' if credits else ''))
+
 with open(os.path.join(OUT, 'truth.json'), 'w', encoding='utf-8') as f:
     json.dump(cases, f, ensure_ascii=False, indent=1)
 print(len(cases), 'images')

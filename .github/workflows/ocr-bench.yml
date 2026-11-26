@@ -1,7 +1,8 @@
 name: OCR bench (live Google Lens / Vision)
 
 # Reads the synthetic subtitle crops in bench/images with the app's own Lens/Vision code, live.
-# Vision runs only if the repository has a VISION_API_KEY secret (never printed).
+# Vision runs only if the repository has a VISION_API_KEY secret (never printed); Gemini / OpenRouter only
+# with GEMINI_API_KEY / OPENROUTER_API_KEY secrets and "[bench-ai]" in the commit message (they cost money).
 # The report is committed to the orphan branch "ocr-bench-results" (no APK is built or released).
 on:
   push:
@@ -42,6 +43,9 @@ jobs:
       - name: Run (live)
         env:
           VISION_API_KEY: ${{ secrets.VISION_API_KEY }}
+          # the AI engines cost per image: read only when the push says so
+          GEMINI_API_KEY: ${{ contains(github.event.head_commit.message, '[bench-ai]') && secrets.GEMINI_API_KEY || '' }}
+          OPENROUTER_API_KEY: ${{ contains(github.event.head_commit.message, '[bench-ai]') && secrets.OPENROUTER_API_KEY || '' }}
         run: |
           java -Dstdout.encoding=UTF-8 -cp out:libs/coroutines.jar:libs/ser-core.jar:libs/ser-json.jar:kotlinc/lib/kotlin-stdlib.jar \
             com.abdulrahman.hardsubocr.bench.BenchKt bench/images bench-out/report.md

@@ -445,16 +445,61 @@ object VisionLayout {
     }
 
     /**
+     * [m] (a mark: dash, punctuation) belongs to the Arabic word [c]: on its row, beside it — at most a
+     * little more than a word space away — and nearer to it than to any text in other letters (a
+     * stroke of a crew name read as «-» sits against that name, not against the subtitle).
+     */
+    private fun ownMark(m: Word, c: Word, all: List<Word>): Boolean {
+        if (!m.punct || c.punct || !hasArabic(c.text)) return false
+        val h = c.h.toDouble()
+        if (Math.abs(m.cy - c.cy) > h * 0.5) return false
+        val gap = maxOf(m.x0 - c.x1, c.x0 - m.x1).toDouble()
+        if (gap < -h * 0.3 || gap > h * 1.2) return false
+        return all.none { o ->
+            o !== m && o !== c && hasLatin(o.text) && minOf(o.y1, m.y1) - maxOf(o.y0, m.y0) > 0 &&
+                maxOf(o.x0 - m.x1, m.x0 - o.x1).toDouble() < gap
+        }
+    }
+
+    /**
+     * Keys ([ClassicShape.lineKey]) of the lines of this answer that start with a dialogue dash
+     * standing where a line's own dash stands: in front of its first Arabic word ([ownMark]), or
+     * read by Vision inside that word.
+     */
+    fun dashedLines(words: List<Word>): Set<String> {
+        if (words.isEmpty()) return emptySet()
+        val ws = dedupe(words)
+        val out = HashSet<String>()
+        for (line in lines(ws).map { dropStrays(it) }) {
+            if (line.isEmpty()) continue
+            val text = join(line)
+            if (!ClassicShape.startsWithDash(text)) continue
+            val first = line[0]
+            val ok = if (!first.punct) hasArabic(first.text)
+            else line.getOrNull(1)?.let { ownMark(first, it, ws) } ?: false
+            if (ok) out.add(ClassicShape.lineKey(text))
+        }
+        return out
+    }
+
+    /**
      * Where to look again — only when the first answer itself shows the subtitle was read together
      * with other text on its rows (crew names beside or touching the box), or unsure. The area is
      * the subtitle's words with a small margin, never reaching into that other text: the same
      * picture, cropped, nothing else changed. null = the first answer stands (no second request).
+     *
+     * The subtitle's own marks are part of the area: the dash in front of a line and the punctuation
+     * at its end ([ownMark]). Before 2.7.8 the area was the Arabic words alone plus a third of a line
+     * height, and the dash of a dialogue's wider line — beyond every letter of the subtitle — was cut
+     * off: «- هوليا ⏎ - ابتعدي يا جوليزار» came back «- هوليا ⏎ ابتعدي يا جوليزار».
      */
     fun focusArea(words: List<Word>, imgW: Int, imgH: Int): IntArray? {
         val ws = dedupe(words)
         val (core, noise) = subtitleWords(ws)
         if (core.isEmpty()) return null
-        val ax0 = core.minOf { it.x0 }; val ax1 = core.maxOf { it.x1 }
+        val marks = ws.filter { m -> m.punct && core.any { c -> ownMark(m, c, ws) } }
+        val area = core + marks
+        val ax0 = area.minOf { it.x0 }; val ax1 = area.maxOf { it.x1 }
         val ay0 = core.minOf { it.y0 }; val ay1 = core.maxOf { it.y1 }
         val h = core.map { it.h }.sorted()[core.size / 2]
         val others = ws.filter { it !in core && !it.punct }

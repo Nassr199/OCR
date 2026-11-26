@@ -91,13 +91,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var openRouterModel by mutableStateOf(s.openRouterModel)
     var thinking by mutableStateOf(s.thinking)
         private set
-    var profileGemini by mutableStateOf(s.profileGemini)
-        private set
-    var profileOpenRouter by mutableStateOf(s.profileOpenRouter)
+    /** Reading style of Gemini and OpenRouter (one setting for both). */
+    var aiProfile by mutableStateOf(s.aiProfile)
         private set
     var enhanceChoice by mutableStateOf(s.enhanceChoice)
-        private set
-    var mediaHigh by mutableStateOf(s.mediaHigh)
         private set
     var lastErrorReport by mutableStateOf(s.lastErrorReport)
         private set
@@ -268,7 +265,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var keyTesting by mutableStateOf(false)
         private set
 
-    /** One real request with the key: Gemini lists its models, Vision reads a tiny blank image. */
+    /**
+     * One real request with the key: Gemini lists its models, OpenRouter tells what the key is (paid,
+     * limit, usage) and whether the chosen model exists, Vision reads a tiny blank image.
+     */
     fun testKey() {
         val e = engine
         val key = keyOf(e).trim()
@@ -289,6 +289,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                     "\nغير متاح لحسابك الآن: " + missing.joinToString("، ") else "")
                         )
                     }
+                    EngineKind.OPENROUTER -> {
+                        val info = OpenRouterEngine.keyInfo(Net.transport, key)
+                        val models = runCatching { OpenRouterEngine.listModels(Net.transport) }.getOrDefault(emptyList())
+                        if (models.isNotEmpty()) fetchedOpenRouter = models
+                        val chosen = openRouterModel.trim().ifBlank { OpenRouterEngine.DEFAULT_MODEL }
+                        KeyTest(e, true, openRouterKeyText(info) +
+                            (if (models.isNotEmpty() && chosen !in models) "\n⚠️ النموذج المختار «$chosen» غير موجود في OpenRouter الآن، أو لا يقرأ الصور" else ""))
+                    }
                     EngineKind.VISION -> {
                         val png = withContext(Dispatchers.Default) {
                             val b = Bitmap.createBitmap(64, 32, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
@@ -306,6 +314,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /** «اختبار المفتاح» of OpenRouter in plain words (GET /api/v1/key). */
+    private fun openRouterKeyText(k: OpenRouterEngine.Companion.KeyInfo): String = buildString {
+        append("✓ المفتاح يعمل")
+        when (k.freeTier) {
+            false -> append(" • حساب مدفوع (اشتريت رصيدًا من قبل)")
+            true -> append(" • حساب مجاني: لم يُشترَ رصيد بعد، والنماذج المدفوعة تحتاج رصيدًا")
+            null -> Unit
+        }
+        if (k.limit == null) append("\nلا حد إنفاق على هذا المفتاح")
+        else append("\nحد هذا المفتاح ").append(money(k.limit)).append(" — المتبقي ").append(k.remaining?.let { money(it) } ?: "؟")
+        k.usage?.let { append(" • استهلاكه حتى الآن ").append(money(it)) }
+    }
+
+    private fun money(v: Double) = "%.2f$".format(java.util.Locale.US, v)
 
     fun chooseModel(id: String) {
         if (engine == EngineKind.OPENROUTER) {
@@ -332,15 +355,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EngineKind.LENS, EngineKind.VISION -> emptyList()
     }
 
+    /** The same style for Gemini and OpenRouter. */
     fun chooseProfile(p: AiProfile) {
-        if (engine == EngineKind.OPENROUTER) {
-            profileOpenRouter = p; s.profileOpenRouter = p
-        } else {
-            profileGemini = p; s.profileGemini = p
-        }
+        aiProfile = p; s.aiProfile = p
     }
 
-    fun currentProfile(): AiProfile = if (engine == EngineKind.OPENROUTER) profileOpenRouter else profileGemini
+    fun currentProfile(): AiProfile = aiProfile
 
     /** Effective "enhance images" for the selected engine (AUTO follows the profile). */
     fun enhanceEffective(): Boolean = when (enhanceChoice) {
@@ -356,10 +376,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun chooseEnhanceChoice(c: EnhanceChoice) {
         enhanceChoice = c; s.enhanceChoice = c
-    }
-
-    fun chooseMediaHigh(v: Boolean) {
-        mediaHigh = v; s.mediaHigh = v
     }
 
     fun dismissErrorReport() {
@@ -668,7 +684,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             lang = s.subLang,
             profile = s.profileFor(e),
             enhance = s.enhanceFor(e),
-            mediaHigh = s.mediaHigh,
+            mediaHigh = true,
             stabilize = s.stabilizeFor(e)
         )
         JobManager.start(ctx, req)
@@ -815,21 +831,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun mergeLabel(c: Choice): String = when (c) {
-        Choice.AUTO -> "تلقائي (حسب الأسلوب)"
+        Choice.AUTO -> "تلقائي (حسب المحرك)"
         Choice.PRO -> "دمج التكرار الذكي"
         Choice.STRICT_OR_PRECISE -> "دمج الانقسام فقط (آمن)"
         Choice.NONE -> "بدون دمج إطلاقًا"
     }
 
     fun cleanLabel(c: CleanChoice): String = when (c) {
-        CleanChoice.AUTO -> "تلقائي (حسب الأسلوب)"
-        CleanChoice.V26 -> "حماية التشكيل (موصى به)"
+        CleanChoice.AUTO -> "حسب طريقة القراءة (موصى به)"
+        CleanChoice.V26 -> "حماية التشكيل"
         CleanChoice.STRICT_OR_PRECISE -> "حرفي متعدد الأسطر"
-        CleanChoice.PRO -> "سريع: سطر واحد بدون تشكيل"
+        CleanChoice.PRO -> "سطر واحد بلا تشكيل"
     }
 
     fun enhanceLabel(c: EnhanceChoice): String = when (c) {
-        EnhanceChoice.AUTO -> "تلقائي (حسب الأسلوب)"
+        EnhanceChoice.AUTO -> "تلقائي (حسب طريقة القراءة)"
         EnhanceChoice.ON -> "دائمًا"
         EnhanceChoice.OFF -> "أبدًا"
     }

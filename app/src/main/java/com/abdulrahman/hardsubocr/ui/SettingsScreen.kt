@@ -210,11 +210,12 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
                 Spacer(Modifier.height(8.dp))
                 SliderRow("Gemini / OpenRouter", "${u.workersAi}", u.workersAi.toFloat(), 1f..12f, 10,
                     onChange = { u.workersAi = it.roundToInt() }, onDone = { s.workersAi = u.workersAi })
+                Hint("إذا ردّت الخدمة بأنها مزدحمة (429) يقلّل التطبيق هذا العدد تلقائيًا، ثم يعيده تدريجيًا حين تهدأ.")
             }
             SettingsCard("الأخطاء") {
                 SliderRow("عدد مرات إعادة المحاولة", "${u.retries}", u.retries.toFloat(), 0f..10f, 9,
                     onChange = { u.retries = it.roundToInt() }, onDone = { s.retries = u.retries })
-                Hint("إذا انقطعت الشبكة أو انشغلت الخدمة تُعاد الصورة تلقائيًا بعد انتظار يزيد تدريجيًا (2–20 ثانية). أما المفتاح الخاطئ أو نفاد الرصيد فيوقف المهمة فورًا.")
+                Hint("إذا انقطعت الشبكة أو تعطلت الخدمة مؤقتًا تُعاد الصورة بعد انتظار يزيد تدريجيًا (2–20 ثانية). وإذا قالت الخدمة إنها مزدحمة (429) يُنتظر ما تطلبه أو أطول (4–45 ثانية) وبضعف عدد المحاولات (8 على الأقل). أما المفتاح الخاطئ أو نفاد الرصيد فيوقف المهمة فورًا.")
             }
         }
 
@@ -288,9 +289,9 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             SettingsCard("Gemini وOpenRouter") {
                 ChoiceList(
                     listOf(
-                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "حسب الأسلوب المختار للنموذج. (الترجمة الإنجليزية لها تنظيف خاص تلقائيًا)"),
-                        ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف التشكيل الخاطئ فقط ويُبقي الصحيح، ويصلح الكلمات التي قُرئت حروفًا منفصلة"),
-                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف ردود النموذج والرموز الزائدة فقط، ويُبقي الأسطر والتشكيل كما قرأها"),
+                        ChoiceItem(CleanChoice.AUTO, vm.cleanLabel(CleanChoice.AUTO), "حسب «طريقة القراءة» المختارة في المحرك. مع «كما في الصورة»: تبقى الأسطر وشرطات الحوار وعلامات الترقيم والتشكيل، ويُحذف تشكيل الكلمة إذا جاء كثيفًا على أغلب حروفها. (للترجمة الإنجليزية تنظيف خاص تلقائيًا)"),
+                        ChoiceItem(CleanChoice.V26, vm.cleanLabel(CleanChoice.V26), "يحذف تشكيل الكلمة إذا جاء كثيفًا على أغلب حروفها، ويصلح الكلمات التي قُرئت حروفًا منفصلة، ويُبقي الأسطر. يحذف «…» وعلامتي «»."),
+                        ChoiceItem(CleanChoice.STRICT_OR_PRECISE, vm.cleanLabel(CleanChoice.STRICT_OR_PRECISE), "يحذف ردود النموذج والرموز الزائدة فقط، ويُبقي الأسطر والتشكيل كما كتبها النموذج"),
                         ChoiceItem(CleanChoice.PRO, vm.cleanLabel(CleanChoice.PRO), "يُبقي العربي فقط في سطر واحد ويحذف التشكيل")
                     ),
                     u.clean
@@ -304,7 +305,7 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
         SettingsPage.MERGE -> SettingsCard("طريقة الدمج") {
             ChoiceList(
                 listOf(
-                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision: دمج التكرار. Gemini وOpenRouter: حسب الأسلوب المختار."),
+                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision: دمج التكرار. Gemini وOpenRouter: حسب «طريقة القراءة» (دمج الانقسام فقط، إلا مع «سطر واحد»: دمج التكرار)."),
                     ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "يجمع المقاطع المتتالية المتطابقة تقريبًا (90% فأكثر) التي يفصلها أقل من ثلث ثانية في ترجمة واحدة"),
                     ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "يجمع فقط مقطعين متلاصقين بالنص نفسه (ترجمة انقسمت إلى صورتين)، ولا يدمج نصين مختلفين أبدًا"),
                     ChoiceItem(Choice.NONE, vm.mergeLabel(Choice.NONE), "كل صورة ترجمة مستقلة بتوقيتها، حتى لو تكرر النص")
@@ -318,14 +319,14 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             Spacer(Modifier.height(6.dp))
             ChoiceList(
                 listOf(
-                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع أسلوب «مع التشكيل»، ومعطّل مع «حرفي» و«سريع»"),
+                    ChoiceItem(EnhanceChoice.AUTO, vm.enhanceLabel(EnhanceChoice.AUTO), "مفعّل مع «كما في الصورة»، ومعطّل مع «حرفي» و«سطر واحد»"),
                     ChoiceItem(EnhanceChoice.ON, vm.enhanceLabel(EnhanceChoice.ON), null),
                     ChoiceItem(EnhanceChoice.OFF, vm.enhanceLabel(EnhanceChoice.OFF), null)
                 ),
                 vm.enhanceChoice
             ) { vm.chooseEnhanceChoice(it) }
             Spacer(Modifier.height(4.dp))
-            Hint("يقصّ الجزء الذي فيه الترجمة، ويكبّر الصور الصغيرة، ويحوّلها إلى رمادي بتباين ووضوح أعلى قبل الإرسال.")
+            Hint("يُبقي شريط الترجمة وحده — ولا يقطع أبدًا سطرًا من الترجمة إن كان أعلى من المعتاد — ويكبّر الصور الصغيرة، ويحوّلها إلى رمادي بتباين ووضوح أعلى قبل الإرسال.")
         }
 
         SettingsPage.SRT -> SettingsCard(null) {

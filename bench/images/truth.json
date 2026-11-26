@@ -262,5 +262,71 @@
    0,
    0
   ]
+ },
+ {
+  "file": "13_dialogue_box.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider",
+  "box": [
+   444,
+   69,
+   786,
+   187
+  ]
+ },
+ {
+  "file": "14_dialogue_box_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   444,
+   69,
+   786,
+   187
+  ]
+ },
+ {
+  "file": "15_dialogue_box_thin_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   480,
+   75,
+   750,
+   187
+  ]
+ },
+ {
+  "file": "16_dialogue_box_long2_credits.jpg",
+  "truth": "- ماذا؟\n- لا شيء، عودي إلى البيت الآن",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   342,
+   61,
+   888,
+   187
+  ]
+ },
+ {
+  "file": "17_dialogue_box_nospace_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   450,
+   69,
+   780,
+   187
+  ]
+ },
+ {
+  "file": "18_one_speaker_wrap_credits.jpg",
+  "truth": "- لا أعرف ماذا سأفعل\nبعد كل ما حدث",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   418,
+   51,
+   812,
+   187
+  ]
  }
 ]
