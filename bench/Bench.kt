@@ -61,11 +61,49 @@ private fun toPng(jpeg: ByteArray): Png {
     return Png(out.toByteArray(), img.width, img.height)
 }
 
+/** The picture as JPEG at [quality] (0–100), same size: what Chrome's Lens overlay uploads (JPEG, quality 40). */
+private fun toJpeg(jpeg: ByteArray, quality: Int): Png {
+    val src = ImageIO.read(jpeg.inputStream())
+    val rgb = java.awt.image.BufferedImage(src.width, src.height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    rgb.createGraphics().apply { drawImage(src, 0, 0, null); dispose() }
+    val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
+    val param = writer.defaultWriteParam.apply { compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT; compressionQuality = quality / 100f }
+    val out = ByteArrayOutputStream()
+    ImageIO.createImageOutputStream(out).use { ios -> writer.output = ios; writer.write(null, javax.imageio.IIOImage(rgb, null, null), param) }
+    writer.dispose()
+    return Png(out.toByteArray(), src.width, src.height)
+}
+
+private fun toJpegBytes(img: ByteArray, quality: Int): ByteArray = toJpeg(img, quality).bytes
+
+/** One Lens request, timed (ms of the HTTP exchange only). */
+private suspend fun timedLens(http: HttpTransport, img: Png): Pair<ByteArray?, Long> {
+    val body = LensProtocol.buildRequest(img.bytes, img.w, img.h, "ar", "US", "America/New_York")
+    val t0 = System.nanoTime()
+    val r = runCatching {
+        http.execute(
+            HttpRequest(
+                LensProtocol.ENDPOINT,
+                headers = mapOf(
+                    "X-Goog-Api-Key" to LensProtocol.API_KEY, "User-Agent" to LensProtocol.USER_AGENT,
+                    "Accept" to "*/*", "Accept-Language" to "ar,en;q=0.9"
+                ),
+                body = body, contentType = "application/x-protobuf", timeoutMs = 60_000
+            )
+        )
+    }.getOrNull()
+    val ms = (System.nanoTime() - t0) / 1_000_000
+    kotlinx.coroutines.delay(300)
+    return (if (r != null && r.code == 200) r.body else null) to ms
+}
+
 /** The app's ImageResampler, on the JVM (bilinear, like Android's createScaledBitmap(filter = true)). */
 object JvmResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
     override fun view(image: com.abdulrahman.hardsubocr.core.PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int, scale: Float): com.abdulrahman.hardsubocr.core.PreparedImage? {
         val p = transform(image.bytes, x0, y0, x1, y1, scale.toDouble())
-        return com.abdulrahman.hardsubocr.core.PreparedImage(p.bytes, "image/png", p.w, p.h, image.name)
+        // as the app's AndroidResampler since 2.8.0: the look as JPEG (quality 90)
+        val j = toJpegBytes(p.bytes, 90)
+        return com.abdulrahman.hardsubocr.core.PreparedImage(j, "image/jpeg", p.w, p.h, image.name)
     }
 }
 
@@ -191,6 +229,8 @@ fun main(args: Array<String>) = runBlocking {
     sb.append("AI: ").append(listOfNotNull(gemini?.let { "Gemini $geminiModel" }, openRouter?.let { "OpenRouter $openRouterModel" }).ifEmpty { listOf("not run (needs the secrets and [bench-ai] in the commit message)") }.joinToString(", "))
         .append(" — the app's exact reading (picture enhanced as in the app, thinking low)\n\n")
     val scores = LinkedHashMap<String, Score>()
+    class Fmt { var n = 0; var failed = 0; var bytes = 0L; val times = ArrayList<Long>() }
+    val formats = LinkedHashMap<String, Fmt>()
     val shapes = LinkedHashMap<String, IntArray>()
     /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
     fun shape(name: String, got: String, truth: String): String {
@@ -227,11 +267,29 @@ fun main(args: Array<String>) = runBlocking {
             if (res.repeats.isNotEmpty()) sb.append("    read twice in the same place, left out: ").append(res.repeats.joinToString(" ") { "«$it»" }).append('\n')
             sb.append("    words (Lens's own lines, word by word with its box)\n").append(lensRaw(body))
         }
+        // ---------------------------------------------------------------- Google Lens: upload format (speed vs accuracy)
+        run {
+            val src = File(dir, file).readBytes()
+            val line = StringBuilder("- Lens format:")
+            for ((fmt, img) in listOf("png" to png, "jpeg95" to toJpeg(src, 95), "jpeg85" to toJpeg(src, 85), "jpeg70" to toJpeg(src, 70), "jpeg40" to toJpeg(src, 40))) {
+                val (b, ms) = timedLens(http, img)
+                val rr = b?.let { LensProtocol.parseResponse(it) }
+                val text = rr?.readingText(img.w, img.h)
+                val f = formats.getOrPut(fmt) { Fmt() }
+                f.bytes += img.bytes.size; f.times.add(ms); f.n++
+                if (text == null) { f.failed++; line.append(" $fmt ✖"); continue }
+                line.append(" $fmt ").append(score("lens format $fmt", text, truth)).append(" ${img.bytes.size / 1024}KB ${ms}ms;")
+                shape("lens format $fmt", text, truth)
+            }
+            sb.append(line).append('\n')
+        }
         // ---------------------------------------------------------------- Google Lens: the app (multi-view)
         run {
             var looks = ""
             val engine = com.abdulrahman.hardsubocr.core.LensEngine(http, "ar", "US", views = JvmResampler, looks = { looks = it })
-            val img = com.abdulrahman.hardsubocr.core.PreparedImage(png.bytes, "image/png", png.w, png.h, file)
+            // as the app since 2.8.0: a JPEG that fits goes to Lens as it is
+            val src = File(dir, file).readBytes()
+            val img = com.abdulrahman.hardsubocr.core.PreparedImage(src, "image/jpeg", png.w, png.h, file)
             val t = runCatching { engine.recognize(img) }
             val text = t.getOrNull()
             if (text == null) sb.append("- Lens app: ").append(t.exceptionOrNull()?.message).append('\n')
@@ -261,7 +319,9 @@ fun main(args: Array<String>) = runBlocking {
         if (visionKey.isNotBlank()) {
             var trace: com.abdulrahman.hardsubocr.core.VisionEngine.Trace? = null
             val engine = VisionEngine(http, visionKey, "ar", document = true, cropper = JvmCropper, trace = { trace = it })
-            val img = com.abdulrahman.hardsubocr.core.PreparedImage(png.bytes, "image/png", png.w, png.h, file)
+            // as the app since 2.8.0: a JPEG that fits goes to Lens as it is
+            val src = File(dir, file).readBytes()
+            val img = com.abdulrahman.hardsubocr.core.PreparedImage(src, "image/jpeg", png.w, png.h, file)
             val t = runCatching { engine.recognize(img) }
             val text = t.getOrNull()
             if (text == null) sb.append("- Vision app: ").append((t.exceptionOrNull()?.message ?: "").replace(visionKey, "***")).append('\n')
@@ -323,6 +383,14 @@ fun main(args: Array<String>) = runBlocking {
         sb.append('\n')
     }
 
+    if (formats.isNotEmpty()) {
+        sb.append("## Lens upload format (same picture, same size; one look each)\n\n| format | avg size | median ms | p90 ms | failed |\n|---|---|---|---|---|\n")
+        for ((k, f) in formats) {
+            val t = f.times.sorted()
+            sb.append("| $k | ${f.bytes / maxOf(1, f.n) / 1024} KB | ${t.getOrElse(t.size / 2) { 0 }} | ${t.getOrElse((t.size * 9) / 10) { 0 }} | ${f.failed} |\n")
+        }
+        sb.append('\n')
+    }
     sb.append("## Summary (after the app's classic cleaning; errors = edit distance to the truth)\n\n")
     sb.append("| engine | exact | char errors | CER |\n|---|---|---|---|\n")
     for ((k, s) in scores) {

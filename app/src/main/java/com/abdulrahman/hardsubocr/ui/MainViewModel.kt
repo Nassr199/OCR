@@ -91,10 +91,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var thinking by mutableStateOf(s.thinking)
         private set
     /** Reading style of Gemini and OpenRouter (one setting for both). */
-    var aiProfile by mutableStateOf(s.aiProfile)
-        private set
-    var enhanceChoice by mutableStateOf(s.enhanceChoice)
-        private set
     var lastErrorReport by mutableStateOf(s.lastErrorReport)
         private set
 
@@ -355,22 +351,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The same text form for Gemini and OpenRouter. */
-    fun chooseProfile(p: AiProfile) {
-        aiProfile = p; s.aiProfile = p
-    }
+    /** Gemini/OpenRouter: Google Lens reads the picture again when the AI repeats a word or is cut. */
+    var aiLensCheck by mutableStateOf(s.aiLensCheck)
+        private set
 
-    fun currentProfile(): AiProfile = aiProfile
-
-    /** Effective "enhance images" for the selected engine (AUTO follows the profile). */
-    fun enhanceEffective(): Boolean = when (enhanceChoice) {
-        EnhanceChoice.ON -> true
-        EnhanceChoice.OFF -> false
-        EnhanceChoice.AUTO -> !engine.isClassicOcr && currentProfile().enhanceImages
-    }
-
-    fun setEnhance(on: Boolean) {
-        enhanceChoice = if (on) EnhanceChoice.ON else EnhanceChoice.OFF
-        s.enhanceChoice = enhanceChoice
+    fun chooseAiLensCheck(on: Boolean) {
+        aiLensCheck = on; s.aiLensCheck = on
     }
 
 
@@ -681,7 +667,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             profile = s.profileFor(e),
             enhance = s.enhanceFor(e),
             mediaHigh = true,
-            stabilize = s.stabilizeFor(e)
+            stabilize = s.stabilizeFor(e),
+            aiLensCheck = aiLensCheck
         )
         JobManager.start(ctx, req)
     }

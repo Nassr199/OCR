@@ -32,6 +32,12 @@ sealed class OcrError(message: String) : Exception(message) {
 
     /** Only this image failed. The job continues and the image is listed as failed. */
     class Failed(message: String) : OcrError(message)
+
+    /**
+     * An AI answer stopped before its end twice (filter, length): only this image failed, and the
+     * pipeline may take Google Lens's reading of it instead ([LensCheck]). [partial] is what was written.
+     */
+    class Cut(message: String, val partial: String) : OcrError(message)
 }
 
 enum class EngineKind { LENS, GEMINI, OPENROUTER, VISION }

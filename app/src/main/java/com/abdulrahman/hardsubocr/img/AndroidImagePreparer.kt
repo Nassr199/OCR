@@ -14,8 +14,11 @@ import com.abdulrahman.hardsubocr.core.isClassicOcr
 import java.io.ByteArrayOutputStream
 
 /**
- * - enhance = false: Lens and Vision get PNG ≤ 1500 px (like chrome-lens-py); Gemini/OpenRouter get the
- *   original PNG/JPEG/WebP bytes untouched.
+ * - Google Lens gets JPEG ≤ 1500 px (2.8.0): what Chrome's own Lens upload is (JPEG). A JPEG source
+ *   that fits goes as it is, with no re-encoding; anything else is encoded at [LENS_JPEG_QUALITY].
+ *   Live bench (37 frames, same size): PNG 216 KB / median 559 ms; JPEG q95 44 KB / 409 ms; q85
+ *   24 KB / 385 ms — the same readings (32/37 exact, 28/37 shape; errors 14 → 13). Vision keeps PNG.
+ * - enhance = false: Vision gets PNG ≤ 1500 px; Gemini/OpenRouter get the original PNG/JPEG/WebP bytes.
  * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
  *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
  */
@@ -37,7 +40,12 @@ class AndroidImagePreparer(
         if (enhance && !kind.isClassicOcr) return enhanced(bytes, w, h, kind)
 
         return when {
-            // Lens and Vision: the same PNG ≤ 1500 px (classic OCR)
+            // Google Lens: the JPEG as it came, or encoded once (see above)
+            kind == EngineKind.LENS -> {
+                if (mime == "image/jpeg" && longest <= LensProtocol.MAX_DIMENSION) PreparedImage(bytes, "image/jpeg", w, h)
+                else encodeJpeg(bytes, w, h, LensProtocol.MAX_DIMENSION)
+            }
+            // Vision: PNG ≤ 1500 px
             kind.isClassicOcr -> {
                 if (mime == "image/png" && longest <= LensProtocol.MAX_DIMENSION) {
                     PreparedImage(bytes, "image/png", w, h)
@@ -83,6 +91,17 @@ class AndroidImagePreparer(
         return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)
     }
 
+    private fun encodeJpeg(bytes: ByteArray, w: Int, h: Int, maxDim: Int): PreparedImage {
+        val decoded = decode(bytes, w, h, maxDim)
+        val bmp = scaleToFit(decoded, maxDim)
+        try {
+            return PreparedImage(toJpeg(bmp), "image/jpeg", bmp.width, bmp.height)
+        } finally {
+            if (bmp !== decoded) bmp.recycle()
+            decoded.recycle()
+        }
+    }
+
     private fun encodePng(bytes: ByteArray, w: Int, h: Int, maxDim: Int): PreparedImage {
         val decoded = decode(bytes, w, h, maxDim)
         val bmp = scaleToFit(decoded, maxDim)
@@ -104,6 +123,15 @@ class AndroidImagePreparer(
             return Bitmap.createScaledBitmap(src, nw, nh, true)
         }
 
+        /** Google Lens upload quality (see the class comment): no loss of reading at 85 and above on the bench. */
+        const val LENS_JPEG_QUALITY = 90
+
+        fun toJpeg(bmp: Bitmap, quality: Int = LENS_JPEG_QUALITY): ByteArray {
+            val out = ByteArrayOutputStream(bmp.width * bmp.height / 8 + 1024)
+            bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            return out.toByteArray()
+        }
+
         fun toPng(bmp: Bitmap): ByteArray {
             val out = ByteArrayOutputStream(bmp.width * bmp.height / 2 + 1024)
             bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -113,8 +141,8 @@ class AndroidImagePreparer(
 }
 
 /**
- * Lens's extra looks (ClassicViews): a part of the same picture, scaled (bilinear), as PNG — the
- * pixels themselves are not altered.
+ * Lens's extra looks (ClassicViews): a part of the same picture, scaled (bilinear), as JPEG like the
+ * first look (2.8.0) — the pixels themselves are not otherwise altered.
  */
 object AndroidResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
     override fun view(image: PreparedImage, x0: Int, y0: Int, x1: Int, y1: Int, scale: Float): PreparedImage? {
@@ -129,7 +157,7 @@ object AndroidResampler : com.abdulrahman.hardsubocr.core.ImageResampler {
             val nh = maxOf(1, Math.round(part.height * scale))
             val out = if (nw == part.width && nh == part.height) part else Bitmap.createScaledBitmap(part, nw, nh, true)
             try {
-                return PreparedImage(AndroidImagePreparer.toPng(out), "image/png", out.width, out.height, image.name)
+                return PreparedImage(AndroidImagePreparer.toJpeg(out), "image/jpeg", out.width, out.height, image.name)
             } finally {
                 if (out !== part && out !== src) out.recycle()
                 if (part !== src) part.recycle()

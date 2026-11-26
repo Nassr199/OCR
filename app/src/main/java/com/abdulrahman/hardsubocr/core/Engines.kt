@@ -429,7 +429,7 @@ enum class AiProfile(
      * merge of split pieces only. The cleaning (CleanMode.EXACT) is v2.6's that also keeps «…», «» and
      * the dialogue dash's space. (2.7.8 replaced the prompt with one of this app's — withdrawn in 2.7.9.)
      */
-    V26("v26", "تشكيل واضح", Prompts.GEMINI_V26_PROMPT, CleanMode.EXACT, MergeMode.STRICT, true, true),
+    V26("v26s", "تشكيل واضح", Prompts.SUBTITLE_PROMPT, CleanMode.EXACT, MergeMode.STRICT, true, true),
 
     /** ocr_windows_v2.1.py: long ultra-precise prompt, every diacritic the model writes kept, merge rules 2A–2E. */
     V21("v21", "كل التشكيل", Prompts.GEMINI_SYSTEM_PROMPT, CleanMode.PRECISE, MergeMode.STRICT, false, false),
@@ -488,8 +488,8 @@ object AiFinish {
     fun note(engine: String, image: String, reason: String, text: String) =
         DiagLog.w("ai", "$image: $engine stopped before the end ($reason) after «${text.replace("\n", " ⏎ ").take(80)}»")
 
-    fun failed(engine: String, reasons: List<String>): OcrError.Failed =
-        OcrError.Failed("$engine أوقف الإجابة قبل نهايتها مرتين (${reasons.distinct().joinToString(" / ")}) — لم تُكتب هذه الترجمة بدل أن تُكتب ناقصة")
+    fun failed(engine: String, reasons: List<String>, partial: String = ""): OcrError.Cut =
+        OcrError.Cut("$engine أوقف الإجابة قبل نهايتها مرتين (${reasons.distinct().joinToString(" / ")}) — لم تُكتب هذه الترجمة بدل أن تُكتب ناقصة", partial)
 }
 
 /**
@@ -507,6 +507,9 @@ object AiRecipe {
      * goes as «low» from the first request; any other model that refuses a level is lowered at its first
      * answer (minimal → low → the model's own).
      */
+    /** Output room per answer, thinking included (Google: never a small limit with thinking on). */
+    const val MAX_OUTPUT_TOKENS = 8192
+
     fun thinkingFor(model: String, level: ThinkingLevel): String? {
         val id = model.trim().substringAfterLast('/').lowercase()
         return if (level == ThinkingLevel.MINIMAL && (id.startsWith("gemini-4") || id.startsWith("gemini-3.8"))) "low" else level.api
@@ -541,11 +544,6 @@ class GeminiEngine(
     var mediaHigh: Boolean = highResolution
         private set
 
-    /** temperature 0 / topP 1 (v2.6); dropped if a model ever refuses them (Gemini 4 ignores them). */
-    @Volatile
-    var sampling: Boolean = true
-        private set
-
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح Gemini API أولاً")
         if (this.model.isBlank()) throw OcrError.Fatal("اختر نموذج Gemini")
@@ -574,10 +572,10 @@ class GeminiEngine(
             )) addJsonObject { put("category", c); put("threshold", "BLOCK_NONE") }
         }
         putJsonObject("generationConfig") {
-            if (sampling) {
-                put("temperature", 0.0)
-                put("topP", 1.0)
-            }
+            // no temperature / topP (v2.6 sent 0 / 1): Gemini 3.5 Flash-Lite, 3.6 and later ignore them
+            // and Google says they will be refused; on Gemini 3 below 1.0 can loop (Google)
+            // thinking tokens count against it: room enough that a subtitle is never cut by the limit
+            put("maxOutputTokens", AiRecipe.MAX_OUTPUT_TOKENS)
             if (high) put("mediaResolution", "MEDIA_RESOLUTION_HIGH")
             if (thinking != null) putJsonObject("thinkingConfig") { put("thinkingLevel", thinking) }
         }
@@ -591,7 +589,7 @@ class GeminiEngine(
             val why = reason ?: "?"
             AiFinish.note("Gemini", image.name, why, text)
             cuts.add(why)
-            if (cuts.size >= 2) throw AiFinish.failed("Gemini", cuts)
+            if (cuts.size >= 2) throw AiFinish.failed("Gemini", cuts, text)
             kotlinx.coroutines.delay(AiFinish.PAUSE_MS)
         }
     }
@@ -611,10 +609,11 @@ class GeminiEngine(
         )
         if (resp.code == 200) {
             val root = parseJsonOrNull(resp.text).obj()
-            root?.get("usageMetadata").obj()?.let { u ->
-                usage.add(u["promptTokenCount"].long(), u["candidatesTokenCount"].long(), u["thoughtsTokenCount"].long())
-            }
-            return parseText(resp.text) to finishReason(resp.text)
+            val u = root?.get("usageMetadata").obj()
+            if (u != null) usage.add(u["promptTokenCount"].long(), u["candidatesTokenCount"].long(), u["thoughtsTokenCount"].long())
+            val reason = finishReason(resp.text)
+            DiagLog.i("ai", "${image.name}: Gemini $model ${level ?: "auto"} → ${reason ?: "-"} · in ${u?.get("promptTokenCount").long() ?: "?"} · out ${u?.get("candidatesTokenCount").long() ?: "?"} · thinking ${u?.get("thoughtsTokenCount").long() ?: 0}")
+            return parseText(resp.text) to reason
         }
 
         val err = GeminiErrors.parse(resp.text)
@@ -632,11 +631,6 @@ class GeminiEngine(
             mediaHigh = false
             DiagLog.w("gemini", "$model refused mediaResolution HIGH: $msg")
             throw OcrError.Retryable("النموذج لا يقبل تحديد دقة الصورة — إعادة بدقته الافتراضية", retryAfterMs = 0)
-        }
-        if (resp.code == 400 && sampling && (low.contains("temperature") || low.contains("top_p") || low.contains("topp"))) {
-            sampling = false
-            DiagLog.w("gemini", "$model refused temperature/topP: $msg")
-            throw OcrError.Retryable("النموذج لا يقبل ضبط العشوائية — إعادة بإعداده الافتراضي", retryAfterMs = 0)
         }
         throw GeminiErrors.classify(resp.code, err.status, msg, err.retryDelayMs)
     }
@@ -779,11 +773,6 @@ class OpenRouterEngine(
     var effort: String? = AiRecipe.thinkingFor(this.model, thinking)
         private set
 
-    /** temperature 0 / top_p 1, dropped if the model refuses them (some reasoning models do). */
-    @Volatile
-    var sampling: Boolean = true
-        private set
-
     init {
         if (apiKey.isBlank()) throw OcrError.Fatal("أدخل مفتاح OpenRouter أولاً")
     }
@@ -806,10 +795,8 @@ class OpenRouterEngine(
                 }
             }
         }
-        if (sampling) {
-            put("temperature", 0.0)
-            put("top_p", 1.0)
-        }
+        // no temperature / top_p: ignored by current Gemini models (see GeminiEngine.buildBody)
+        put("max_tokens", AiRecipe.MAX_OUTPUT_TOKENS)
         // without it OpenRouter lets the model think at its own default (Gemini 4 Hydrogen: high — far slower)
         effort?.let { e -> putJsonObject("reasoning") { put("effort", e); put("exclude", true) } }
     }.toString()
@@ -822,7 +809,7 @@ class OpenRouterEngine(
             val why = listOfNotNull(reason, native?.takeIf { !it.equals(reason, ignoreCase = true) }).joinToString(" / ")
             AiFinish.note("OpenRouter", image.name, why, text)
             cuts.add(why)
-            if (cuts.size >= 2) throw AiFinish.failed("OpenRouter", cuts)
+            if (cuts.size >= 2) throw AiFinish.failed("OpenRouter", cuts, text)
             kotlinx.coroutines.delay(AiFinish.PAUSE_MS)
         }
     }
@@ -855,6 +842,8 @@ class OpenRouterEngine(
                 )
             }
             val choice = root?.get("choices").arr()?.firstOrNull().obj()
+            val u = root?.get("usage").obj()
+            DiagLog.i("ai", "${image.name}: OpenRouter $model ${effort ?: "auto"} → ${choice?.get("finish_reason").str() ?: "-"}/${choice?.get("native_finish_reason").str() ?: "-"} · ${root?.get("provider").str() ?: "?"} · in ${u?.get("prompt_tokens").long() ?: "?"} · out ${u?.get("completion_tokens").long() ?: "?"} · thinking ${u?.get("completion_tokens_details").obj()?.get("reasoning_tokens").long() ?: 0}")
             return Triple(parseText(root), choice?.get("finish_reason").str(), choice?.get("native_finish_reason").str())
         }
         throw classify(resp, errObj)
@@ -884,11 +873,6 @@ class OpenRouterEngine(
                 "OpenRouter: مزوّد النموذج مزدحم الآن (429$by) — ليس رصيدك",
                 parseRetryAfter(resp.header("Retry-After")), true
             )
-            code == 400 && sampling && e.message.lowercase().let { it.contains("temperature") || it.contains("top_p") } -> {
-                sampling = false
-                DiagLog.w("openrouter", "$model refused temperature/top_p: ${e.message}")
-                OcrError.Retryable("النموذج لا يقبل ضبط العشوائية — إعادة بإعداده الافتراضي", retryAfterMs = 0)
-            }
             code == 400 && effort != null && e.message.lowercase().let { it.contains("reasoning") || it.contains("thinking") } -> {
                 DiagLog.w("openrouter", "$model refused reasoning effort $effort: ${e.message}")
                 effort = null

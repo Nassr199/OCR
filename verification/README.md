@@ -21,6 +21,7 @@ Paths inside the scripts point to the machine where they were run; adjust them.
 | `ai/AiTest.kt` | 2.7.8–2.7.9: Gemini and OpenRouter send the same request (v2.6's: its prompt, then the picture; thinking «minimal», «low» for Gemini 4 / 3.8); an answer cut before its end is sent again, never written; OpenRouter errors in plain words (provider 429 vs credit vs free-model limits), key check, refused parameters; adaptive requests in flight under 429; the exact reading's cleaning. |
 | `img/BandTest.kt` | 2.7.8: the image enhancement's subtitle band never cuts a line of the subtitle; v2.6's band unchanged where it cut nothing. Run: `java … BandTestKt ../bench/images`. |
 | `lens/RepeatTest.kt` | 2.7.9: a place Lens read twice inside one line (letters and shadow) — «… انظري إلي هل تسمعينني؟ هل», «… على الجرح الجرح» — removed by word boxes (real Lens protobuf built in the test); real repeats in two places kept; no word boxes / line-sized boxes untouched; copies in another line, marks, pieces of a word, another hamza. |
+| `ai/AiCheckTest.kt` | 2.8.0: Google Lens as the AI engines' second reader — repeat counts («بخير بخير بخير…» → Lens's count, the AI's spelling kept), cut answers («أر» → Lens's «أريد أمي»), Lens never rewrites other words, Lens reads the original picture, memory key `|lens`, Lens off / unreachable. |
 | `vision/RepeatVisionTest.kt` + `LayoutCommon.kt` | 2.7.9: the same two lines through Google Vision (copy inside the same paragraph): removed; real repeats kept. |
 
 `kc.sh` compiles Kotlin with the compiler embedded in a Gradle distribution:
