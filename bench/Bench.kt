@@ -137,15 +137,35 @@ private fun one(s: String) = s.replace("\n", " ⏎ ")
  * text-safe edges for an image folder (no band for the video mode's area, "_roi_" frames), and since
  * 2.9.0 framed on the subtitle itself ([frame]).
  */
-private fun aiPicture(jpeg: ByteArray, name: String, frame: Boolean): com.abdulrahman.hardsubocr.core.PreparedImage {
+private fun aiPicture(jpeg: ByteArray, name: String, frame: Boolean, upscale: Boolean = true): com.abdulrahman.hardsubocr.core.PreparedImage {
     val img = ImageIO.read(jpeg.inputStream())
     val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
     val out = com.abdulrahman.hardsubocr.core.ImageV26.prepare(
         px, img.width, img.height,
-        com.abdulrahman.hardsubocr.core.ImageV26.Options(cropBand = "_roi_" !in name, keepText = true, frame = frame)
+        com.abdulrahman.hardsubocr.core.ImageV26.Options(cropBand = "_roi_" !in name, keepText = true, frame = frame, upscale = upscale)
     )
     return com.abdulrahman.hardsubocr.core.PreparedImage(com.abdulrahman.hardsubocr.core.PngGray.encode(out), "image/png", out.width, out.height, name)
 }
+
+/** The picture as it came (color JPEG, no v2.6 enhancement); framed on the subtitle when asked. */
+private fun colorPicture(jpeg: ByteArray, name: String, frame: Boolean): com.abdulrahman.hardsubocr.core.PreparedImage {
+    if (!frame) {
+        val img = ImageIO.read(jpeg.inputStream())
+        return com.abdulrahman.hardsubocr.core.PreparedImage(jpeg, "image/jpeg", img.width, img.height, name)
+    }
+    val img = ImageIO.read(jpeg.inputStream())
+    val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
+    val b = com.abdulrahman.hardsubocr.core.SubtitleFrame.find(px, img.width, img.height) ?: return colorPicture(jpeg, name, false)
+    val part = img.getSubimage(b.left, b.top, b.width, b.height)
+    val copy = java.awt.image.BufferedImage(b.width, b.height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    copy.graphics.drawImage(part, 0, 0, null)
+    val out = ByteArrayOutputStream()
+    ImageIO.write(copy, "png", out)
+    return com.abdulrahman.hardsubocr.core.PreparedImage(out.toByteArray(), "image/png", b.width, b.height, name)
+}
+
+/** How the picture is made for a variant. */
+private enum class Pic { V26, V26_FRAMED, V26_FRAMED_NO_UPSCALE, COLOR, COLOR_FRAMED }
 
 /** The AI instructions of 2.8.0, to compare with today's (Prompts.SUBTITLE_PROMPT). */
 private const val PROMPT_280: String =
@@ -169,16 +189,25 @@ private const val PROMPT_280: String =
         "Output only the subtitle text with no commentary.\n" +
         ""
 
-/** One way of reading with an AI engine: the picture (framed or not), the instructions, the thinking level. */
-private class AiVariant(val name: String, val frame: Boolean, val prompt: String?, val thinking: com.abdulrahman.hardsubocr.core.ThinkingLevel)
+/** One way of reading with an AI engine: the picture, the instructions, the thinking level. */
+private class AiVariant(val name: String, val pic: Pic, val prompt: String?, val thinking: com.abdulrahman.hardsubocr.core.ThinkingLevel)
 
+/** The 2.8.0 instructions with only "every line" instead of "only the main" dialogue. */
+private val PROMPT_EVERY_LINE: String = PROMPT_280.replace(
+    "- Extract only the main Arabic subtitle dialogue.\n",
+    "- Extract the Arabic subtitle dialogue: every one of its lines, top to bottom, including a short line such as a single name.\n"
+).also { check(it != PROMPT_280) }
+
+private val MIN = com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL
 private val AI_VARIANTS = listOf(
-    AiVariant("2.8.0", false, PROMPT_280, com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL),
-    AiVariant("2.9.0", true, null, com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL),
-    AiVariant("2.9.0 thinking low", true, null, com.abdulrahman.hardsubocr.core.ThinkingLevel.LOW),
-    AiVariant("frame only", true, PROMPT_280, com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL),
-    AiVariant("prompt only", false, null, com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL),
+    AiVariant("2.8.0", Pic.V26, PROMPT_280, MIN),
+    AiVariant("color", Pic.COLOR, PROMPT_280, MIN),
+    AiVariant("color framed", Pic.COLOR_FRAMED, PROMPT_280, MIN),
+    AiVariant("gray framed ×1", Pic.V26_FRAMED_NO_UPSCALE, PROMPT_280, MIN),
+    AiVariant("2.8.0 every line", Pic.V26, PROMPT_EVERY_LINE, MIN),
+    AiVariant("2.9.0 draft", Pic.V26_FRAMED, null, MIN),
 )
+private const val AI_RUNS = 3
 
 /** One-line, no tashkeel — the comparison form (the app's classic cleaning). */
 private fun norm(s: String) = Cleaner.clean(s, CleanMode.PRO)
@@ -270,7 +299,7 @@ fun main(args: Array<String>) = runBlocking {
     sb.append("# OCR bench — commit ").append(System.getenv("GITHUB_SHA") ?: "local").append(" — ").append(java.time.Instant.now()).append("\n\n")
     sb.append("Vision: ").append(if (visionKey.isBlank()) "no VISION_API_KEY secret — Lens only" else "key present (not shown)").append("\n")
     sb.append("AI: ").append(listOfNotNull(gemini?.let { "Gemini $geminiModel" }, openRouter?.let { "OpenRouter $openRouterModel" }).ifEmpty { listOf("not run (needs the secrets and [bench-ai] in the commit message)") }.joinToString(", "))
-        .append(" — versions of the reading: ").append(AI_VARIANTS.joinToString(" · ") { it.name }).append(" (each twice)\n\n")
+        .append(" — versions of the reading: ").append(AI_VARIANTS.joinToString(" · ") { it.name }).append(" (each $AI_RUNS times)\n\n")
     val scores = LinkedHashMap<String, Score>()
     class Fmt { var n = 0; var failed = 0; var bytes = 0L; val times = ArrayList<Long>() }
     val formats = LinkedHashMap<String, Fmt>()
@@ -354,17 +383,20 @@ fun main(args: Array<String>) = runBlocking {
         for ((label, key, model) in listOf(Triple("gemini", geminiKey, geminiModel), Triple("openrouter", openRouterKey, openRouterModel))) {
             if (key.isBlank()) continue
             val src = File(dir, file).readBytes()
-            val pics = mapOf(false to aiPicture(src, file, false), true to aiPicture(src, file, true))
-            sb.append("- ").append(label).append(" pictures: whole ").append(pics[false]!!.width).append('×').append(pics[false]!!.height)
-                .append(", framed ").append(pics[true]!!.width).append('×').append(pics[true]!!.height).append('\n')
+            val pics = mapOf(
+                Pic.V26 to aiPicture(src, file, false), Pic.V26_FRAMED to aiPicture(src, file, true),
+                Pic.V26_FRAMED_NO_UPSCALE to aiPicture(src, file, true, upscale = false),
+                Pic.COLOR to colorPicture(src, file, false), Pic.COLOR_FRAMED to colorPicture(src, file, true)
+            )
+            sb.append("- ").append(label).append(" pictures: ").append(pics.entries.joinToString(", ") { "${it.key} ${it.value.width}×${it.value.height}" }).append('\n')
             val runs = kotlinx.coroutines.coroutineScope {
-                AI_VARIANTS.flatMap { v -> (1..2).map { n -> v to n } }.map { (v, n) ->
+                AI_VARIANTS.flatMap { v -> (1..AI_RUNS).map { n -> v to n } }.map { (v, n) ->
                     async(Dispatchers.IO) {
                         aiGate.acquire()
                         try {
                             val engine = if (label == "gemini") com.abdulrahman.hardsubocr.core.GeminiEngine(http, key, model, v.thinking, promptOverride = v.prompt)
                             else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, key, model, v.thinking, promptOverride = v.prompt)
-                            Triple(v, n, runCatching { engine.recognize(pics[v.frame]!!) })
+                            Triple(v, n, runCatching { engine.recognize(pics[v.pic]!!) })
                         } finally { aiGate.release() }
                     }
                 }.map { it.await() }
