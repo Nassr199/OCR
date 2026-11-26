@@ -1,4 +1,4 @@
-# OCR bench — commit cfbda2962f58734579558829a1f3ea39e7f20927 — 2026-11-26T19:38:26.947532752Z
+# OCR bench — commit bc5291ab12c9222ed34406726161b2492b87039d — 2026-11-26T19:46:37.133182599Z
 
 Vision: no VISION_API_KEY secret — Lens only
 AI: not run (needs the secrets and [bench-ai] in the commit message) — the app's exact reading (picture enhanced as in the app, thinking low)
@@ -11,7 +11,7 @@ truth: «حبيبي، هل أنت بخير؟»
     lines Saç Tasarım[0.187,0.410,0.085,0.085 p0] Mustafa Gümüş[0.187,0.654,0.245,0.259 p1] حبيبي، هل أنت بخير؟[0.500,0.665,0.335,0.259 p2] Makyaj Tasarım[0.821,0.413,0.115,0.100 p3] Beste Bayoğlu[0.822,0.597,0.219,0.169 p4]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Saç»+sep« »@0.158,0.408,0.026,0.100 «Tasarım»+sep« »@0.201,0.408,0.059,0.100
+      line: «Saç»+sep« »@0.158,0.410,0.026,0.085 «Tasarım»+sep« »@0.201,0.410,0.059,0.085
     p1 dir=1 lang=null
       line: «Mustafa»+sep« »@0.129,0.656,0.128,0.254 «Gümüş»+sep« »@0.256,0.655,0.107,0.254
     p2 dir=1 lang=null
@@ -20,7 +20,7 @@ truth: «حبيبي، هل أنت بخير؟»
       line: «Makyaj»+sep« »@0.791,0.413,0.054,0.100 «Tasarım»+sep« »@0.850,0.413,0.056,0.100
     p4 dir=null lang=null
       line: «Beste»+sep« »@0.754,0.597,0.083,0.169 «Bayoğlu»@0.871,0.597,0.121,0.169
-- Lens format: png ✓ 188KB 592ms; jpeg95 ✓ 48KB 395ms; jpeg85 ✓ 26KB 414ms; jpeg70 ✓ 19KB 444ms; jpeg40 ✓ 14KB 427ms;
+- Lens format: png ✓ 188KB 546ms; jpeg95 ✓ 48KB 366ms; jpeg85 ✓ 26KB 354ms; jpeg70 ✓ 19KB 347ms; jpeg40 ✓ 14KB 355ms;
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 01_habibi_credits_bg1.jpg — credits both sides, background variant 1
@@ -40,7 +40,7 @@ truth: «حبيبي، هل أنت بخير؟»
       line: «Makyaj»+sep« »@0.790,0.413,0.054,0.100 «Tasarım»+sep« »@0.850,0.413,0.057,0.100
     p4 dir=null lang=null
       line: «Beste»+sep« »@0.755,0.595,0.084,0.184 «Bayoğlu»@0.871,0.595,0.122,0.184
-- Lens format: png ✓ 174KB 500ms; jpeg95 ✓ 46KB 375ms; jpeg85 ✓ 24KB 413ms; jpeg70 ✓ 18KB 357ms; jpeg40 ✓ 13KB 358ms;
+- Lens format: png ✓ 174KB 504ms; jpeg95 ✓ 46KB 372ms; jpeg85 ✓ 24KB 505ms; jpeg70 ✓ 18KB 332ms; jpeg40 ✓ 13KB 367ms;
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 01_habibi_credits_bg2.jpg — credits both sides, background variant 2
@@ -60,7 +60,7 @@ truth: «حبيبي، هل أنت بخير؟»
       line: «Makyaj»+sep« »@0.789,0.413,0.054,0.100 «Tasarım»+sep« »@0.850,0.413,0.055,0.100
     p4 dir=null lang=null
       line: «Beste»+sep« »@0.754,0.595,0.085,0.174 «Bayoğlu»@0.871,0.595,0.123,0.174
-- Lens format: png ✓ 190KB 556ms; jpeg95 ✓ 48KB 421ms; jpeg85 ✓ 26KB 407ms; jpeg70 ✓ 19KB 393ms; jpeg40 ✓ 14KB 419ms;
+- Lens format: png ✓ 190KB 545ms; jpeg95 ✓ 48KB 356ms; jpeg85 ✓ 26KB 490ms; jpeg70 ✓ 19KB 371ms; jpeg40 ✓ 14KB 320ms;
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 02_habibi_alone.jpg — no credits
@@ -72,7 +72,7 @@ truth: «حبيبي، هل أنت بخير؟»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «حبيبي»@0.622,0.667,0.092,0.239 «،»+sep« »@0.567,0.667,0.007,0.239 «هل»+sep« »@0.523,0.667,0.051,0.239 «أنت»+sep« »@0.458,0.667,0.055,0.239 «بخير»@0.380,0.667,0.069,0.239 «؟»@0.339,0.667,0.015,0.239
-- Lens format: png ✓ 155KB 443ms; jpeg95 ✓ 34KB 325ms; jpeg85 ✓ 17KB 335ms; jpeg70 ✓ 12KB 420ms; jpeg40 ✓ 9KB 359ms;
+- Lens format: png ✓ 155KB 491ms; jpeg95 ✓ 34KB 304ms; jpeg85 ✓ 17KB 299ms; jpeg70 ✓ 12KB 301ms; jpeg40 ✓ 9KB 310ms;
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 03_abi_over_credit_a255.jpg — box covers the middle of a credit name, credit alpha 255
@@ -92,9 +92,9 @@ truth: «أبي»
       line: «2.»+sep« »@0.720,0.403,0.011,0.100 «Ekip»+sep« »@0.747,0.400,0.032,0.095 «Görüntü»+sep« »@0.796,0.400,0.058,0.095 «Yönetmeni»+sep« »@0.865,0.400,0.074,0.095
     p4 dir=null lang=null
       line: «Tuğberk»+sep« »@0.771,0.589,0.127,0.184 «Süel»@0.878,0.587,0.066,0.179
-- Lens format: png ✗ (3) 214KB 553ms; jpeg95 ✗ (3) 49KB 382ms; jpeg85 ✗ (3) 25KB 390ms; jpeg70 ✗ (3) 18KB 422ms; jpeg40 ✗ (3) 13KB 419ms;
+- Lens format: png ✗ (3) 214KB 568ms; jpeg95 ✗ (3) 49KB 360ms; jpeg85 ✗ (3) 25KB 419ms; jpeg70 ✗ (3) 18KB 355ms; jpeg40 ✗ (3) 13KB 338ms;
 - Lens app ✓ shape ✓ «أبي»
-    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | الوسط «en ⏎ Yapım Koordinatörü ⏎ 2. Ek ⏎ maz Dan أبي ines Tu» → ×2
+    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | الوسط «en ⏎ Yapım Koordinatörü ⏎ 2. Ek ⏎ maz Dan أبي ines ⏎ Tu» → ×2
 
 ## 03_abi_over_credit_a150.jpg — box covers the middle of a credit name, credit alpha 150
 truth: «أبي»
@@ -115,7 +115,7 @@ truth: «أبي»
       line: «2.»+sep« »@0.720,0.408,0.011,0.100 «Ekip»+sep« »@0.746,0.405,0.033,0.095 «Görüntü»+sep« »@0.795,0.405,0.057,0.095 «Yönetmeni»+sep« »@0.866,0.405,0.075,0.095
     p5 dir=null lang=null
       line: «Tuğberk»+sep« »@0.770,0.587,0.125,0.169 «Süel»@0.877,0.584,0.066,0.164
-- Lens format: png ✗ (1) 218KB 623ms; jpeg95 ✗ (1) 42KB 450ms; jpeg85 ✗ (1) 20KB 417ms; jpeg70 ✗ (1) 14KB 390ms; jpeg40 ✗ (1) 10KB 395ms;
+- Lens format: png ✗ (1) 218KB 580ms; jpeg95 ✗ (1) 42KB 510ms; jpeg85 ✗ (1) 20KB 316ms; jpeg70 ✗ (1) 14KB 368ms; jpeg40 ✗ (1) 10KB 433ms;
 - Lens app ✓ shape ✓ «أبي»
     looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | حول الترجمة «Yapım Koordinat ⏎ أبي ⏎ n» | شريط الترجمة «3:» → حول الترجمة
 
@@ -129,7 +129,7 @@ truth: «أجل، أنا بخير. ⏎ لا تقلق عليّ.»
     p0 dir=1 lang=null
       line: «أجل»@0.564,0.426,0.050,0.219 «،»+sep« »@0.532,0.430,0.006,0.214 «أنا»+sep« »@0.502,0.429,0.027,0.214 «بخير»@0.445,0.433,0.058,0.214 «.»+sep« »@0.412,0.440,0.005,0.214
       line: «لا»+sep« »@0.577,0.738,0.020,0.174 «تقلق»+sep« »@0.520,0.743,0.070,0.174 «علي»@0.448,0.743,0.062,0.174 «.»@0.418,0.749,0.007,0.174
-- Lens format: png ✓ 144KB 498ms; jpeg95 ✓ 34KB 394ms; jpeg85 ✓ 16KB 399ms; jpeg70 ✓ 12KB 382ms; jpeg40 ✓ 9KB 372ms;
+- Lens format: png ✓ 144KB 447ms; jpeg95 ✓ 34KB 354ms; jpeg85 ✓ 16KB 875ms; jpeg70 ✓ 12KB 634ms; jpeg40 ✓ 9KB 409ms;
 - Lens app ✓ shape ✗ «أجل، أنا بخير. ⏎ لا تقلق علي.» «أجل، أنا بخير. لا تقلق علي.»
 
 ## 05_long_line_credits.jpg — long line, short credits at the edges
@@ -149,7 +149,7 @@ truth: «لا أعرف ماذا سأفعل الآن، كل شيء تغيّر»
       line: «Müzik»+sep« »@0.876,0.403,0.049,0.090
     p4 dir=1 lang=null
       line: «Can»+sep« »@0.828,0.655,0.060,0.244 «Ercan»@0.912,0.655,0.091,0.244
-- Lens format: png ✓ 176KB 477ms; jpeg95 ✓ 44KB 371ms; jpeg85 ✓ 24KB 420ms; jpeg70 ✓ 18KB 363ms; jpeg40 ✓ 13KB 372ms;
+- Lens format: png ✓ 176KB 547ms; jpeg95 ✓ 44KB 345ms; jpeg85 ✓ 24KB 353ms; jpeg70 ✓ 18KB 355ms; jpeg40 ✓ 13KB 333ms;
 - Lens app ✓ shape ✓ «لا أعرف ماذا سأفعل الآن، كل شيء تغير»
 
 ## 06_short_words.jpg — short words, one credit
@@ -160,12 +160,12 @@ truth: «لا، لم يحدث شيء»
     lines Styling[0.187,0.416,0.051,0.104 p0] Aslı Çolak[0.188,0.595,0.156,0.154 p1] لا، لم يحدث شيء[0.501,0.656,0.273,0.209 p2]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Styling»+sep« »@0.187,0.416,0.051,0.104
+      line: «Styling»+sep« »@0.187,0.413,0.051,0.109
     p1 dir=null lang=null
-      line: «Aslı»+sep« »@0.138,0.595,0.057,0.154 «Çolak»+sep« »@0.223,0.595,0.085,0.154
+      line: «Aslı»+sep« »@0.138,0.607,0.057,0.229 «Çolak»+sep« »@0.223,0.607,0.085,0.229
     p2 dir=1 lang=null
       line: «لا»@0.628,0.654,0.020,0.204 «،»+sep« »@0.607,0.654,0.007,0.204 «لم»+sep« »@0.571,0.654,0.035,0.204 «يحدث»+sep« »@0.497,0.654,0.082,0.204 «شيء»@0.402,0.657,0.076,0.209
-- Lens format: png ✓ 164KB 512ms; jpeg95 ✓ 35KB 412ms; jpeg85 ✓ 16KB 392ms; jpeg70 ✓ 12KB 349ms; jpeg40 ✓ 9KB 325ms;
+- Lens format: png ✓ 164KB 498ms; jpeg95 ✓ 35KB 472ms; jpeg85 ✓ 16KB 347ms; jpeg70 ✓ 12KB 287ms; jpeg40 ✓ 9KB 302ms;
 - Lens app ✓ shape ✓ «لا، لم يحدث شيء»
 
 ## 07_short_0_a255.jpg — short word in a small box over a credit name, alpha 255
@@ -191,9 +191,9 @@ truth: «نعم»
       line: «Kostüm»+sep« »@0.772,0.396,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.396,0.072,0.075
     p7 dir=null lang=null
       line: «Hilcen»+sep« »@0.776,0.579,0.100,0.149 «Can»@0.867,0.581,0.057,0.144
-- Lens format: png ✓ 194KB 549ms; jpeg95 ✓ 44KB 392ms; jpeg85 ✓ 22KB 373ms; jpeg70 ✓ 15KB 557ms; jpeg40 ✓ 11KB 358ms;
+- Lens format: png ✓ 194KB 573ms; jpeg95 ✓ 44KB 655ms; jpeg85 ✓ 22KB 488ms; jpeg70 ✓ 15KB 348ms; jpeg40 ✓ 11KB 359ms;
 - Lens app ✓ shape ✓ «نعم»
-    looks: الصورة «Sanat Yönetmeni ⏎ Görüntü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Sel ⏎ d» | ×2 «Sanat Yönetmeni ⏎ Görüntü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Sel ⏎ d» | حول الترجمة «Görüntü Yönetmeni ⏎ نعم ⏎ el» | شريط الترجمة «Ismall urmaz ⏎ icen Can» → الصورة
+    looks: الصورة «Sanat Yönetmeni ⏎ Görüntü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Sel ⏎ d» | حول الترجمة «Görüntü Yönetmeni ⏎ نعم ⏎ el» | شريط الترجمة «Ismall urmaz ⏎ icen Can» → الصورة
 
 ## 07_short_0_a170.jpg — short word in a small box over a credit name, alpha 170
 truth: «نعم»
@@ -218,9 +218,9 @@ truth: «نعم»
       line: «Kostüm»+sep« »@0.772,0.401,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.401,0.071,0.075
     p7 dir=null lang=null
       line: «Hilcen»+sep« »@0.775,0.576,0.100,0.144 «Can»@0.867,0.581,0.057,0.144
-- Lens format: png ✓ 194KB 602ms; jpeg95 ✓ 39KB 418ms; jpeg85 ✓ 18KB 385ms; jpeg70 ✓ 13KB 380ms; jpeg40 ✓ 9KB 380ms;
+- Lens format: png ✓ 194KB 537ms; jpeg95 ✓ 39KB 358ms; jpeg85 ✓ 18KB 350ms; jpeg70 ✓ 13KB 336ms; jpeg40 ✓ 9KB 346ms;
 - Lens app ✓ shape ✓ «نعم»
-    looks: الصورة «Sanat Yönetmeni ⏎ Fortintü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Sel ⏎ » | ×2 «Sanat Yönetmeni ⏎ Görüntü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Hilcen » | حول الترجمة «Görüntü Yönetmeni ⏎ el ⏎ نعم» | شريط الترجمة «Ismall Durmaz ⏎ Se ⏎ ain نعم ⏎ Hlicen Can» → الصورة
+    looks: الصورة «Sanat Yönetmeni ⏎ runtü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Sel ⏎ dın» | ×2 «Sanat Yönetmeni ⏎ Görtintü Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Hilcen» | حول الترجمة «tintu Yönetmeni ⏎ din ⏎ نعم ⏎ sel» | شريط الترجمة «Ismall Durmaz ⏎ Se ⏎ hin نعم ⏎ Hlicen Can» → الصورة
 
 ## 07_short_1_a255.jpg — short word in a small box over a credit name, alpha 255
 truth: «أمي»
@@ -241,9 +241,9 @@ truth: «أمي»
       line: «Kostüm»+sep« »@0.772,0.396,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.396,0.072,0.075
     p5 dir=null lang=null
       line: «Hilcen»+sep« »@0.775,0.581,0.100,0.144 «Can»@0.867,0.580,0.057,0.144
-- Lens format: png ✓ 217KB 582ms; jpeg95 ✓ 46KB 372ms; jpeg85 ✓ 23KB 319ms; jpeg70 ✓ 16KB 412ms; jpeg40 ✓ 12KB 314ms;
+- Lens format: png ✓ 217KB 875ms; jpeg95 ✓ 46KB 349ms; jpeg85 ✓ 23KB 305ms; jpeg70 ✓ 16KB 342ms; jpeg40 ✓ 12KB 415ms;
 - Lens app ✓ shape ✓ «أمي»
-    looks: الصورة «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz İsma أمي ma» | ×2 «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Hilcen Ca» | حول الترجمة «Sanat Yönetmeni ⏎ Z İsma ⏎ أمى ⏎ maz» | شريط الترجمة «İsmail Durmaz İsma ⏎ أمي ⏎ 'maz ⏎ Hilcen Can» → الصورة
+    looks: الصورة «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz İsma أمي ma» | ×2 «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz İsmaأمى maz» | حول الترجمة «Sanat Yönetmeni ⏎ Z İsma ⏎ أمي ⏎ maz» | شريط الترجمة «İsmail Durmaz ⏎ maz ⏎ Hilcen Can» → الصورة
 
 ## 07_short_1_a170.jpg — short word in a small box over a credit name, alpha 170
 truth: «أمي»
@@ -266,7 +266,7 @@ truth: «أمي»
       line: «Kostüm»+sep« »@0.771,0.401,0.058,0.095 «Sorumlusu»+sep« »@0.838,0.401,0.072,0.095
     p6 dir=null lang=null
       line: «Hilcen»+sep« »@0.775,0.584,0.102,0.179 «Can»@0.867,0.585,0.057,0.174
-- Lens format: png ✗ (2) 217KB 559ms; jpeg95 ✗ (2) 41KB 406ms; jpeg85 ✗ (1) 19KB 399ms; jpeg70 ✗ (1) 14KB 389ms; jpeg40 ✗ (1) 10KB 325ms;
+- Lens format: png ✗ (2) 217KB 700ms; jpeg95 ✗ (2) 41KB 369ms; jpeg85 ✗ (1) 19KB 338ms; jpeg70 ✗ (1) 14KB 328ms; jpeg40 ✗ (1) 10KB 325ms;
 - Lens app ✗ (1) shape ✗ «امي» «امي»
     looks: الصورة «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ maz ⏎ Hil» | ×2 «Sanat Yönetmeni ⏎ Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Hilcen Ca» | الوسط «Sanat Yönetmeni ⏎ maz ⏎ H ⏎ امي» → الوسط
 
@@ -289,9 +289,9 @@ truth: «ماذا؟»
       line: «Kostüm»+sep« »@0.772,0.396,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.396,0.072,0.075
     p5 dir=null lang=null
       line: «Hilcen»+sep« »@0.776,0.581,0.099,0.144 «Can»@0.867,0.580,0.056,0.144
-- Lens format: png ✓ 195KB 592ms; jpeg95 ✓ 43KB 444ms; jpeg85 ✓ 22KB 407ms; jpeg70 ✓ 15KB 405ms; jpeg40 ✓ 11KB 443ms;
+- Lens format: png ✓ 195KB 521ms; jpeg95 ✓ 43KB 331ms; jpeg85 ✓ 22KB 337ms; jpeg70 ✓ 15KB 315ms; jpeg40 ✓ 11KB 353ms;
 - Lens app ✓ shape ✓ «ماذا؟»
-    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | ×2 «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Hi ⏎ an ماذا؟ ⏎ Hi» | حول الترجمة «Kostüm ⏎ an ماذا؟ Hi» | شريط الترجمة «İsmail Durmaz ⏎ Hi ⏎ an ماذا؟ ⏎ Hilcen Can» → الصورة
+    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | ×2 «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | حول الترجمة «Kostüm ⏎ an ماذا؟ Hi» | شريط الترجمة «İsmail Durmaz ⏎ Hi ⏎ an ماذا؟ ⏎ Hilcen Can» → الصورة
 
 ## 07_short_2_a170.jpg — short word in a small box over a credit name, alpha 170
 truth: «ماذا؟»
@@ -312,7 +312,7 @@ truth: «ماذا؟»
       line: «Kostüm»+sep« »@0.772,0.396,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.396,0.072,0.075
     p5 dir=null lang=null
       line: «Hilcen»+sep« »@0.776,0.574,0.099,0.149 «Can»@0.867,0.573,0.056,0.149
-- Lens format: png ✓ 193KB 650ms; jpeg95 ✓ 40KB 454ms; jpeg85 ✓ 19KB 393ms; jpeg70 ✓ 13KB 393ms; jpeg40 ✓ 10KB 319ms;
+- Lens format: png ✓ 193KB 621ms; jpeg95 ✓ 40KB 326ms; jpeg85 ✓ 19KB 335ms; jpeg70 ✓ 13KB 346ms; jpeg40 ✓ 10KB 417ms;
 - Lens app ✓ shape ✓ «ماذا؟»
     looks: الصورة «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | ×2 «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | حول الترجمة «Kostüm ⏎ an ماذا؟ Hi» | شريط الترجمة «İsmail Durmaz ⏎ Hi ⏎ an ماذا؟ ⏎ Hilcen Can» → الصورة
 
@@ -335,9 +335,9 @@ truth: «حسنًا»
       line: «Kostüm»+sep« »@0.772,0.398,0.055,0.090 «Sorumlusu»+sep« »@0.839,0.398,0.071,0.090
     p5 dir=null lang=null
       line: «Hilcen»+sep« »@0.776,0.581,0.099,0.204 «Can»@0.867,0.580,0.057,0.204
-- Lens format: png ✗ (4) 189KB 486ms; jpeg95 ✗ (4) 42KB 309ms; jpeg85 ✗ (4) 20KB 349ms; jpeg70 ✗ (4) 14KB 448ms; jpeg40 ✗ (4) 10KB 351ms;
+- Lens format: png ✗ (4) 189KB 473ms; jpeg95 ✗ (4) 42KB 320ms; jpeg85 ✗ (4) 20KB 288ms; jpeg70 ✗ (4) 14KB 307ms; jpeg40 ✗ (4) 10KB 298ms;
 - Lens app ✓ shape ✓ «حسنا»
-    looks: الصورة «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Ca» | ×2 «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ker ⏎ tay حسنًا ⏎» | الوسط «Yapımcı ⏎ H ⏎ tay ⏎ حسنًا ⏎ Kei ⏎ maz» → ×2
+    looks: الصورة «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Ca» | ×2 «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ker ⏎ tay حسنًا ⏎» | الوسط «Yapımcı ⏎ maz ⏎ Kei ⏎ tay ⏎ H» → ×2
 
 ## 07_short_3_a170.jpg — short word in a small box over a credit name, alpha 170
 truth: «حسنًا»
@@ -347,18 +347,18 @@ truth: «حسنًا»
     lines Sanat Yönetmeni[0.191,0.403,0.115,0.070 p0] İsmail Durmaz[0.192,0.568,0.225,0.154 p1] Yapımcı[0.498,0.408,0.062,0.090 p2] Ketay[0.501,0.604,0.199,0.159 p3] Hilcen Can[0.809,0.583,0.174,0.109 p4]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Sanat»+sep« »@0.152,0.403,0.037,0.070 «Yönetmeni»+sep« »@0.211,0.403,0.074,0.070
+      line: «Sanat»+sep« »@0.152,0.403,0.037,0.090 «Yönetmeni»+sep« »@0.211,0.403,0.074,0.090
     p1 dir=null lang=null
-      line: «İsmail»+sep« »@0.126,0.566,0.093,0.154 «Durmaz»+sep« »@0.245,0.571,0.119,0.154
+      line: «İsmail»+sep« »@0.126,0.579,0.093,0.199 «Durmaz»+sep« »@0.245,0.584,0.119,0.199
     p2 dir=null lang=null
-      line: «Yapımcı»+sep« »@0.498,0.408,0.062,0.090
+      line: «Yapımcı»+sep« »@0.498,0.401,0.062,0.104
     p3 dir=null lang=null
-      line: «Ketay»+sep« »@0.501,0.604,0.199,0.159
+      line: «Ketay»+sep« »@0.501,0.584,0.199,0.209
     p4 dir=null lang=null
-      line: «Hilcen»+sep« »@0.774,0.582,0.105,0.109 «Can»@0.867,0.582,0.059,0.109
-- Lens format: png ✗ (4) 186KB 520ms; jpeg95 ✗ (4) 37KB 811ms; jpeg85 ✗ (4) 16KB 352ms; jpeg70 ✗ (4) 12KB 314ms; jpeg40 ✗ (4) 8KB 321ms;
+      line: «Hilcen»+sep« »@0.774,0.587,0.105,0.149 «Can»@0.867,0.587,0.059,0.149
+- Lens format: png ✗ (4) 186KB 492ms; jpeg95 ✗ (4) 37KB 318ms; jpeg85 ✗ (4) 16KB 292ms; jpeg70 ✗ (4) 12KB 292ms; jpeg40 ✗ (4) 8KB 286ms;
 - Lens app ✗ (4) shape ✗ «» «»
-    looks: الصورة «Sanat Yönetmeni ⏎ Yapımcı ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Yapımcı ⏎ İsmail Durmaz ⏎ Hilcen Can» | الوسط «Yapımcı ⏎ maz ⏎ Ketay ⏎ H» → لا ترجمة
+    looks: الصورة «Sanat Yönetmeni ⏎ Yapımcı ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Yapımcı ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Can» | الوسط «Yapımcı ⏎ maz ⏎ Ketay ⏎ H» → لا ترجمة
 
 ## 07_short_4_a255.jpg — short word in a small box over a credit name, alpha 255
 truth: «لماذا؟»
@@ -372,7 +372,7 @@ truth: «لماذا؟»
     p1 dir=null lang=null
       line: «İsmail»+sep« »@0.127,0.576,0.094,0.154 «Durmaz»+sep« »@0.246,0.576,0.118,0.154
     p2 dir=null lang=null
-      line: «Senaryo»+sep« »@0.499,0.409,0.056,0.080
+      line: «Senaryo»+sep« »@0.499,0.404,0.056,0.080
     p3 dir=1 lang=null
       line: «E»+sep« »@0.425,0.610,0.023,0.164
     p4 dir=1 lang=null
@@ -380,8 +380,8 @@ truth: «لماذا؟»
     p5 dir=null lang=null
       line: «Kostüm»+sep« »@0.772,0.401,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.401,0.071,0.075
     p6 dir=null lang=null
-      line: «Hilcen»+sep« »@0.776,0.581,0.098,0.134 «Can»@0.867,0.580,0.056,0.134
-- Lens format: png ✓ 186KB 690ms; jpeg95 ✓ 42KB 355ms; jpeg85 ✓ 21KB 394ms; jpeg70 ✓ 15KB 431ms; jpeg40 ✓ 11KB 386ms;
+      line: «Hilcen»+sep« »@0.776,0.578,0.098,0.139 «Can»@0.867,0.578,0.056,0.139
+- Lens format: png ✓ 186KB 685ms; jpeg95 ✓ 42KB 371ms; jpeg85 ✓ 21KB 318ms; jpeg70 ✓ 15KB 447ms; jpeg40 ✓ 11KB 340ms;
 - Lens app ✓ shape ✓ «لماذا؟»
 
 ## 07_short_4_a170.jpg — short word in a small box over a credit name, alpha 170
@@ -405,9 +405,9 @@ truth: «لماذا؟»
       line: «Kostüm»+sep« »@0.772,0.393,0.055,0.080 «Sorumlusu»+sep« »@0.839,0.393,0.072,0.080
     p6 dir=null lang=null
       line: «Hilcen»+sep« »@0.776,0.569,0.098,0.159 «Can»@0.867,0.568,0.056,0.159
-- Lens format: png ✓ 187KB 643ms; jpeg95 ✓ 39KB 423ms; jpeg85 ✓ 18KB 385ms; jpeg70 ✓ 13KB 399ms; jpeg40 ✓ 10KB 363ms;
+- Lens format: png ✓ 187KB 603ms; jpeg95 ✓ 39KB 322ms; jpeg85 ✓ 18KB 320ms; jpeg70 ✓ 13KB 318ms; jpeg40 ✓ 10KB 371ms;
 - Lens app ✓ shape ✓ «لماذا؟»
-    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | حول الترجمة «لماذا؟» | شريط الترجمة «İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» → الصورة
+    looks: الصورة «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | ×2 «Sanat Yönetmeni ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» | حول الترجمة «لماذا ؟» | شريط الترجمة «İsmail Durmaz ⏎ لماذا ؟ ⏎ Hilcen Can» → الصورة
 
 ## 08_dialogue_dashes.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
 truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
@@ -420,7 +420,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
       line: «-»+sep« »@0.551,0.420,0.017,0.196 «هوليا»+sep« »@0.488,0.420,0.089,0.196
     p1 dir=1 lang=null
       line: «-»+sep« »@0.657,0.702,0.019,0.213 «ابتعدي»+sep« »@0.577,0.702,0.110,0.213 «يا»+sep« »@0.496,0.702,0.024,0.213 «جوليزار»@0.400,0.702,0.133,0.213
-- Lens format: png ✓ 181KB 640ms; jpeg95 ✓ 35KB 430ms; jpeg85 ✓ 21KB 387ms; jpeg70 ✓ 15KB 448ms; jpeg40 ✓ 12KB 359ms;
+- Lens format: png ✓ 181KB 623ms; jpeg95 ✓ 35KB 490ms; jpeg85 ✓ 21KB 444ms; jpeg70 ✓ 15KB 397ms; jpeg40 ✓ 12KB 398ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
 
 ## 09_two_lines_period.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
@@ -433,7 +433,7 @@ truth: «هوليا. ساعدوني ⏎ ماذا حدث؟»
     p0 dir=1 lang=null
       line: «هوليا»@0.596,0.403,0.087,0.209 «.»+sep« »@0.545,0.406,0.010,0.204 «ساعدوني»+sep« »@0.440,0.408,0.163,0.213
       line: «ماذا»+sep« »@0.556,0.669,0.067,0.165 «حدث»@0.467,0.669,0.085,0.165 «؟»@0.420,0.674,0.020,0.165
-- Lens format: png ✓ 215KB 591ms; jpeg95 ✓ 39KB 425ms; jpeg85 ✓ 23KB 363ms; jpeg70 ✓ 17KB 319ms; jpeg40 ✓ 12KB 368ms;
+- Lens format: png ✓ 215KB 740ms; jpeg95 ✓ 39KB 274ms; jpeg85 ✓ 23KB 354ms; jpeg70 ✓ 17KB 420ms; jpeg40 ✓ 12KB 319ms;
 - Lens app ✓ shape ✓ «هوليا. ساعدوني ماذا حدث؟»
 
 ## 10_dash_one_line.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
@@ -445,7 +445,7 @@ truth: «- لا أعرف»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «-»+sep« »@0.575,0.534,0.015,0.235 «لا»+sep« »@0.543,0.534,0.025,0.235 «أعرف»@0.465,0.537,0.102,0.243
-- Lens format: png ✓ 214KB 597ms; jpeg95 ✓ 31KB 362ms; jpeg85 ✓ 18KB 384ms; jpeg70 ✓ 13KB 367ms; jpeg40 ✓ 10KB 572ms;
+- Lens format: png ✓ 214KB 543ms; jpeg95 ✓ 31KB 289ms; jpeg85 ✓ 18KB 294ms; jpeg70 ✓ 13KB 380ms; jpeg40 ✓ 10KB 476ms;
 - Lens app ✓ shape ✓ «لا أعرف»
 
 ## 11_ellipsis.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
@@ -457,7 +457,7 @@ truth: «انتظر... لا تذهب!»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «انتظر»@0.595,0.556,0.107,0.217 «...»+sep« »@0.539,0.556,0.050,0.217 «لا»+sep« »@0.487,0.556,0.024,0.217 «تذهب»@0.411,0.556,0.100,0.217 «!»@0.359,0.561,0.010,0.217
-- Lens format: png ✓ 166KB 505ms; jpeg95 ✓ 31KB 594ms; jpeg85 ✓ 18KB 585ms; jpeg70 ✓ 14KB 331ms; jpeg40 ✓ 10KB 372ms;
+- Lens format: png ✓ 166KB 686ms; jpeg95 ✓ 31KB 331ms; jpeg85 ✓ 18KB 305ms; jpeg70 ✓ 14KB 353ms; jpeg40 ✓ 10KB 319ms;
 - Lens app ✓ shape ✓ «انتظر... لا تذهب!»
 
 ## 12_dialogue_question.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
@@ -471,7 +471,7 @@ truth: «- هل أنت بخير؟ ⏎ - نعم، أنا بخير»
       line: «-»+sep« »@0.627,0.396,0.014,0.235 «هل»+sep« »@0.576,0.395,0.059,0.235 «أنت»+sep« »@0.504,0.395,0.063,0.235 «بخير»@0.420,0.395,0.078,0.235 «؟»+sep« »@0.375,0.400,0.019,0.235
     p1 dir=1 lang=null
       line: «-»+sep« »@0.613,0.678,0.015,0.252 «نعم»@0.561,0.678,0.059,0.252 «،»+sep« »@0.525,0.678,0.009,0.252 «أنا»+sep« »@0.487,0.678,0.035,0.252 «بخير»@0.413,0.680,0.079,0.257
-- Lens format: png ✓ 196KB 520ms; jpeg95 ✓ 36KB 419ms; jpeg85 ✓ 21KB 554ms; jpeg70 ✓ 16KB 383ms; jpeg40 ✓ 12KB 339ms;
+- Lens format: png ✓ 196KB 669ms; jpeg95 ✓ 36KB 310ms; jpeg85 ✓ 21KB 521ms; jpeg70 ✓ 16KB 376ms; jpeg40 ✓ 12KB 433ms;
 - Lens app ✓ shape ✓ «هل أنت بخير؟ نعم، أنا بخير»
 
 ## 13_dialogue_box.jpg — two-line subtitle in the box, second line wider
@@ -485,7 +485,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
       line: «هوليا»+sep« »@0.491,0.530,0.069,0.154
     p1 dir=1 lang=null
       line: «-»+sep« »@0.619,0.774,0.008,0.174 «ابتعدي»+sep« »@0.560,0.773,0.081,0.174 «يا»+sep« »@0.496,0.774,0.015,0.174 «جوليزار»@0.422,0.776,0.102,0.179
-- Lens format: png ✓ 144KB 493ms; jpeg95 ✓ 33KB 370ms; jpeg85 ✓ 16KB 337ms; jpeg70 ✓ 11KB 344ms; jpeg40 ✓ 9KB 390ms;
+- Lens format: png ✓ 144KB 607ms; jpeg95 ✓ 33KB 342ms; jpeg85 ✓ 16KB 352ms; jpeg70 ✓ 11KB 306ms; jpeg40 ✓ 9KB 314ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
     looks: الصورة «هوليا ⏎ - ابتعدي يا جوليزار» | ×2 «- هوليا ⏎ - ابتعدي يا جوليزار» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» → الصورة + شرطة حوار من قراءة أخرى «- هوليا ⏎ - ابتعدي يا جوليزار»
 
@@ -508,7 +508,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
       line: «Kurgu»+sep« »@0.860,0.407,0.048,0.095
     p5 dir=null lang=null
       line: «Ali»+sep« »@0.817,0.594,0.043,0.159 «Kaya»@0.887,0.600,0.073,0.159
-- Lens format: png ✓ 186KB 507ms; jpeg95 ✓ 44KB 386ms; jpeg85 ✓ 23KB 383ms; jpeg70 ✓ 17KB 386ms; jpeg40 ✓ 12KB 436ms;
+- Lens format: png ✓ 186KB 680ms; jpeg95 ✓ 44KB 506ms; jpeg85 ✓ 23KB 327ms; jpeg70 ✓ 17KB 347ms; jpeg40 ✓ 12KB 329ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
     looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
@@ -531,9 +531,9 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
       line: «Kurgu»+sep« »@0.859,0.412,0.047,0.095
     p5 dir=null lang=null
       line: «Ali»+sep« »@0.818,0.591,0.042,0.164 «Kaya»@0.887,0.592,0.072,0.164
-- Lens format: png ✓ 184KB 687ms; jpeg95 ✓ 42KB 422ms; jpeg85 ✓ 21KB 413ms; jpeg70 ✓ 15KB 411ms; jpeg40 ✓ 11KB 340ms;
+- Lens format: png ✓ 184KB 811ms; jpeg95 ✓ 42KB 444ms; jpeg85 ✓ 21KB 417ms; jpeg70 ✓ 15KB 307ms; jpeg40 ✓ 11KB 450ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
-    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Goruntu Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
+    looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Goruntu Yonetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
 ## 16_dialogue_box_long2_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
 truth: «- ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن»
@@ -554,7 +554,7 @@ truth: «- ماذا؟ ⏎ - لا شيء، عودي إلى البيت الآن»
       line: «Kurgu»+sep« »@0.860,0.406,0.048,0.095
     p5 dir=null lang=null
       line: «Ali»+sep« »@0.817,0.595,0.041,0.164 «Kaya»@0.887,0.595,0.072,0.164
-- Lens format: png ✓ 166KB 521ms; jpeg95 ✓ 44KB 478ms; jpeg85 ✓ 24KB 365ms; jpeg70 ✓ 18KB 382ms; jpeg40 ✓ 13KB 347ms;
+- Lens format: png ✓ 166KB 475ms; jpeg95 ✓ 44KB 473ms; jpeg85 ✓ 24KB 346ms; jpeg70 ✓ 18KB 363ms; jpeg40 ✓ 13KB 316ms;
 - Lens app ✓ shape ✓ «ماذا؟ لا شيء، عودي إلى البيت الآن»
 
 ## 17_dialogue_box_nospace_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
@@ -575,7 +575,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
       line: «Kurgu»+sep« »@0.860,0.407,0.048,0.095
     p4 dir=null lang=null
       line: «Ali»+sep« »@0.817,0.591,0.041,0.164 «Kaya»@0.888,0.594,0.072,0.169
-- Lens format: png ✓ 163KB 539ms; jpeg95 ✓ 43KB 409ms; jpeg85 ✓ 22KB 402ms; jpeg70 ✓ 16KB 376ms; jpeg40 ✓ 12KB 425ms;
+- Lens format: png ✓ 163KB 689ms; jpeg95 ✓ 43KB 386ms; jpeg85 ✓ 22KB 307ms; jpeg70 ✓ 16KB 303ms; jpeg40 ✓ 12KB 347ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
 
 ## 18_one_speaker_wrap_credits.jpg — two-line subtitle in the box, second line wider, credits on its rows
@@ -596,7 +596,7 @@ truth: «- لا أعرف ماذا سأفعل ⏎ بعد كل ما حدث»
       line: «Kurgu»+sep« »@0.860,0.409,0.048,0.100
     p4 dir=null lang=null
       line: «Ali»+sep« »@0.817,0.596,0.041,0.164 «Kaya»@0.888,0.596,0.072,0.164
-- Lens format: png ✓ 184KB 647ms; jpeg95 ✓ 45KB 389ms; jpeg85 ✓ 24KB 325ms; jpeg70 ✓ 17KB 360ms; jpeg40 ✓ 13KB 376ms;
+- Lens format: png ✓ 184KB 521ms; jpeg95 ✓ 45KB 299ms; jpeg85 ✓ 24KB 318ms; jpeg70 ✓ 17KB 327ms; jpeg40 ✓ 13KB 309ms;
 - Lens app ✓ shape ✓ «لا أعرف ماذا سأفعل بعد كل ما حدث»
     looks: الصورة «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » | ×2 «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » | حول الترجمة «- لا أعرف ماذا سأفعل ⏎ eni ⏎ Lin ⏎ بعد كل ما حدث» | شريط الترجمة «Kurgu ⏎ - لا أعرف ماذا سأفعل ⏎ Görüntü Yönetmeni ⏎ Selin Aydın ⏎ Ali Kaya ⏎ بعد » → الصورة
 
@@ -609,7 +609,7 @@ truth: «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «هل»+sep« »@0.841,0.517,0.059,0.217 «تسمعينني»@0.715,0.518,0.172,0.217 «؟»+sep« »@0.619,0.517,0.016,0.217 «هل»+sep« »@0.563,0.517,0.057,0.217 «تسمعينني»@0.439,0.518,0.170,0.217 «؟»+sep« »@0.341,0.517,0.018,0.217 «انظري»+sep« »@0.259,0.518,0.115,0.217 «إلي»@0.158,0.517,0.066,0.217
-- Lens format: png ✓ 198KB 547ms; jpeg95 ✓ 41KB 354ms; jpeg85 ✓ 25KB 351ms; jpeg70 ✓ 19KB 574ms; jpeg40 ✓ 14KB 395ms;
+- Lens format: png ✓ 198KB 536ms; jpeg95 ✓ 41KB 331ms; jpeg85 ✓ 25KB 421ms; jpeg70 ✓ 19KB 312ms; jpeg40 ✓ 14KB 307ms;
 - Lens app ✓ shape ✓ «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
 
 ## 20_shadow_hear_me_serif.jpg — white text, thin outline, soft drop shadow, no box (bright scene, dark suit)
@@ -621,7 +621,7 @@ truth: «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «هل»+sep« »@0.792,0.520,0.047,0.248 «تسمعينني»+sep« »@0.688,0.520,0.146,0.248 «؟»+sep« »@0.600,0.520,0.015,0.248 «هل»+sep« »@0.555,0.520,0.044,0.248 «تسمعينني»@0.450,0.520,0.142,0.248 «؟»+sep« »@0.364,0.520,0.016,0.248 «انظري»+sep« »@0.295,0.520,0.090,0.248 «إلي»@0.210,0.520,0.049,0.248
-- Lens format: png ✓ 236KB 590ms; jpeg95 ✓ 45KB 311ms; jpeg85 ✓ 27KB 332ms; jpeg70 ✓ 20KB 334ms; jpeg40 ✓ 14KB 349ms;
+- Lens format: png ✓ 236KB 622ms; jpeg95 ✓ 45KB 289ms; jpeg85 ✓ 27KB 339ms; jpeg70 ✓ 20KB 364ms; jpeg40 ✓ 14KB 414ms;
 - Lens app ✓ shape ✓ «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
 
 ## 21_shadow_wound.jpg — white text, thin outline, soft drop shadow, no box (bright scene, dark suit)
@@ -633,7 +633,7 @@ truth: «قمت بالضغط المباشر على الجرح»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «قمت»+sep« »@0.744,0.508,0.089,0.209 «بالضغط»+sep« »@0.623,0.510,0.128,0.213 «المباشر»+sep« »@0.472,0.512,0.138,0.209 «على»+sep« »@0.356,0.513,0.076,0.209 «الجرح»@0.259,0.515,0.093,0.213
-- Lens format: png ✓ 198KB 540ms; jpeg95 ✓ 37KB 346ms; jpeg85 ✓ 23KB 355ms; jpeg70 ✓ 17KB 381ms; jpeg40 ✓ 13KB 369ms;
+- Lens format: png ✓ 198KB 562ms; jpeg95 ✓ 37KB 364ms; jpeg85 ✓ 23KB 310ms; jpeg70 ✓ 17KB 293ms; jpeg40 ✓ 13KB 406ms;
 - Lens app ✓ shape ✓ «قمت بالضغط المباشر على الجرح»
 
 ## 22_shadow_wound_serif.jpg — white text, thin outline, soft drop shadow, no box (bright scene, dark suit)
@@ -645,7 +645,7 @@ truth: «قمت بالضغط المباشر على الجرح»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «قمت»+sep« »@0.707,0.512,0.076,0.226 «بالضغط»+sep« »@0.604,0.512,0.115,0.226 «المباشر»+sep« »@0.481,0.514,0.111,0.230 «على»+sep« »@0.384,0.517,0.064,0.226 «الجرح»@0.299,0.519,0.090,0.230
-- Lens format: png ✓ 227KB 566ms; jpeg95 ✓ 39KB 419ms; jpeg85 ✓ 24KB 349ms; jpeg70 ✓ 18KB 340ms; jpeg40 ✓ 13KB 324ms;
+- Lens format: png ✓ 227KB 654ms; jpeg95 ✓ 39KB 306ms; jpeg85 ✓ 24KB 354ms; jpeg70 ✓ 18KB 307ms; jpeg40 ✓ 13KB 339ms;
 - Lens app ✓ shape ✓ «قمت بالضغط المباشر على الجرح»
 
 ## 23_frame_hear_me.jpg — whole frame 1500×844, shadowed subtitle at the bottom
@@ -657,7 +657,7 @@ truth: «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «هل»+sep« »@0.738,0.887,0.039,0.070 «تسمعينني»@0.653,0.887,0.119,0.071 «؟»+sep« »@0.582,0.888,0.013,0.070 «هل»+sep« »@0.545,0.888,0.034,0.070 «تسمعينني»@0.458,0.888,0.119,0.070 «؟»+sep« »@0.388,0.888,0.015,0.070 «انظري»+sep« »@0.332,0.888,0.080,0.070 «إلي»@0.262,0.889,0.041,0.071
-- Lens format: png ✓ 587KB 935ms; jpeg95 ✓ 100KB 458ms; jpeg85 ✓ 62KB 417ms; jpeg70 ✓ 48KB 383ms; jpeg40 ✓ 36KB 398ms;
+- Lens format: png ✓ 587KB 1182ms; jpeg95 ✓ 100KB 458ms; jpeg85 ✓ 62KB 546ms; jpeg70 ✓ 48KB 300ms; jpeg40 ✓ 36KB 329ms;
 - Lens app ✓ shape ✓ «هل تسمعينني؟ هل تسمعينني؟ انظري إلي»
 
 ## 24_frame_wound.jpg — whole frame 1500×844, shadowed subtitle at the bottom
@@ -669,7 +669,7 @@ truth: «قمت بالضغط المباشر على الجرح»
     words (Lens's own lines, word by word with its box)
     p0 dir=1 lang=null
       line: «قمت»+sep« »@0.669,0.886,0.062,0.059 «بالضغط»+sep« »@0.585,0.887,0.095,0.060 «المباشر»+sep« »@0.483,0.887,0.093,0.059 «على»+sep« »@0.404,0.887,0.055,0.059 «الجرح»@0.336,0.888,0.074,0.060
-- Lens format: png ✓ 497KB 807ms; jpeg95 ✓ 86KB 442ms; jpeg85 ✓ 54KB 348ms; jpeg70 ✓ 42KB 324ms; jpeg40 ✓ 33KB 337ms;
+- Lens format: png ✓ 497KB 927ms; jpeg95 ✓ 86KB 389ms; jpeg85 ✓ 54KB 340ms; jpeg70 ✓ 42KB 309ms; jpeg40 ✓ 33KB 325ms;
 - Lens app ✓ shape ✓ «قمت بالضغط المباشر على الجرح»
 
 ## 25_frame_dialogue.jpg — whole frame 1500×844, shadowed subtitle at the bottom
@@ -682,18 +682,18 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     p0 dir=1 lang=null
       line: «-»+sep« »@0.532,0.802,0.011,0.058 «هوليا»+sep« »@0.489,0.802,0.055,0.059
       line: «-»+sep« »@0.608,0.890,0.013,0.060 «ابتعدي»+sep« »@0.555,0.890,0.093,0.060 «يا»+sep« »@0.492,0.890,0.019,0.060 «جوليزار»@0.428,0.891,0.089,0.062
-- Lens format: png ✓ 472KB 777ms; jpeg95 ✓ 83KB 429ms; jpeg85 ✓ 52KB 368ms; jpeg70 ✓ 41KB 407ms; jpeg40 ✓ 32KB 367ms;
+- Lens format: png ✓ 472KB 862ms; jpeg95 ✓ 83KB 456ms; jpeg85 ✓ 52KB 345ms; jpeg70 ✓ 41KB 317ms; jpeg40 ✓ 32KB 311ms;
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
 
 ## Lens upload format (same picture, same size; one look each)
 
 | format | avg size | median ms | p90 ms | failed |
 |---|---|---|---|---|
-| png | 216 KB | 559 | 690 | 0 |
-| jpeg95 | 44 KB | 409 | 458 | 0 |
-| jpeg85 | 24 KB | 385 | 417 | 0 |
-| jpeg70 | 18 KB | 383 | 448 | 0 |
-| jpeg40 | 13 KB | 368 | 427 | 0 |
+| png | 216 KB | 580 | 862 | 0 |
+| jpeg95 | 44 KB | 356 | 490 | 0 |
+| jpeg85 | 24 KB | 345 | 505 | 0 |
+| jpeg70 | 18 KB | 336 | 397 | 0 |
+| jpeg40 | 13 KB | 339 | 433 | 0 |
 
 ## Summary (after the app's classic cleaning; errors = edit distance to the truth)
 
