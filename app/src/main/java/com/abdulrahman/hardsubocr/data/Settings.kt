@@ -265,8 +265,12 @@ class Settings(context: Context) {
     )
 
     // ---------------------------------------------------------------- derived
+    /**
+     * Gemini and OpenRouter read one way (2.8.0): ocr_windows_v2.6.py's recipe ([AiProfile.V26]). The
+     * text-form choice of 2.7.8–2.7.9 is gone; a value saved then ("ai_style") is no longer read.
+     */
     fun profileFor(kind: EngineKind): AiProfile? = when (kind) {
-        EngineKind.GEMINI, EngineKind.OPENROUTER -> aiProfile
+        EngineKind.GEMINI, EngineKind.OPENROUTER -> AiProfile.V26
         EngineKind.LENS, EngineKind.VISION -> null
     }
 
@@ -289,11 +293,17 @@ class Settings(context: Context) {
         Choice.AUTO -> profileFor(kind)?.merge ?: MergeMode.PRO
     }
 
-    fun enhanceFor(kind: EngineKind): Boolean = if (kind.isClassicOcr) false else when (enhanceChoice) {
-        EnhanceChoice.ON -> true
-        EnhanceChoice.OFF -> false
-        EnhanceChoice.AUTO -> profileFor(kind)?.enhanceImages ?: false
-    }
+    /**
+     * v2.6 prepares every picture for the AI (subtitle band, enlarged, grayscale, contrast, sharpen —
+     * less of the scene and of watermarks, more pixels per letter). 2.8.0 always does, as v2.6: a value
+     * saved by the old switch ("enhance_choice") is no longer read. Lens and Vision get the original.
+     */
+    fun enhanceFor(kind: EngineKind): Boolean = !kind.isClassicOcr
+
+    /** Gemini/OpenRouter: Google Lens reads the picture again when the AI repeats a word or is cut ([AiCheck]). */
+    var aiLensCheck: Boolean
+        get() = sp.getBoolean("ai_lens_check", true)
+        set(v) = putBool("ai_lens_check", v)
 
     fun stabilizeFor(kind: EngineKind): Boolean = !kind.isClassicOcr && subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
         (profileFor(kind)?.stabilize ?: false)

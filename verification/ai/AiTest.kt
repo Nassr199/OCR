@@ -36,11 +36,14 @@ fun main() = runBlocking {
         gParts.size == 2 && gParts[0].jsonObject.containsKey("text") && gParts[1].jsonObject.containsKey("inlineData"))
     check("Gemini: no systemInstruction, no candidateCount", !gb.containsKey("systemInstruction") && !gb["generationConfig"]!!.jsonObject.containsKey("candidateCount"))
     val gc = gb["generationConfig"]!!.jsonObject
-    check("Gemini: temperature 0, topP 1, high detail, thinking «minimal» sent as «low» to Gemini 4 (the defaults)",
-        gc["temperature"]!!.jsonPrimitive.double == 0.0 && gc["topP"]!!.jsonPrimitive.double == 1.0 &&
+    check("Gemini: no temperature/topP (ignored by current models), output room 8192, high detail, thinking «minimal» sent as «low» to Gemini 4",
+        !gc.containsKey("temperature") && !gc.containsKey("topP") && gc["maxOutputTokens"]!!.jsonPrimitive.int == 8192 &&
             gc["mediaResolution"]!!.jsonPrimitive.content == "MEDIA_RESOLUTION_HIGH" &&
             gc["thinkingConfig"]!!.jsonObject["thinkingLevel"]!!.jsonPrimitive.content == "low", gc.toString())
-    check("Gemini: v2.6's prompt by default, byte for byte", gParts[0].jsonObject["text"]!!.jsonPrimitive.content == Prompts.GEMINI_V26_PROMPT)
+    check("Gemini: the subtitle prompt (v2.6's with the repeat and Arabic-watermark lines)", gParts[0].jsonObject["text"]!!.jsonPrimitive.content == Prompts.SUBTITLE_PROMPT)
+    val v26 = Prompts.GEMINI_V26_PROMPT.lines(); val sub = Prompts.SUBTITLE_PROMPT.lines()
+    check("…every other v2.6 line unchanged, in order", sub.filter { it in v26 } == v26.filter { !it.startsWith("- Ignore watermarks") } &&
+        sub.size == v26.size + 1 && sub.single { it.startsWith("- Ignore watermarks") }.startsWith(v26.single { it.startsWith("- Ignore watermarks") }))
     check("Gemini: usage counted", g.usage.answers.get() == 1 && g.usage.thinkingTokens.get() == 90L && g.usage.promptTokens.get() == 1400L)
 
     val oh = Fake(mutableListOf(r(200, OR_OK)))
@@ -55,8 +58,8 @@ fun main() = runBlocking {
     check("OpenRouter: the same picture bytes", oContent[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content ==
         "data:image/png;base64," + gParts[1].jsonObject["inlineData"]!!.jsonObject["data"]!!.jsonPrimitive.content)
     check("OpenRouter: high detail", oContent[1].jsonObject["image_url"]!!.jsonObject["detail"]?.jsonPrimitive?.content == "high")
-    check("OpenRouter: temperature 0, top_p 1, reasoning low (hidden) like Gemini's thinking",
-        ob["temperature"]!!.jsonPrimitive.double == 0.0 && ob["top_p"]!!.jsonPrimitive.double == 1.0 &&
+    check("OpenRouter: no temperature/top_p, max_tokens 8192, reasoning low (hidden) like Gemini's thinking",
+        !ob.containsKey("temperature") && !ob.containsKey("top_p") && ob["max_tokens"]!!.jsonPrimitive.int == 8192 &&
             ob["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content == "low" && ob["reasoning"]!!.jsonObject["exclude"]!!.jsonPrimitive.boolean, ob.toString().take(0))
     check("OpenRouter: attribution is the app's page, not openrouter.ai", oh.seen[0].headers["HTTP-Referer"] == "https://github.com/Nassr199/OCR" && oh.seen[0].headers["X-OpenRouter-Title"] != null)
     check("OpenRouter: usage and cost counted", o.usage.thinkingTokens.get() == 90L && o.usage.costMicros.get() == 2130L, o.usage.summary() ?: "")
@@ -82,8 +85,8 @@ fun main() = runBlocking {
     OpenRouterEngine(oe, "K", "google/gemini-4-hydrogen", lang = SubLang.ENGLISH).recognize(img)
     check("English: the English prompt through both", obj(ge.seen[0]).toString().contains("NO_TEXT") && obj(oe.seen[0]).toString().contains("NO_TEXT"))
     // resume-memory identity: style, thinking and detail in it, same shape for both
-    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:v26:t=minimal:hi" &&
-        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:v26:t=minimal:hi",
+    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:v26s:t=minimal:hi" &&
+        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:v26s:t=minimal:hi",
         GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId)
 
     // ------------------------------------------------------------------ OpenRouter errors, in plain words
@@ -109,23 +112,12 @@ fun main() = runBlocking {
     check("error inside a 200 answer (cut generation): retried, not an empty subtitle", mid is OcrError.Retryable, mid?.message ?: "null")
     val bad = orError(400, """{"error":{"code":400,"message":"Provider returned error","metadata":{"provider_name":"Google AI Studio","raw":"INVALID_ARGUMENT: image too large"}}}""")
     check("400: this image only, with the provider's reason", bad is OcrError.Failed && bad.message!!.contains("image too large"), bad?.message ?: "")
-    // a model that refuses temperature / top_p, or reasoning: adjusted once, then read
-    val fs = Fake(mutableListOf(r(400, """{"error":{"code":400,"message":"Unsupported parameter: 'temperature' is not supported with this model."}}"""), r(200, OR_OK)))
-    val oo = OpenRouterEngine(fs, "K", "openai/gpt-x")
-    val firstTry = try { oo.recognize(img); null } catch (e: OcrError) { e }
-    check("OpenRouter: refused temperature → retried at once without it", firstTry is OcrError.Retryable && firstTry.retryAfterMs == 0L && oo.recognize(img).isNotEmpty() &&
-        !obj(fs.seen[1]).containsKey("temperature") && !obj(fs.seen[1]).containsKey("top_p") && obj(fs.seen[1]).containsKey("reasoning"))
+    // a model that refuses reasoning: adjusted once, then read
     val fr = Fake(mutableListOf(r(400, """{"error":{"code":400,"message":"Reasoning is not supported for this model"}}"""), r(200, OR_OK)))
     val o2 = OpenRouterEngine(fr, "K", "some/vl-model")
     runCatching { o2.recognize(img) }
     o2.recognize(img)
-    check("OpenRouter: refused reasoning → retried without it", !obj(fr.seen[1]).containsKey("reasoning") && obj(fr.seen[1]).containsKey("temperature"))
-    val gs = Fake(mutableListOf(r(400, """{"error":{"code":400,"message":"Invalid value at 'generation_config.temperature'","status":"INVALID_ARGUMENT"}}"""), r(200, GEM_OK)))
-    val g3 = GeminiEngine(gs, "K", "gemini-9")
-    runCatching { g3.recognize(img) }
-    g3.recognize(img)
-    check("Gemini: refused temperature → retried without temperature/topP, thinking kept",
-        obj(gs.seen[1])["generationConfig"]!!.jsonObject.let { !it.containsKey("temperature") && !it.containsKey("topP") && it.containsKey("thinkingConfig") })
+    check("OpenRouter: refused reasoning → retried without it", !obj(fr.seen[1]).containsKey("reasoning") && obj(fr.seen[1]).containsKey("max_tokens"))
     // key check
     val ki = OpenRouterEngine.keyInfo(Fake(mutableListOf(r(200, """{"data":{"label":"sk-or-v1-0e6...1c96","limit":null,"limit_remaining":null,"usage":3.25,"is_free_tier":false}}"""))), "K")
     check("key check: paid account, no key limit, usage", ki.freeTier == false && ki.limit == null && ki.usage == 3.25)
@@ -221,11 +213,11 @@ fun main() = runBlocking {
     val (c1, f1) = gRead(gem("أر", "RECITATION"), gem("أريد أمي", "STOP"))
     check("cut answer («أر», RECITATION) → sent again, the whole answer kept", c1 == "أريد أمي" && f1.seen.size == 2, c1.toString())
     val (c2, f2) = gRead(gem("أر", "SAFETY"), gem("أر", "SAFETY"))
-    check("cut twice → this image fails with the reason (no «أر» in the SRT)", c2 is OcrError.Failed && (c2 as OcrError).message!!.contains("SAFETY") && f2.seen.size == 2, (c2 as? OcrError)?.message ?: c2.toString())
+    check("cut twice → this image fails with the reason (no «أر» in the SRT)", c2 is OcrError.Cut && (c2 as OcrError.Cut).message!!.contains("SAFETY") && c2.partial == "أر" && f2.seen.size == 2, (c2 as? OcrError)?.message ?: c2.toString())
     val (c3, _) = gRead(gem("بخير بخير", "MAX_TOKENS"), gem("بخير بخير أجل أنا بخير", "STOP"))
     check("length limit → sent again", c3 == "بخير بخير أجل أنا بخير", c3.toString())
     val (c4, _) = gRead(r(200, """{"promptFeedback":{"blockReason":"OTHER"}}"""), r(200, """{"promptFeedback":{"blockReason":"OTHER"}}"""))
-    check("picture refused twice → failed, not an empty subtitle", c4 is OcrError.Failed && (c4 as OcrError).message!!.contains("BLOCKED_OTHER"), (c4 as? OcrError)?.message ?: c4.toString())
+    check("picture refused twice → failed, not an empty subtitle", c4 is OcrError.Cut && (c4 as OcrError).message!!.contains("BLOCKED_OTHER"), (c4 as? OcrError)?.message ?: c4.toString())
     val (c5, f5) = gRead(gem("أريد أمي", null))
     check("no finish reason given → whole", c5 == "أريد أمي" && f5.seen.size == 1)
     val (c6, _) = gRead(gem("", "STOP"))
@@ -235,7 +227,7 @@ fun main() = runBlocking {
     suspend fun oRead(vararg answers: HttpResponse): Any = try { OpenRouterEngine(Fake(answers.toMutableList()), "K", "google/gemini-3.5-flash-lite").recognize(img) } catch (e: OcrError) { e }
     check("OpenRouter: cut by length → sent again", oRead(orAns("أر", "length", "MAX_TOKENS"), orAns("أريد أمي", "stop")) == "أريد أمي")
     val oc = oRead(orAns("أر", "content_filter", "RECITATION"), orAns("أر", "content_filter", "RECITATION"))
-    check("OpenRouter: cut twice → failed with the provider's reason", oc is OcrError.Failed && (oc as OcrError).message!!.contains("RECITATION"), (oc as? OcrError)?.message ?: oc.toString())
+    check("OpenRouter: cut twice → failed with the provider's reason", oc is OcrError.Cut && (oc as OcrError).message!!.contains("RECITATION"), (oc as? OcrError)?.message ?: oc.toString())
     check("OpenRouter: no finish reason → whole", oRead(orAns("أريد أمي", null)) == "أريد أمي")
 
     println(if (fails == 0) "ALL PASSED" else "$fails FAILED")

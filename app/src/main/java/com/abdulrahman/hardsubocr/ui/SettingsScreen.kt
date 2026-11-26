@@ -285,13 +285,13 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             SettingsCard("كل المحركات") {
                 SwitchRow("حذف التشكيل", "يحذف كل الحركات من الترجمة.", u.strip) { u.strip = it; s.stripDiacritics = it }
             }
-            Hint("Gemini وOpenRouter: يُختار شكل نصهما من «النص الناتج» في لوحة المحرك.", Modifier.padding(horizontal = 4.dp))
+
         }
 
         SettingsPage.MERGE -> SettingsCard("طريقة الدمج") {
             ChoiceList(
                 listOf(
-                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision: دمج التكرار. Gemini وOpenRouter: دمج الانقسام فقط، ومع «بلا تشكيل»: دمج التكرار."),
+                    ChoiceItem(Choice.AUTO, vm.mergeLabel(Choice.AUTO), "Lens وVision: دمج التكرار. Gemini وOpenRouter: دمج الانقسام فقط."),
                     ChoiceItem(Choice.PRO, vm.mergeLabel(Choice.PRO), "يجمع المقاطع المتتالية المتطابقة تقريبًا (90% فأكثر) التي يفصلها أقل من ثلث ثانية في ترجمة واحدة"),
                     ChoiceItem(Choice.STRICT_OR_PRECISE, vm.mergeLabel(Choice.STRICT_OR_PRECISE), "يجمع فقط مقطعين متلاصقين بالنص نفسه (ترجمة انقسمت إلى صورتين)، ولا يدمج نصين مختلفين أبدًا"),
                     ChoiceItem(Choice.NONE, vm.mergeLabel(Choice.NONE), "كل صورة ترجمة مستقلة بتوقيتها، حتى لو تكرر النص")

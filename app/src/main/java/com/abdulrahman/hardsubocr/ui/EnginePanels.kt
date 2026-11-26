@@ -62,7 +62,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.abdulrahman.hardsubocr.core.AiProfile
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ModelInfo
@@ -135,16 +134,6 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
     }
 }
 
-@Composable
-private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean) {
-    SwitchRow(
-        "تحسين الصورة",
-        "يقصّ شريط الترجمة، ويكبّر الصور الصغيرة، ويزيد وضوحها قبل الإرسال.",
-        vm.enhanceEffective(),
-        enabled
-    ) { vm.setEnhance(it) }
-}
-
 // ============================================================================ Google Vision
 
 @Composable
@@ -200,15 +189,6 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
 
 // ============================================================================ Gemini / OpenRouter
 
-/** What each text form gives — every claim is what the code does (AiProfile, Cleaner, Merge). */
-private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.V26 -> "الأسطر وعلامات الترقيم كما في الصورة، والتشكيل الظاهر بوضوح فقط. موصى به."
-    AiProfile.V21 -> "الأسطر وعلامات الترقيم كما في الصورة، وكل تشكيل يكتبه النموذج."
-    AiProfile.PRO -> "النص العربي في سطر واحد، بلا تشكيل ولا شرطات حوار."
-}
-
-private val profileOptions = listOf(AiProfile.V26, AiProfile.V21, AiProfile.PRO).map { it to it.title }
-
 private val thinkingOptions = listOf(
     ThinkingLevel.MINIMAL to "أدنى",
     ThinkingLevel.LOW to "منخفض",
@@ -218,17 +198,17 @@ private val thinkingOptions = listOf(
 )
 
 private fun thinkingHint(t: ThinkingLevel): String = when (t) {
-    ThinkingLevel.MINIMAL -> "الأسرع والأقل تكلفة. موصى به. Gemini 4 و3.8 Flash لا يدعمانه فيعملان بـ«منخفض»."
-    ThinkingLevel.LOW -> "تفكير قصير قبل الإجابة: أبطأ قليلًا."
+    ThinkingLevel.MINIMAL -> "الأسرع والأقل تكلفة، وتوصي به Google للاستخراج بالجملة. Gemini 4 و3.8 Flash لا يدعمانه فيعملان بـ«منخفض»."
+    ThinkingLevel.LOW -> "تفكير قصير قبل الإجابة: أبطأ قليلًا وأعلى تكلفة."
     ThinkingLevel.MEDIUM -> "أبطأ وأعلى تكلفة."
     ThinkingLevel.HIGH -> "الأبطأ والأعلى تكلفة."
-    ThinkingLevel.DEFAULT -> "مستوى النموذج نفسه (في Gemini 4 Hydrogen وNeon: عالٍ)."
+    ThinkingLevel.DEFAULT -> "مستوى النموذج المختار نفسه (في Gemini 4 Hydrogen وNeon: عالٍ)."
 }
 
 /**
- * Gemini and OpenRouter: one panel, in the order the choices are made — key, model, the text it
- * gives, thinking level, image enhancement. Only the key and the model list differ between the two;
- * the request is the same (AiRecipe). One short line under each choice says what it does.
+ * Gemini and OpenRouter: one panel — key, model, thinking level, the Google Lens check. Both read the
+ * same way (AiRecipe): the subtitle band, enlarged and sharpened as in ocr_windows_v2.6.py, with its
+ * instructions. Only the key and the model list differ.
  */
 @Composable
 private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
@@ -268,17 +248,17 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
     )
 
     Spacer(Modifier.height(14.dp))
-    SectionLabel("النص الناتج")
-    Segmented(profileOptions, vm.currentProfile(), enabled) { vm.chooseProfile(it) }
-    Hint(profileHint(vm.currentProfile()), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
-
-    Spacer(Modifier.height(14.dp))
     SectionLabel("مستوى التفكير")
     Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
     Hint(thinkingHint(vm.thinking), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
 
     Spacer(Modifier.height(8.dp))
-    EnhanceSwitch(vm, enabled)
+    SwitchRow(
+        "المراجعة بـ Google Lens",
+        "إذا كرّر النموذج كلمة أو أوقف إجابته قبل نهايتها، يقرأ Google Lens الصورة نفسها مجانًا: يُؤخذ منه عدد التكرار، أو قراءته بدل الإجابة الناقصة.",
+        vm.aiLensCheck,
+        enabled
+    ) { vm.chooseAiLensCheck(it) }
 }
 
 // ============================================================================ API key
