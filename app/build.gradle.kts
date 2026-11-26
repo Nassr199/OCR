@@ -61,6 +61,18 @@ android {
         }
     }
 
+    // Screenshots of every screen on a phone (upright and on its side) and a tablet, rendered on the
+    // JVM by Robolectric (src/test, workflow "UI screenshots"): there is no device in the build loop.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.maxHeapSize = "3g"
+            }
+        }
+    }
+
     lint {
         // Lint must never block the APK for a beginner-friendly CI build.
         checkReleaseBuilds = false
@@ -93,4 +105,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

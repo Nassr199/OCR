@@ -48,6 +48,11 @@ object JobManager {
         }
     }
 
+    /** Screenshot tests only: shows [state] as if a job were in it (nothing runs). */
+    internal fun preview(state: JobState) {
+        _state.value = state
+    }
+
     fun dismiss() {
         if (!isRunning) _state.value = JobState.Idle
     }

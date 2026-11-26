@@ -89,6 +89,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import com.abdulrahman.hardsubocr.core.SubLang
 import com.abdulrahman.hardsubocr.data.VideoMode
 import com.abdulrahman.hardsubocr.core.EngineKind
@@ -110,165 +120,94 @@ fun shareSrt(context: Context, uri: Uri) {
     context.startActivity(Intent.createChooser(i, "مشاركة ملف الترجمة"))
 }
 
-private val cardPad = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
+internal val cardPad = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
 
+/**
+ * The extraction tab: what the next job reads with (engine), what it reads (source) and where it
+ * writes (output), under a card that says whether all of it is ready. Cards come in one after another.
+ * A wide screen (a tablet, a phone on its side) puts them in two columns beside the navigation rail.
+ */
 @Composable
-fun HomeScreen(
+fun ExtractTab(
     vm: MainViewModel,
-    onOpenSettings: () -> Unit,
+    running: Boolean,
+    progress: Float?,
     onOpenRoi: () -> Unit,
-    onOpenEditor: (Int) -> Unit
+    onShowProgress: () -> Unit
 ) {
     val context = LocalContext.current
-    val state by vm.job.collectAsState()
-    val running = state is JobState.Running
-    val snackbar = remember { SnackbarHostState() }
-    val list = rememberLazyListState()
-    var logFilter by rememberSaveable { mutableStateOf(LogFilter.ALL) }
-
-    LaunchedEffect(vm.message) {
-        val m = vm.message
-        if (m != null) {
-            snackbar.showSnackbar(m)
-            vm.message = null
-        }
-    }
-    // a job starts: show its progress from the top
-    LaunchedEffect(running) { if (running) list.animateScrollToItem(0) }
-
+    val chrome = LocalChrome.current
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { vm.onImagePicked(it) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onFolderPicked(it) }
     val pickOutput = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onOutputPicked(it) }
     val pickParent = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { vm.onMultiParentPicked(it) }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { vm.onVideoPicked(it) }
     val saveDiag = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { vm.saveDiagnostics(it) }
-    var saveAsIndex by remember { mutableIntStateOf(-1) }
-    val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) {
-        vm.saveOutputAs(saveAsIndex, it)
-    }
-    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.start() }
+    val diag = DiagActions(save = { saveDiag.launch(vm.diagFileName()) }, share = { vm.shareDiagnostics(context) })
 
-    fun startClicked() {
-        val problem = vm.canStart()
-        if (problem != null) {
-            vm.message = problem; return
-        }
-        val needAsk = Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        if (needAsk) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.start()
-    }
-
-    val onSave: (Int, String) -> Unit = { i, name ->
-        if (!vm.saveOutput(i)) {
-            saveAsIndex = i; saveAs.launch("$name.srt")
-        }
-    }
-    val diag = DiagActions(
-        save = { saveDiag.launch(vm.diagFileName()) },
-        share = { vm.shareDiagnostics(context) }
-    )
-
-    val (statusText, statusColor) = when (val st = state) {
-        is JobState.Running -> String.format(Locale.US, "يعمل الآن • %.1f%%", st.progress.fraction * 100) to Amber
-        is JobState.Done -> (if (st.stopped) "أُوقف" else "اكتمل") to (if (st.stopped) Amber else Good)
-        is JobState.Error -> "حدث خطأ" to Bad
-        JobState.Idle -> "جاهز" to Good
-    }
-
-    Scaffold(
-        // Insets are handled by the header (status bar) and the action bar (navigation bar).
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = {
-            ActionBar(
-                vm = vm,
-                running = running,
-                onStart = { startClicked() },
-                onStop = { vm.stop() }
+    val header: LazyListScope.() -> Unit = {
+        item(key = "header") {
+            TabHeader(
+                "HardSub OCR", "استخراج الترجمة العربية المدمجة",
+                status = if (running) "يعمل الآن" to Amber else "جاهز" to Good,
+                logo = true, modifier = Modifier.reveal(0)
             )
         }
-    ) { padding ->
-        LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .imePadding(),
-            state = list,
-            contentPadding = PaddingValues(bottom = 12.dp)
-        ) {
-            item(key = "header") {
-                Column(Modifier.padding(bottom = 14.dp)) { AppHeader(statusText, statusColor, onOpenSettings, busy = running) }
+        item(key = "crash") {
+            AnimatedVisibility(
+                visible = vm.lastErrorReport != null,
+                enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
+                exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
+            ) {
+                CrashBanner(vm.lastErrorReport ?: "", diag, onDismiss = { vm.dismissErrorReport() }, modifier = cardPad)
             }
-            item(key = "crash") {
-                AnimatedVisibility(
-                    visible = vm.lastErrorReport != null,
-                    enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
-                    exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
-                ) {
-                    CrashBanner(vm.lastErrorReport ?: "", diag, onDismiss = { vm.dismissErrorReport() }, modifier = cardPad)
-                }
+        }
+        item(key = "ready") {
+            AnimatedContent(running, transitionSpec = { Motion.fadeThrough() }, label = "ready") { busy ->
+                if (busy) RunningBanner(progress ?: 0f, onShowProgress, cardPad.reveal(1))
+                else ReadyCard(vm, cardPad.reveal(1))
             }
-            item(key = "state") {
-                AnimatedContent(
-                    targetState = state,
-                    contentKey = { it::class },
-                    transitionSpec = {
-                        (fadeIn(tween(Motion.NORMAL)) + scaleIn(tween(Motion.NORMAL), initialScale = 0.96f)) togetherWith
-                            fadeOut(tween(Motion.FAST)) using SizeTransform(clip = false)
-                    },
-                    label = "jobState"
-                ) { st ->
-                    when (st) {
-                        is JobState.Running -> ProgressCard(st.progress, cardPad)
-                        is JobState.Done -> ResultCard(
-                            title = st.summary,
-                            good = !st.stopped,
-                            elapsed = st.elapsedSec,
-                            details = null,
-                            outputs = st.outputs,
-                            onEdit = onOpenEditor,
-                            onShare = { uri -> shareSrt(context, uri) },
-                            onSave = onSave,
-                            onClose = { vm.dismissResult() },
-                            diag = null,
-                            modifier = cardPad
-                        )
-                        is JobState.Error -> ResultCard(
-                            title = st.message,
-                            good = false,
-                            elapsed = null,
-                            details = st.details,
-                            outputs = st.outputs,
-                            onEdit = onOpenEditor,
-                            onShare = { uri -> shareSrt(context, uri) },
-                            onSave = onSave,
-                            onClose = { vm.dismissResult() },
-                            diag = diag,
-                            modifier = cardPad
-                        )
-                        JobState.Idle -> Box(Modifier.fillMaxWidth())
-                    }
-                }
-            }
+        }
+    }
+    val source: LazyListScope.(Int) -> Unit = { i ->
+        item(key = "source") {
+            SourceCard(
+                vm, enabled = !running,
+                onPickImage = { pickImage.launch(arrayOf("image/*")) },
+                onPickFolder = { pickFolder.launch(null) },
+                onPickParent = { pickParent.launch(null) },
+                onPickVideo = { pickVideo.launch(arrayOf("video/*")) },
+                onOpenRoi = onOpenRoi,
+                modifier = cardPad.reveal(i)
+            )
+        }
+        item(key = "output") { OutputCard(vm, enabled = !running, onPick = { pickOutput.launch(null) }, modifier = cardPad.reveal(i + 1)) }
+    }
+    val engine: LazyListScope.(Int) -> Unit = { i ->
+        item(key = "engine") { EngineCard(vm, enabled = !running, modifier = cardPad.reveal(i)) }
+    }
 
-            val st = state
-            if (st is JobState.Running) {
-                logSection(st.progress.log, logFilter) { logFilter = it }
-            } else {
-                item(key = "engine") { EngineCard(vm, enabled = true, modifier = cardPad) }
-                item(key = "source") {
-                    SourceCard(
-                        vm, enabled = true,
-                        onPickImage = { pickImage.launch(arrayOf("image/*")) },
-                        onPickFolder = { pickFolder.launch(null) },
-                        onPickParent = { pickParent.launch(null) },
-                        onPickVideo = { pickVideo.launch(arrayOf("video/*")) },
-                        onOpenRoi = onOpenRoi,
-                        modifier = cardPad
-                    )
-                }
-                item(key = "output") { OutputCard(vm, enabled = true, onPick = { pickOutput.launch(null) }, modifier = cardPad) }
+    if (chrome.wide) {
+        Row(Modifier.fillMaxSize().padding(start = chrome.start).imePadding()) {
+            LazyColumn(
+                Modifier.weight(1f).fillMaxHeight(),
+                contentPadding = PaddingValues(top = chrome.top + 8.dp, bottom = chrome.bottom)
+            ) {
+                header(); source(2)
             }
+            LazyColumn(
+                Modifier.weight(1f).fillMaxHeight(),
+                contentPadding = PaddingValues(top = chrome.top + 8.dp, bottom = chrome.bottom)
+            ) {
+                engine(2)
+            }
+        }
+    } else {
+        LazyColumn(
+            Modifier.fillMaxSize().imePadding(),
+            contentPadding = PaddingValues(top = chrome.top + 8.dp, bottom = chrome.bottom)
+        ) {
+            header(); engine(2); source(3)
         }
     }
 
@@ -285,96 +224,177 @@ fun HomeScreen(
     }
 }
 
+/** Title of a tab: the app's mark (on the first tab), the title, one line under it, its status. */
+@Composable
+fun TabHeader(
+    title: String,
+    subtitle: String,
+    status: Pair<String, Color>? = null,
+    logo: Boolean = false,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 6.dp, bottom = 18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (logo) {
+            Box(
+                Modifier
+                    .size(50.dp)
+                    .shadow(10.dp, RoundedCornerShape(16.dp), ambientColor = scheme.primary, spotColor = scheme.primary)
+                    .background(Brush.linearGradient(listOf(Color(0xFF0B4F4A), Color(0xFF07201E))), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.foundation.Image(
+                    androidx.compose.ui.res.painterResource(com.abdulrahman.hardsubocr.R.drawable.ic_launcher_foreground), null,
+                    Modifier.fillMaxSize()
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2)
+        }
+        if (status != null) {
+            Spacer(Modifier.width(8.dp))
+            StatusPill(status.first, status.second)
+        }
+        trailing?.invoke()
+    }
+}
+
+private fun sourceSummary(vm: MainViewModel): String = when (vm.sourceMode) {
+    SourceMode.IMAGE -> vm.image?.name ?: "لم تُختر صورة"
+    SourceMode.FOLDER -> vm.folder?.let { f -> f.name + (vm.folderImages?.let { " • $it صورة" } ?: "") } ?: "لم يُختر مجلد"
+    SourceMode.MULTI -> if (vm.multi.isEmpty()) "لا توجد مجلدات" else "${vm.multi.size} مجلد • ${vm.multi.sumOf { it.images.coerceAtLeast(0) }} صورة"
+    SourceMode.VIDEO -> vm.video?.name ?: "لم يُختر فيديو"
+}
+
+private fun sourceKind(m: SourceMode): String = when (m) {
+    SourceMode.IMAGE -> "صورة"
+    SourceMode.FOLDER -> "مجلد صور"
+    SourceMode.MULTI -> "مجلدات متعددة"
+    SourceMode.VIDEO -> "فيديو"
+}
+
+/** Label of the start button for the chosen source. */
+fun startLabel(vm: MainViewModel): String =
+    if (vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY) "حفظ الصور" else "استخراج"
+
+/**
+ * Is everything set for a job: the engine (and its key), the source, the output folder — each on a
+ * line with a green or amber mark, and what is still missing in the title.
+ */
+@Composable
+private fun ReadyCard(vm: MainViewModel, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val problem = vm.canStart()
+    val imagesOnly = vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY
+    val keyOk = imagesOnly || when (vm.engine) {
+        EngineKind.GEMINI -> vm.geminiKey.isNotBlank()
+        EngineKind.OPENROUTER -> vm.openRouterKey.isNotBlank()
+        EngineKind.VISION -> vm.visionKey.isNotBlank()
+        EngineKind.LENS -> true
+    }
+    val sourceOk = when (vm.sourceMode) {
+        SourceMode.IMAGE -> vm.image != null
+        SourceMode.FOLDER -> vm.folder != null
+        SourceMode.MULTI -> vm.multi.isNotEmpty()
+        SourceMode.VIDEO -> vm.video != null
+    }
+    val outputOk = vm.output != null || vm.sourceMode != SourceMode.VIDEO
+    val model = when (vm.engine) {
+        EngineKind.GEMINI -> " • " + vm.geminiModel
+        EngineKind.OPENROUTER -> " • " + vm.openRouterModel.substringAfter('/')
+        EngineKind.LENS, EngineKind.VISION -> ""
+    }
+    val accent by animateColorAsState(if (problem == null) Good else Amber, Motion.quick(), label = "readyAccent")
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(scheme.primaryContainer.copy(alpha = if (isDarkScheme()) 0.55f else 0.7f), scheme.surfaceContainer)
+                )
+            )
+            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(26.dp))
+            .padding(18.dp)
+            .animateContentSize(Motion.soft())
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).background(accent, CircleShape))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (problem == null) "جاهز للاستخراج" else problem.removeSuffix("."),
+                fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f)
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        ReadyLine("المحرك", engineName(vm.engine) + model, keyOk)
+        ReadyLine(sourceKind(vm.sourceMode), sourceSummary(vm), sourceOk)
+        ReadyLine(
+            "الحفظ",
+            vm.output?.name ?: if (vm.sourceMode == SourceMode.VIDEO) "اختر مجلدًا" else "بجانب الصور",
+            outputOk
+        )
+    }
+}
+
+@Composable
+private fun ReadyLine(label: String, value: String, ok: Boolean) {
+    val c by animateColorAsState(if (ok) Good else Amber, Motion.quick(), label = "readyLine")
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (ok) Icons.Filled.CheckCircle else Icons.Filled.Warning, null, Modifier.size(18.dp), tint = c)
+        Spacer(Modifier.width(10.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(92.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+/** While a job runs, the extraction tab says so and leads to its progress; its cards are locked. */
+@Composable
+private fun RunningBanner(fraction: Float, onShow: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val f by animateFloatAsState(fraction.coerceIn(0f, 1f), Motion.soft(), label = "banner")
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(Amber.copy(alpha = 0.14f))
+            .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(26.dp))
+            .clickable(onClick = onShow)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                progress = { f }, modifier = Modifier.fillMaxSize(), color = Amber, strokeWidth = 4.dp,
+                trackColor = scheme.surfaceContainerHighest, strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            Text(String.format(Locale.US, "%.0f%%", f * 100), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("استخراج قيد التشغيل", fontWeight = FontWeight.Bold)
+            Hint("الإعدادات مقفلة حتى ينتهي أو توقفه.")
+        }
+        TextButton(onClick = onShow) { Text("عرض التقدم") }
+    }
+}
+
 /** «حفظ / مشاركة ملف التشخيص» from the crash banner and the error card. */
 class DiagActions(val save: () -> Unit, val share: () -> Unit)
 
 @Composable
-private fun DiagButtons(diag: DiagActions) {
+internal fun DiagButtons(diag: DiagActions) {
     Hint("ملف التشخيص يحتوي خطوات المعالجة والأخطاء ومعلومات الجهاز، بدون أي مفتاح API.", Modifier.padding(top = 4.dp))
     RowSpaced {
         OutlinedButton(onClick = diag.save, modifier = Modifier.weight(1f)) { Text("💾 حفظ ملف التشخيص") }
         OutlinedButton(onClick = diag.share, modifier = Modifier.weight(1f)) { Text("↗ إرساله") }
-    }
-}
-
-// ============================================================================ action bar
-
-private fun sourceSummary(vm: MainViewModel): String = when (vm.sourceMode) {
-    SourceMode.IMAGE -> vm.image?.let { "🖼 ${it.name}" } ?: "🖼 لم تُختر صورة"
-    SourceMode.FOLDER -> vm.folder?.let { f -> "📁 ${f.name}" + (vm.folderImages?.let { " • $it صورة" } ?: "") } ?: "📁 لم يُختر مجلد"
-    SourceMode.MULTI -> if (vm.multi.isEmpty()) "🗂 لا توجد مجلدات" else "🗂 ${vm.multi.size} مجلد • ${vm.multi.sumOf { it.images }} صورة"
-    SourceMode.VIDEO -> vm.video?.let { "🎬 ${it.name}" } ?: "🎬 لم يُختر فيديو"
-}
-
-@Composable
-private fun ActionBar(vm: MainViewModel, running: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 3.dp,
-        shadowElevation = 12.dp,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                val model = when (vm.engine) {
-                    EngineKind.GEMINI -> " • " + vm.geminiModel
-                    EngineKind.OPENROUTER -> " • " + vm.openRouterModel.substringAfter('/')
-                    EngineKind.LENS, EngineKind.VISION -> ""
-                }
-                Text(
-                    engineName(vm.engine) + model,
-                    fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    sourceSummary(vm),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            AnimatedContent(
-                targetState = running,
-                transitionSpec = {
-                    (fadeIn(tween(Motion.NORMAL)) + scaleIn(tween(Motion.NORMAL), initialScale = 0.9f)) togetherWith
-                        fadeOut(tween(Motion.FAST)) using SizeTransform(clip = false)
-                },
-                label = "action"
-            ) { isRunning ->
-                if (isRunning) {
-                    Button(
-                        onClick = onStop,
-                        modifier = Modifier.height(54.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    ) {
-                        Icon(Icons.Filled.Close, null); Spacer(Modifier.width(6.dp))
-                        Text("إيقاف", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    Button(onClick = onStart, modifier = Modifier.height(54.dp), shape = RoundedCornerShape(18.dp)) {
-                        Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
-                        Text(
-                            when {
-                                vm.sourceMode == SourceMode.MULTI -> "استخراج الكل"
-                                vm.sourceMode == SourceMode.VIDEO && vm.videoMode == VideoMode.FRAMES_ONLY -> "حفظ الصور"
-                                else -> "استخراج"
-                            },
-                            fontSize = 16.sp, fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -547,7 +567,7 @@ private fun OutputCard(vm: MainViewModel, enabled: Boolean, onPick: () -> Unit, 
 // ============================================================================ results
 
 @Composable
-private fun ResultCard(
+internal fun ResultCard(
     title: String,
     good: Boolean,
     elapsed: Double?,

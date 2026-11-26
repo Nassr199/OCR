@@ -60,6 +60,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val job: StateFlow<JobState> = JobManager.state
 
+    /** The log of the last job, kept after it ends: the processing tab shows it under the result. */
+    var lastLog by mutableStateOf<List<com.abdulrahman.hardsubocr.job.LogLine>>(emptyList())
+        private set
+
+    init {
+        viewModelScope.launch { job.collect { if (it is JobState.Running) lastLog = it.progress.log } }
+    }
+
     // ------------------------------------------------------------------ engine
     var engine by mutableStateOf(s.engine)
         private set

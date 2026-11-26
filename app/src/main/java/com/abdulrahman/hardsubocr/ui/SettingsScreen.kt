@@ -8,6 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -96,8 +99,13 @@ class SettingsUi(s: Settings) {
  * Pages move along the reading direction (shared axis): forward = in from the left in Arabic.
  */
 @Composable
-fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit, asTab: Boolean = false) {
     val u = remember { SettingsUi(vm.s) }
+    val chrome = LocalChrome.current
+    if (asTab && chrome.wide) {
+        SettingsTwoPane(vm, u)
+        return
+    }
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     BackHandler(enabled = page != null) { page = null }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -109,9 +117,29 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         label = "settingsPage"
     ) { p ->
         if (p == null) {
-            SettingsHub(vm, u, onBack = onBack, onOpen = { page = it })
+            SettingsHub(vm, u, onBack = if (asTab) null else onBack, onOpen = { page = it })
         } else {
             SettingsPageScreen(p.title, onBack = { page = null }) { PageContent(p, vm, u) }
+        }
+    }
+}
+
+/**
+ * Settings on a wide screen: the list of categories and the open page side by side (the first
+ * category open at first); choosing another category changes the page with a fade-through.
+ */
+@Composable
+private fun SettingsTwoPane(vm: MainViewModel, u: SettingsUi) {
+    val chrome = LocalChrome.current
+    var page by rememberSaveable { mutableStateOf(SettingsPage.READING) }
+    Row(Modifier.fillMaxSize().padding(start = chrome.start)) {
+        Box(Modifier.weight(0.42f).fillMaxHeight()) {
+            SettingsHub(vm, u, onBack = null, onOpen = { page = it }, selected = page)
+        }
+        Box(Modifier.weight(0.58f).fillMaxHeight()) {
+            AnimatedContent(targetState = page, transitionSpec = { Motion.fadeThrough() }, label = "settingsDetail") { p ->
+                SettingsPageScreen(p.title, onBack = null) { PageContent(p, vm, u) }
+            }
         }
     }
 }
@@ -119,43 +147,43 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 // ============================================================================ list of categories
 
 @Composable
-private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+private fun SettingsHub(vm: MainViewModel, u: SettingsUi, onBack: (() -> Unit)?, onOpen: (SettingsPage) -> Unit, selected: SettingsPage? = null) {
     val cacheLabel = remember(vm.settingsVersion) { vm.cacheSizeLabel() }
     val diagLabel = remember(vm.settingsVersion, vm.diagnostics) { vm.diagSizeLabel() }
 
     SettingsPageScreen("الإعدادات", onBack) {
-        SettingsGroup("المعالجة") {
-            Entry(SettingsPage.READING, onOpen,
+        SettingsGroup("المعالجة", Modifier.reveal(1)) {
+            Entry(SettingsPage.READING, onOpen, selected,
                 "Lens وVision ${u.workersLens} • الذكاء الاصطناعي ${u.workersAi} • إعادة ${u.retries}")
-            Entry(SettingsPage.VIDEO, onOpen, listOf(
+            Entry(SettingsPage.VIDEO, onOpen, selected, listOf(
                 videoEngineLabel(u.vEngine),
                 if (u.every == 1) "كل إطار" else "كل ${u.every} إطارات",
                 if (u.gpu) "Vulkan" else "المعالج المركزي"
             ).joinToString(" • "), last = true)
         }
-        SettingsGroup("النص والملف") {
-            Entry(SettingsPage.CLEAN, onOpen, (if (u.classicOneLine) "Lens وVision: سطر واحد" else "Lens وVision: كما في الصورة") + (if (u.strip) " • التشكيل محذوف" else ""))
-            Entry(SettingsPage.MERGE, onOpen, vm.mergeLabel(u.merge))
-            Entry(SettingsPage.SRT, onOpen, listOf(
+        SettingsGroup("النص والملف", Modifier.reveal(2)) {
+            Entry(SettingsPage.CLEAN, onOpen, selected, (if (u.classicOneLine) "Lens وVision: سطر واحد" else "Lens وVision: كما في الصورة") + (if (u.strip) " • التشكيل محذوف" else ""))
+            Entry(SettingsPage.MERGE, onOpen, selected, vm.mergeLabel(u.merge))
+            Entry(SettingsPage.SRT, onOpen, selected, listOf(
                 if (u.bom) "UTF-8 مع BOM" else "UTF-8",
                 if (u.crlf) "CRLF" else "LF",
                 if (u.overwrite) "استبدال الملف" else "اسم جديد"
             ).joinToString(" • "), last = true)
         }
-        SettingsGroup("الخدمات والبيانات") {
-            Entry(SettingsPage.LENS, onOpen, "رمز الدولة ${u.region.ifBlank { "US" }}")
-            Entry(SettingsPage.CACHE, onOpen, (if (u.resume) "الاستئناف مفعّل" else "الاستئناف متوقف") + " • $cacheLabel")
-            Entry(SettingsPage.DIAG, onOpen, (if (vm.diagnostics) "مفعّل" else "متوقف") + " • $diagLabel", last = true)
+        SettingsGroup("الخدمات والبيانات", Modifier.reveal(3)) {
+            Entry(SettingsPage.LENS, onOpen, selected, "رمز الدولة ${u.region.ifBlank { "US" }}")
+            Entry(SettingsPage.CACHE, onOpen, selected, (if (u.resume) "الاستئناف مفعّل" else "الاستئناف متوقف") + " • $cacheLabel")
+            Entry(SettingsPage.DIAG, onOpen, selected, (if (vm.diagnostics) "مفعّل" else "متوقف") + " • $diagLabel", last = true)
         }
-        SettingsGroup("التطبيق") {
-            Entry(SettingsPage.ABOUT, onOpen, "الإصدار ${BuildConfig.VERSION_NAME}", last = true)
+        SettingsGroup("التطبيق", Modifier.reveal(4)) {
+            Entry(SettingsPage.ABOUT, onOpen, selected, "الإصدار ${BuildConfig.VERSION_NAME}", last = true)
         }
     }
 }
 
 @Composable
-private fun Entry(p: SettingsPage, onOpen: (SettingsPage) -> Unit, summary: String, last: Boolean = false) {
-    SettingsRow(p.emoji, p.title, summary, divider = !last) { onOpen(p) }
+private fun Entry(p: SettingsPage, onOpen: (SettingsPage) -> Unit, selected: SettingsPage?, summary: String, last: Boolean = false) {
+    SettingsRow(p.emoji, p.title, summary, divider = !last, selected = p == selected) { onOpen(p) }
 }
 
 private fun videoEngineLabel(e: VideoEngine) = when (e) {
@@ -166,16 +194,20 @@ private fun videoEngineLabel(e: VideoEngine) = when (e) {
 
 /** One settings page: large title that folds into the bar while scrolling, content in 16 dp margins. */
 @Composable
-private fun SettingsPageScreen(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
+    val chrome = LocalChrome.current
     val bar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     Scaffold(
         modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
+        // the tab's own surface (the app background) shows through, under the frosted bar
+        containerColor = Color.Transparent,
         topBar = {
             LargeTopAppBar(
                 title = { Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
+                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
                 },
+                colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
                 scrollBehavior = bar
             )
         }
@@ -186,7 +218,8 @@ private fun SettingsPageScreen(title: String, onBack: () -> Unit, content: @Comp
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = maxOf(32.dp, chrome.bottom))
+                .reveal(0),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) { content() }
     }
