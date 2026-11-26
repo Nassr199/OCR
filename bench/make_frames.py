@@ -182,6 +182,59 @@ for i, (name, lines, credits, font) in enumerate(DIALOGUE_BOX):
     truth = '\n'.join('- ' + l[1:] if l.startswith('-') and not l.startswith('- ') else l for l in lines)
     save(name, img, truth, 'two-line subtitle in the box, second line wider' + (', credits on its rows' if credits else ''))
 
+# 19-25: white text with a thin dark outline and a soft drop shadow, no box — the style of the user's
+# frames where Lens gave words twice («… انظري إلي هل تسمعينني؟ هل», «… على الجرح الجرح»)
+SERIF_AR = ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf', 52)
+SANS_AR = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 44)
+
+
+def shadowed(img, lines, font, cy, lh):
+    """Shadow (dark, offset, blurred) under white letters with a 2 px black outline."""
+    w, h = img.size
+    shadow = Image.new('L', (w, h), 0)
+    sd = ImageDraw.Draw(shadow)
+    y0 = cy - lh * len(lines) // 2
+    for i, l in enumerate(lines):
+        sd.text((w // 2 + 3, y0 + lh * i + lh // 2 + 4), l, font=font, fill=200, anchor='mm', direction='rtl',
+                language='ar', stroke_width=2, stroke_fill=200)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(3))
+    img.paste(Image.new('RGB', (w, h), (10, 10, 12)), (0, 0), shadow)
+    d = ImageDraw.Draw(img)
+    for i, l in enumerate(lines):
+        d.text((w // 2, y0 + lh * i + lh // 2), l, font=font, fill=(255, 255, 255), anchor='mm', direction='rtl',
+               language='ar', stroke_width=2, stroke_fill=(0, 0, 0))
+    LAST_BOX[:] = [0, 0, 0, 0]
+
+
+def scene(seed, w, h):
+    """Bright blurred garden/wall with a dark suit in the middle (the subtitle crosses both)."""
+    rnd = random.Random(seed)
+    img = Image.new('RGB', (w, h), (215, 212, 196))
+    d = ImageDraw.Draw(img)
+    for _ in range(26):
+        x, y = rnd.randint(-150, w), rnd.randint(-120, h)
+        r = rnd.randint(40, 260)
+        col = rnd.choice([(235, 232, 220), (70, 110, 60), (110, 140, 80), (245, 245, 240), (190, 170, 150), (160, 40, 45)])
+        d.ellipse([x, y, x + r * 2, y + int(r * 1.2)], fill=col)
+    d.polygon([(w * 0.28, h), (w * 0.36, h * 0.45), (w * 0.62, h * 0.42), (w * 0.72, h)], fill=(28, 32, 52))
+    d.polygon([(w * 0.45, h * 0.5), (w * 0.52, h * 0.47), (w * 0.53, h), (w * 0.47, h)], fill=(235, 235, 240))
+    return img.filter(ImageFilter.GaussianBlur(10))
+
+
+HEAR = 'هل تسمعينني؟ هل تسمعينني؟ انظري إلي'
+WOUND = 'قمت بالضغط المباشر على الجرح'
+for name, text, font, seed in [('19_shadow_hear_me', HEAR, SANS_AR, 400), ('20_shadow_hear_me_serif', HEAR, SERIF_AR, 401),
+                               ('21_shadow_wound', WOUND, SANS_AR, 402), ('22_shadow_wound_serif', WOUND, SERIF_AR, 403)]:
+    img = scene(seed, W, H2)
+    shadowed(img, [text], font, H2 // 2, 70)
+    save(name, img, text, 'white text, thin outline, soft drop shadow, no box (bright scene, dark suit)')
+FW, FH = 1500, 844
+for name, lines, seed in [('23_frame_hear_me', [HEAR], 410), ('24_frame_wound', [WOUND], 411),
+                          ('25_frame_dialogue', ['- هوليا', '- ابتعدي يا جوليزار'], 412)]:
+    img = scene(seed, FW, FH)
+    shadowed(img, lines, SERIF_AR, int(FH * 0.885) - (35 if len(lines) > 1 else 0), 70)
+    save(name, img, '\n'.join(lines), 'whole frame 1500×844, shadowed subtitle at the bottom')
+
 with open(os.path.join(OUT, 'truth.json'), 'w', encoding='utf-8') as f:
     json.dump(cases, f, ensure_ascii=False, indent=1)
 print(len(cases), 'images')

@@ -21,10 +21,7 @@ enum class Choice { AUTO, PRO, STRICT_OR_PRECISE, NONE }
 /** Video: only save the subtitle images (VideoSubFinder-style), or save them and read them too. */
 enum class VideoMode { FRAMES_ONLY, FRAMES_AND_TEXT }
 
-/** Text cleaning override (names kept compatible with v1.0 settings). */
-enum class CleanChoice { AUTO, PRO, STRICT_OR_PRECISE, V26 }
-
-/** Image enhancement before sending (v2.6 prepare_image_for_ocr). */
+/** Image enhancement before sending (v2.6 prepare_image_for_ocr): the switch in the AI engine panel. */
 enum class EnhanceChoice { AUTO, ON, OFF }
 
 /** Normalised (0..1) subtitle region of the video frame. */
@@ -102,11 +99,12 @@ class Settings(context: Context) {
         set(v) = put("openrouter_model", v.trim())
 
     /**
-     * Thinking level of Gemini and OpenRouter (the same for both). «minimal» is no longer offered (Gemini 4
-     * and 3.8 refuse it); a saved «minimal» reads as «low».
+     * Thinking level of Gemini and OpenRouter (the same for both). Default «minimal» — the fastest; a model
+     * without it (Gemini 4, 3.8 Flash) is raised to «low» automatically. 2.7.8 had dropped «minimal» and
+     * read a saved one as «low»; 2.7.9 gives it back as it was saved.
      */
     var thinking: ThinkingLevel
-        get() = enumOf("thinking", ThinkingLevel.LOW).let { if (it == ThinkingLevel.MINIMAL) ThinkingLevel.LOW else it }
+        get() = enumOf("thinking", ThinkingLevel.MINIMAL)
         set(v) = put("thinking", v.name)
 
     var workersLens: Int
@@ -125,17 +123,12 @@ class Settings(context: Context) {
         get() = enumOf("merge_choice", Choice.AUTO)
         set(v) = put("merge_choice", v.name)
 
-    var cleanChoice: CleanChoice
-        get() = enumOf("clean_choice", CleanChoice.AUTO)
-        set(v) = put("clean_choice", v.name)
-
     /**
-     * Reading style of Gemini AND OpenRouter — one setting, so the same model reads the same way through
-     * either (before 2.7.8 each engine had its own, and OpenRouter defaulted to the one-line style). A new
-     * key: everyone starts on the exact reading; the old per-engine keys are no longer read.
+     * Text form of Gemini AND OpenRouter — one setting, so the same model reads the same way through
+     * either. Default V26 (ocr_windows_v2.6.py); 2.7.8's «EXACT» no longer exists and reads as V26.
      */
     var aiProfile: AiProfile
-        get() = enumOf("ai_style", AiProfile.EXACT).let { if (it == AiProfile.V26) AiProfile.EXACT else it }
+        get() = enumOf("ai_style", AiProfile.V26)
         set(v) = put("ai_style", v.name)
 
     var enhanceChoice: EnhanceChoice
@@ -285,12 +278,9 @@ class Settings(context: Context) {
      */
     fun cleanModeFor(kind: EngineKind): CleanMode = if (subLang == SubLang.ENGLISH) CleanMode.ENGLISH
     else if (kind.isClassicOcr) (if (classicOneLine) CleanMode.PRO else CleanMode.CLASSIC)
-    else when (cleanChoice) {
-        CleanChoice.PRO -> CleanMode.PRO
-        CleanChoice.STRICT_OR_PRECISE -> CleanMode.PRECISE
-        CleanChoice.V26 -> CleanMode.V26
-        CleanChoice.AUTO -> profileFor(kind)?.clean ?: CleanMode.PRO
-    }
+    // the AI text form chosen on the main screen decides its cleaning (2.7.9: the separate cleaning
+    // override in the settings is gone — a value saved there, "clean_choice", is no longer read)
+    else profileFor(kind)?.clean ?: CleanMode.PRO
 
     fun mergeModeFor(kind: EngineKind): MergeMode = when (mergeChoice) {
         Choice.PRO -> MergeMode.PRO
@@ -306,7 +296,7 @@ class Settings(context: Context) {
     }
 
     fun stabilizeFor(kind: EngineKind): Boolean = !kind.isClassicOcr && subLang == SubLang.ARABIC && cleanModeFor(kind) != CleanMode.PRO &&
-        ((profileFor(kind)?.stabilize ?: false) || cleanChoice == CleanChoice.V26)
+        (profileFor(kind)?.stabilize ?: false)
 
     /** Lens and Vision share the "classic OCR" setting. */
     fun workersFor(kind: EngineKind): Int = if (kind.isClassicOcr) workersLens else workersAi

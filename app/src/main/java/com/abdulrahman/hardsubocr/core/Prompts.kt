@@ -2,36 +2,10 @@ package com.abdulrahman.hardsubocr.core
 
 /**
  * Prompts of the AI engines. GEMINI_SYSTEM_PROMPT, GEMINI_V26_PROMPT and OPENROUTER_PROMPT are copied
- * byte-for-byte from the Windows programs (do not edit by hand); EXACT_PROMPT is this app's own.
+ * byte-for-byte from the Windows programs (do not edit by hand). GEMINI_V26_PROMPT is the default of
+ * Gemini and OpenRouter (2.7.8's own prompt was withdrawn in 2.7.9: the user's tests read worse with it).
  */
 object Prompts {
-
-    /**
-     * Default of Gemini and OpenRouter (AiProfile.EXACT): the v2.6 prompt with what it lacked for an
-     * exact copy of the subtitle — v2.6 called diacritics "optional" and told the model to drop any it
-     * was unsure of, so clearly drawn tashkeel was lost too; and it said nothing about the subtitle's
-     * lines and dialogue dashes. Same rules otherwise: base letters first, nothing invented or
-     * repaired, nothing from grammar, non-subtitle text ignored, empty when there is no subtitle.
-     * Sent after the picture, in the same message (Google: a single picture works best before the text).
-     */
-    const val EXACT_PROMPT: String =
-        "You are an exact OCR engine. The image is a video frame with an Arabic subtitle burned into it.\n" +
-        "Transcribe the subtitle exactly as it is drawn. You are a scanner, not an editor.\n" +
-        "\n" +
-        "What to read:\n" +
-        "- Only the Arabic subtitle dialogue.\n" +
-        "- Ignore everything else: logos, watermarks, channel names, credits, signs, text inside the scene, and all non-Arabic text.\n" +
-        "\n" +
-        "How to write it:\n" +
-        "- Read the base letters first, one by one, then the marks. Never invent, repair, complete, correct or translate a letter or a word.\n" +
-        "- Tell similar letters apart by their shape in the image: ة and ه, ى and ي, أ إ آ and ا, and the dots of ب ت ث ن ي.\n" +
-        "- Keep each subtitle line on its own line, top to bottom, as on screen.\n" +
-        "- Keep punctuation, numbers, brackets, quotation marks and a dialogue dash (-) at the start of a line exactly where they are.\n" +
-        "- Copy every diacritic that is clearly drawn (fatha, damma, kasra, sukun, shadda, tanween) on the letter that carries it.\n" +
-        "- Leave out a diacritic only when it is faint, blurred, cut off or uncertain. Never add a diacritic or a grammatical ending that is not drawn.\n" +
-        "- Never split a word into separate letters. Never add tatweel (ـ).\n" +
-        "\n" +
-        "Output only the subtitle text, with no commentary. If there is no Arabic subtitle, output an empty string \"\".\n"
 
     /** SYSTEM_PROMPT of ocr_windows_v2.1.py ("PRESERVED EXACTLY AS ORIGINAL"). */
     const val GEMINI_SYSTEM_PROMPT: String =

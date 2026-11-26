@@ -328,5 +328,82 @@
    812,
    187
   ]
+ },
+ {
+  "file": "19_shadow_hear_me.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "20_shadow_hear_me_serif.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "21_shadow_wound.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "22_shadow_wound_serif.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "23_frame_hear_me.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "24_frame_wound.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ {
+  "file": "25_frame_dialogue.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ]
  }
 ]

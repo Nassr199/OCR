@@ -44,7 +44,12 @@ class LensEngine(
     private val looks: ((String) -> Unit)? = null
 ) : OcrEngine {
     override val kind = EngineKind.LENS
-    override val cacheId = "lens:$language:$region:c$CLASSIC_OCR_VERSION" + (if (views != null) ":mv" else "")
+    /**
+     * Resume-memory identity. ":w2" (2.7.9): words Lens gives twice on one place are left out
+     * (LensProtocol.withoutRepeats), so readings an interrupted 2.7.8 job kept are read again; Vision's
+     * identity, and memory, are untouched.
+     */
+    override val cacheId = "lens:$language:$region:c$CLASSIC_OCR_VERSION:w2" + (if (views != null) ":mv" else "")
 
     /**
      * One look at the whole picture; when its reading is suspicious (no Arabic, a short subtitle,
@@ -116,6 +121,8 @@ class LensEngine(
                 }
                 // diagnostic file: exactly what Lens returned for every image
                 if (result.paragraphs.isNotEmpty()) DiagLog.i("lens", "${image.name} lines: " + result.describe())
+                if (result.repeats.isNotEmpty()) DiagLog.i("lens", "${image.name} read twice in the same place, left out: " + result.repeats.joinToString(" ") { "«$it»" })
+                result.twiceKept().let { if (it.isNotEmpty()) DiagLog.i("lens", "${image.name} same word in two places, kept: $it") }
                 val text = result.readingText(image.width, image.height)
                 if (text != result.fullText) DiagLog.i("lens", "${image.name} order: «${result.fullText.replace("\n", " ⏎ ").take(200)}» → «${text.replace("\n", " ⏎ ").take(200)}»")
                 return result
@@ -402,12 +409,14 @@ internal object GoogleApiError {
 enum class ThinkingLevel(val api: String?) { DEFAULT(null), MINIMAL("minimal"), LOW("low"), MEDIUM("medium"), HIGH("high") }
 
 /**
- * Reading style of the AI engines — the prompt and the processing that goes with it. Gemini and
- * OpenRouter use the same style with the same request, so the same model reads the same way through
+ * The text form the AI engines produce — the prompt and the processing that goes with it. Gemini and
+ * OpenRouter use the same one with the same request, so the same model reads the same way through
  * either of them.
  */
 enum class AiProfile(
     val id: String,
+    /** Its name in the app («النص الناتج»). */
+    val title: String,
     val prompt: String,
     val clean: CleanMode,
     val merge: MergeMode,
@@ -415,21 +424,18 @@ enum class AiProfile(
     val stabilize: Boolean
 ) {
     /**
-     * Default: ocr_windows_v2.6.py's reading with what it lacked for an exact copy (Prompts.EXACT_PROMPT):
-     * the tashkeel the picture clearly shows is copied instead of treated as optional, the subtitle's
-     * lines and dialogue dashes are kept. Everything else as v2.6: subtitle-band image enhancement,
-     * diacritics guard (CleanMode.EXACT), consecutive frames agreeing on tashkeel, merge of split pieces only.
+     * Default — ocr_windows_v2.6.py's reading, the one the user trusts: its prompt byte for byte, its
+     * subtitle-band image enhancement, its diacritics guard, consecutive frames agreeing on tashkeel,
+     * merge of split pieces only. The cleaning (CleanMode.EXACT) is v2.6's that also keeps «…», «» and
+     * the dialogue dash's space. (2.7.8 replaced the prompt with one of this app's — withdrawn in 2.7.9.)
      */
-    EXACT("exact", Prompts.EXACT_PROMPT, CleanMode.EXACT, MergeMode.STRICT, true, true),
+    V26("v26", "تشكيل واضح", Prompts.GEMINI_V26_PROMPT, CleanMode.EXACT, MergeMode.STRICT, true, true),
 
-    /** ocr_windows_v2.6.py exactly (its prompt and cleaning). Kept for comparison; not offered in the app. */
-    V26("v26", Prompts.GEMINI_V26_PROMPT, CleanMode.V26, MergeMode.STRICT, true, true),
-
-    /** ocr_windows_v2.1.py: long ultra-precise prompt, clean_ocr_output, merge rules 2A–2E. */
-    V21("v21", Prompts.GEMINI_SYSTEM_PROMPT, CleanMode.PRECISE, MergeMode.STRICT, false, false),
+    /** ocr_windows_v2.1.py: long ultra-precise prompt, every diacritic the model writes kept, merge rules 2A–2E. */
+    V21("v21", "كل التشكيل", Prompts.GEMINI_SYSTEM_PROMPT, CleanMode.PRECISE, MergeMode.STRICT, false, false),
 
     /** HardSubArabicOCR_v2_PRO.py (OpenRouter): short Arabic prompt, arabic_filter, merge_entries. */
-    PRO("pro", Prompts.OPENROUTER_PROMPT, CleanMode.PRO, MergeMode.PRO, false, false)
+    PRO("pro", "بلا تشكيل", Prompts.OPENROUTER_PROMPT, CleanMode.PRO, MergeMode.PRO, false, false)
 }
 
 /**
@@ -464,15 +470,47 @@ class AiUsage {
 }
 
 /**
- * The one request recipe of both AI engines (ocr_windows_v2.6.py's, with Google's current guidance):
- * a single user message holding the picture and then the instructions (Google: one picture works best
- * placed before the text; Gemini 3.8 and later also require text in the final user turn), temperature 0
- * and top-p 1 as v2.6 (newer models ignore them), the picture at Google's high detail level, and the
- * same thinking level.
+ * Whether an AI answer is whole. A model can stop before the end of what it was writing — a safety or
+ * recitation filter (a scene with blood, a line the filter takes for quoted text) or the length limit —
+ * and what it wrote before the stop is a piece of the subtitle («أر» of «أريد أمي»). Such a piece is
+ * never written as the subtitle: the engine sends the picture once more at once, and if that answer is
+ * cut too the image is reported as failed, with the reason, instead of a wrong line in the SRT.
+ */
+object AiFinish {
+    /** Pause before sending a cut picture again. */
+    const val PAUSE_MS = 1_500L
+
+    /** Finish reasons of a whole answer: Gemini "STOP", OpenRouter "stop"; none given = whole. */
+    fun complete(reason: String?): Boolean = reason.isNullOrBlank() || reason.equals("stop", ignoreCase = true) ||
+        reason.equals("end_turn", ignoreCase = true) || reason.equals("FINISH_REASON_UNSPECIFIED", ignoreCase = true)
+
+    /** Diagnostic file: what was cut, where, and after what. */
+    fun note(engine: String, image: String, reason: String, text: String) =
+        DiagLog.w("ai", "$image: $engine stopped before the end ($reason) after «${text.replace("\n", " ⏎ ").take(80)}»")
+
+    fun failed(engine: String, reasons: List<String>): OcrError.Failed =
+        OcrError.Failed("$engine أوقف الإجابة قبل نهايتها مرتين (${reasons.distinct().joinToString(" / ")}) — لم تُكتب هذه الترجمة بدل أن تُكتب ناقصة")
+}
+
+/**
+ * The one request recipe of both AI engines — ocr_windows_v2.6.py's: a single user message holding the
+ * instructions and then the picture, temperature 0 and top-p 1 (newer models ignore them), the picture at
+ * Google's high detail level, the same thinking level. An answer the model did not finish is never taken
+ * as the subtitle ([AiFinish]).
  */
 object AiRecipe {
     /** What the model is told, for this style and subtitle language. */
     fun prompt(profile: AiProfile, lang: SubLang): String = if (lang == SubLang.ENGLISH) Prompts.ENGLISH_PROMPT else profile.prompt
+
+    /**
+     * The thinking level sent. «minimal» on a model known to lack it (Gemini 4, Gemini 3.8: a 400 answer)
+     * goes as «low» from the first request; any other model that refuses a level is lowered at its first
+     * answer (minimal → low → the model's own).
+     */
+    fun thinkingFor(model: String, level: ThinkingLevel): String? {
+        val id = model.trim().substringAfterLast('/').lowercase()
+        return if (level == ThinkingLevel.MINIMAL && (id.startsWith("gemini-4") || id.startsWith("gemini-3.8"))) "low" else level.api
+    }
 
     fun cacheId(engine: String, model: String, profile: AiProfile, thinking: ThinkingLevel, high: Boolean, lang: SubLang): String =
         "$engine:$model:${profile.id}:t=${thinking.api ?: "auto"}:${if (high) "hi" else "def"}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}")
@@ -482,8 +520,8 @@ class GeminiEngine(
     private val http: HttpTransport,
     private val apiKey: String,
     model: String,
-    thinking: ThinkingLevel = ThinkingLevel.LOW,
-    private val profile: AiProfile = AiProfile.EXACT,
+    thinking: ThinkingLevel = ThinkingLevel.MINIMAL,
+    private val profile: AiProfile = AiProfile.V26,
     highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens used, for the job's log (optional). */
@@ -494,9 +532,9 @@ class GeminiEngine(
     override val cacheId = AiRecipe.cacheId("gemini", this.model, profile, thinking, highResolution, lang)
     private val prompt = AiRecipe.prompt(profile, lang)
 
-    /** Lowered automatically when a model rejects it (Gemini 4 and 3.8 have no "minimal"). */
+    /** Lowered automatically when a model rejects it (Gemini 4 and 3.8 have no "minimal": sent as "low"). */
     @Volatile
-    var thinkingLevel: String? = thinking.api
+    var thinkingLevel: String? = AiRecipe.thinkingFor(this.model, thinking)
         private set
 
     @Volatile
@@ -518,13 +556,14 @@ class GeminiEngine(
             addJsonObject {
                 put("role", "user")
                 putJsonArray("parts") {
+                    // v2.6: generate_content([OCR_SYSTEM_PROMPT, image])
+                    addJsonObject { put("text", prompt) }
                     addJsonObject {
                         putJsonObject("inlineData") {
                             put("mimeType", image.mime)
                             put("data", Base64.getEncoder().encodeToString(image.bytes))
                         }
                     }
-                    addJsonObject { put("text", prompt) }
                 }
             }
         }
@@ -545,6 +584,20 @@ class GeminiEngine(
     }.toString()
 
     override suspend fun recognize(image: PreparedImage): String {
+        val cuts = ArrayList<String>(2)
+        while (true) {
+            val (text, reason) = request(image)
+            if (AiFinish.complete(reason)) return text
+            val why = reason ?: "?"
+            AiFinish.note("Gemini", image.name, why, text)
+            cuts.add(why)
+            if (cuts.size >= 2) throw AiFinish.failed("Gemini", cuts)
+            kotlinx.coroutines.delay(AiFinish.PAUSE_MS)
+        }
+    }
+
+    /** One request: the answer's text and finish reason. */
+    private suspend fun request(image: PreparedImage): Pair<String, String?> {
         val level = thinkingLevel
         val high = mediaHigh
         val resp = http.execute(
@@ -561,7 +614,7 @@ class GeminiEngine(
             root?.get("usageMetadata").obj()?.let { u ->
                 usage.add(u["promptTokenCount"].long(), u["candidatesTokenCount"].long(), u["thoughtsTokenCount"].long())
             }
-            return parseText(resp.text)
+            return parseText(resp.text) to finishReason(resp.text)
         }
 
         val err = GeminiErrors.parse(resp.text)
@@ -617,6 +670,17 @@ class GeminiEngine(
                 "translate", "computer-use", "native-audio", "aqa", "learnlm", "-exp", "gemini-1.", "gemini-2.0"
             )
             return skip.none { id.contains(it) }
+        }
+
+        /**
+         * candidates[0].finishReason ("STOP" when the model finished). No candidate at all: the picture was
+         * refused (promptFeedback.blockReason) — not an empty subtitle — or nothing to say (null).
+         */
+        fun finishReason(body: String): String? {
+            val root = parseJsonOrNull(body).obj() ?: return null
+            val c = root["candidates"].arr()?.firstOrNull().obj()
+            if (c != null) return c["finishReason"].str()
+            return root["promptFeedback"].obj()?.get("blockReason").str()?.let { "BLOCKED_$it" }
         }
 
         fun parseText(body: String): String {
@@ -698,8 +762,8 @@ class OpenRouterEngine(
     private val http: HttpTransport,
     private val apiKey: String,
     model: String,
-    thinking: ThinkingLevel = ThinkingLevel.LOW,
-    private val profile: AiProfile = AiProfile.EXACT,
+    thinking: ThinkingLevel = ThinkingLevel.MINIMAL,
+    private val profile: AiProfile = AiProfile.V26,
     private val highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens and cost, for the job's log (optional). */
@@ -710,9 +774,9 @@ class OpenRouterEngine(
     override val kind = EngineKind.OPENROUTER
     override val cacheId = AiRecipe.cacheId("openrouter", this.model, profile, thinking, highResolution, lang)
 
-    /** reasoning.effort: OpenRouter passes it to Gemini as its thinkingLevel (a level the model lacks → the nearest). */
+    /** reasoning.effort: OpenRouter passes it to Gemini as its thinkingLevel («minimal» → «low» where it is missing). */
     @Volatile
-    var effort: String? = thinking.api
+    var effort: String? = AiRecipe.thinkingFor(this.model, thinking)
         private set
 
     /** temperature 0 / top_p 1, dropped if the model refuses them (some reasoning models do). */
@@ -730,6 +794,8 @@ class OpenRouterEngine(
             addJsonObject {
                 put("role", "user")
                 putJsonArray("content") {
+                    // the same order as Gemini's request (v2.6): the instructions, then the picture
+                    addJsonObject { put("type", "text"); put("text", prompt) }
                     addJsonObject {
                         put("type", "image_url")
                         putJsonObject("image_url") {
@@ -737,7 +803,6 @@ class OpenRouterEngine(
                             if (highResolution) put("detail", "high")
                         }
                     }
-                    addJsonObject { put("type", "text"); put("text", prompt) }
                 }
             }
         }
@@ -750,6 +815,20 @@ class OpenRouterEngine(
     }.toString()
 
     override suspend fun recognize(image: PreparedImage): String {
+        val cuts = ArrayList<String>(2)
+        while (true) {
+            val (text, reason, native) = request(image)
+            if (AiFinish.complete(reason)) return text
+            val why = listOfNotNull(reason, native?.takeIf { !it.equals(reason, ignoreCase = true) }).joinToString(" / ")
+            AiFinish.note("OpenRouter", image.name, why, text)
+            cuts.add(why)
+            if (cuts.size >= 2) throw AiFinish.failed("OpenRouter", cuts)
+            kotlinx.coroutines.delay(AiFinish.PAUSE_MS)
+        }
+    }
+
+    /** One request: the answer's text, its finish reason and the provider's own reason. */
+    private suspend fun request(image: PreparedImage): Triple<String, String?, String?> {
         val resp = http.execute(
             HttpRequest(
                 url = "https://openrouter.ai/api/v1/chat/completions",
@@ -775,7 +854,8 @@ class OpenRouterEngine(
                     u["completion_tokens_details"].obj()?.get("reasoning_tokens").long(), u["cost"].double()
                 )
             }
-            return parseText(root)
+            val choice = root?.get("choices").arr()?.firstOrNull().obj()
+            return Triple(parseText(root), choice?.get("finish_reason").str(), choice?.get("native_finish_reason").str())
         }
         throw classify(resp, errObj)
     }

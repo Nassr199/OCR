@@ -91,7 +91,7 @@ object ArabicV26 {
     }
 
     /**
-     * Cleaning of the exact reading (AiProfile.EXACT, the default of Gemini and OpenRouter): v2.6's
+     * Cleaning of the exact reading (AiProfile.V26, the default of Gemini and OpenRouter): v2.6's
      * clean_ocr_output + conservative_clean_diacritics unchanged — model replies, JSON and code
      * blocks removed, fragmented words joined, over-marked words stripped, tatweel removed — keeping
      * also «…», «» and the en/em dash, and a dialogue dash written against its word spaced as on screen.

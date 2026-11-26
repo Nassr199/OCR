@@ -25,7 +25,7 @@ enum class CleanMode {
     V26,
 
     /**
-     * Gemini / OpenRouter default (AiProfile.EXACT): V26's cleaning that also keeps «…», «» and the
+     * Gemini / OpenRouter default (AiProfile.V26): V26's cleaning that also keeps «…», «» and the
      * en/em dash, and spaces a dialogue dash as on screen (ArabicV26.cleanExact).
      */
     EXACT,

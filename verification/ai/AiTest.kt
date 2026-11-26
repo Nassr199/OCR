@@ -7,6 +7,8 @@ import kotlinx.serialization.json.*
 
 // 2.7.8: Gemini and OpenRouter read the same way (one recipe), OpenRouter's errors explained,
 // the number of requests in flight adapts to 429 answers, the exact reading's cleaning.
+// 2.7.9: the recipe is v2.6's again (its prompt first, then the picture; thinking «minimal», sent as
+// «low» to models without it), and an answer cut before its end is never the subtitle.
 
 var fails = 0
 fun check(name: String, ok: Boolean, detail: String = "") { println((if (ok) "✓ " else "✖ ") + name + (if (detail.isNotEmpty()) "  [$detail]" else "")); if (!ok) fails++ }
@@ -30,15 +32,15 @@ fun main() = runBlocking {
     check("Gemini: text without the thought part", g.recognize(img) == "- هوليا\n- ابتعدي")
     val gb = obj(gh.seen[0])
     val gParts = gb["contents"]!!.jsonArray.single().jsonObject["parts"]!!.jsonArray
-    check("Gemini: one user message, the picture first then the prompt", gb["contents"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content == "user" &&
-        gParts.size == 2 && gParts[0].jsonObject.containsKey("inlineData") && gParts[1].jsonObject.containsKey("text"))
+    check("Gemini: one user message, the prompt then the picture (v2.6)", gb["contents"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content == "user" &&
+        gParts.size == 2 && gParts[0].jsonObject.containsKey("text") && gParts[1].jsonObject.containsKey("inlineData"))
     check("Gemini: no systemInstruction, no candidateCount", !gb.containsKey("systemInstruction") && !gb["generationConfig"]!!.jsonObject.containsKey("candidateCount"))
     val gc = gb["generationConfig"]!!.jsonObject
-    check("Gemini: temperature 0, topP 1, high detail, thinking low (the defaults)",
+    check("Gemini: temperature 0, topP 1, high detail, thinking «minimal» sent as «low» to Gemini 4 (the defaults)",
         gc["temperature"]!!.jsonPrimitive.double == 0.0 && gc["topP"]!!.jsonPrimitive.double == 1.0 &&
             gc["mediaResolution"]!!.jsonPrimitive.content == "MEDIA_RESOLUTION_HIGH" &&
             gc["thinkingConfig"]!!.jsonObject["thinkingLevel"]!!.jsonPrimitive.content == "low", gc.toString())
-    check("Gemini: the exact prompt by default", gParts[1].jsonObject["text"]!!.jsonPrimitive.content == Prompts.EXACT_PROMPT)
+    check("Gemini: v2.6's prompt by default, byte for byte", gParts[0].jsonObject["text"]!!.jsonPrimitive.content == Prompts.GEMINI_V26_PROMPT)
     check("Gemini: usage counted", g.usage.answers.get() == 1 && g.usage.thinkingTokens.get() == 90L && g.usage.promptTokens.get() == 1400L)
 
     val oh = Fake(mutableListOf(r(200, OR_OK)))
@@ -46,13 +48,13 @@ fun main() = runBlocking {
     check("OpenRouter: text", o.recognize(img) == "- هوليا\n- ابتعدي")
     val ob = obj(oh.seen[0])
     val oContent = ob["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
-    check("OpenRouter: one user message, the picture first then the prompt",
+    check("OpenRouter: one user message, the prompt then the picture (as Gemini)",
         ob["messages"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content == "user" && oContent.size == 2 &&
-            oContent[0].jsonObject["type"]!!.jsonPrimitive.content == "image_url" && oContent[1].jsonObject["type"]!!.jsonPrimitive.content == "text")
-    check("OpenRouter: the SAME prompt as Gemini", oContent[1].jsonObject["text"]!!.jsonPrimitive.content == gParts[1].jsonObject["text"]!!.jsonPrimitive.content)
-    check("OpenRouter: the same picture bytes", oContent[0].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content ==
-        "data:image/png;base64," + gParts[0].jsonObject["inlineData"]!!.jsonObject["data"]!!.jsonPrimitive.content)
-    check("OpenRouter: high detail", oContent[0].jsonObject["image_url"]!!.jsonObject["detail"]?.jsonPrimitive?.content == "high")
+            oContent[0].jsonObject["type"]!!.jsonPrimitive.content == "text" && oContent[1].jsonObject["type"]!!.jsonPrimitive.content == "image_url")
+    check("OpenRouter: the SAME prompt as Gemini", oContent[0].jsonObject["text"]!!.jsonPrimitive.content == gParts[0].jsonObject["text"]!!.jsonPrimitive.content)
+    check("OpenRouter: the same picture bytes", oContent[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content ==
+        "data:image/png;base64," + gParts[1].jsonObject["inlineData"]!!.jsonObject["data"]!!.jsonPrimitive.content)
+    check("OpenRouter: high detail", oContent[1].jsonObject["image_url"]!!.jsonObject["detail"]?.jsonPrimitive?.content == "high")
     check("OpenRouter: temperature 0, top_p 1, reasoning low (hidden) like Gemini's thinking",
         ob["temperature"]!!.jsonPrimitive.double == 0.0 && ob["top_p"]!!.jsonPrimitive.double == 1.0 &&
             ob["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content == "low" && ob["reasoning"]!!.jsonObject["exclude"]!!.jsonPrimitive.boolean, ob.toString().take(0))
@@ -70,8 +72,8 @@ fun main() = runBlocking {
         val a = Fake(mutableListOf(r(200, GEM_OK))); val b = Fake(mutableListOf(r(200, OR_OK)))
         GeminiEngine(a, "K", "gemini-4-hydrogen", profile = p).recognize(img)
         OpenRouterEngine(b, "K", "google/gemini-4-hydrogen", profile = p).recognize(img)
-        val pa = obj(a.seen[0])["contents"]!!.jsonArray[0].jsonObject["parts"]!!.jsonArray[1].jsonObject["text"]!!.jsonPrimitive.content
-        val pb = obj(b.seen[0])["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[1].jsonObject["text"]!!.jsonPrimitive.content
+        val pa = obj(a.seen[0])["contents"]!!.jsonArray[0].jsonObject["parts"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content
+        val pb = obj(b.seen[0])["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content
         check("style ${p.name}: same prompt through Gemini and OpenRouter", pa == pb && pa == p.prompt)
     }
     // English subtitles
@@ -80,8 +82,8 @@ fun main() = runBlocking {
     OpenRouterEngine(oe, "K", "google/gemini-4-hydrogen", lang = SubLang.ENGLISH).recognize(img)
     check("English: the English prompt through both", obj(ge.seen[0]).toString().contains("NO_TEXT") && obj(oe.seen[0]).toString().contains("NO_TEXT"))
     // resume-memory identity: style, thinking and detail in it, same shape for both
-    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:exact:t=low:hi" &&
-        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:exact:t=low:hi",
+    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:v26:t=minimal:hi" &&
+        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:v26:t=minimal:hi",
         GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId)
 
     // ------------------------------------------------------------------ OpenRouter errors, in plain words
@@ -189,6 +191,52 @@ fun main() = runBlocking {
     check("exact: Latin credit lines dropped", ex("Selin Aydın\n- هوليا") == "- هوليا")
     check("exact: tatweel removed", ex("جميـــل") == "جميل")
     check("exact: «remove all tashkeel» still works", Cleaner.clean("- أنتِ هنا", CleanMode.EXACT, stripDiacritics = true) == "- أنت هنا")
+
+    // ------------------------------------------------------------------ 2.7.9: v2.6 thinking, cut answers
+    // «minimal»: Flash-Lite gets it as is (its own default, as v2.6 left it); Gemini 4 / 3.8 get «low»
+    // from the first request (no 400 round trip); the setting «auto» sends nothing
+    val lite = Fake(mutableListOf(r(200, GEM_OK)))
+    GeminiEngine(lite, "K", "gemini-3.5-flash-lite").recognize(img)
+    check("Flash-Lite: thinking «minimal» sent as is", obj(lite.seen[0])["generationConfig"]!!.jsonObject["thinkingConfig"]!!.jsonObject["thinkingLevel"]!!.jsonPrimitive.content == "minimal")
+    check("Gemini 3.8 Flash / OpenRouter Gemini 4: «minimal» → «low» from the start",
+        AiRecipe.thinkingFor("gemini-3.8-flash", ThinkingLevel.MINIMAL) == "low" && AiRecipe.thinkingFor("google/gemini-4-neon", ThinkingLevel.MINIMAL) == "low" &&
+            AiRecipe.thinkingFor("google/gemini-3.5-flash-lite", ThinkingLevel.MINIMAL) == "minimal" && AiRecipe.thinkingFor("gemini-4-carbon", ThinkingLevel.HIGH) == "high" &&
+            AiRecipe.thinkingFor("gemini-4-carbon", ThinkingLevel.DEFAULT) == null)
+    val orLite = Fake(mutableListOf(r(200, OR_OK)))
+    OpenRouterEngine(orLite, "K", "google/gemini-3.5-flash-lite").recognize(img)
+    check("OpenRouter Flash-Lite: effort «minimal»", obj(orLite.seen[0])["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content == "minimal")
+    // an unknown model that refuses «minimal»: lowered once, then read
+    val unk = Fake(mutableListOf(r(400, """{"error":{"code":400,"message":"Thinking level minimal is not supported for this model.","status":"INVALID_ARGUMENT"}}"""), r(200, GEM_OK)))
+    val gu = GeminiEngine(unk, "K", "gemini-9-pro")
+    runCatching { gu.recognize(img) }
+    check("unknown model refusing «minimal» → «low»", gu.recognize(img) == "- هوليا\n- ابتعدي" &&
+        obj(unk.seen[1])["generationConfig"]!!.jsonObject["thinkingConfig"]!!.jsonObject["thinkingLevel"]!!.jsonPrimitive.content == "low")
+
+    fun gem(text: String, reason: String?) = r(200, """{"candidates":[{"content":{"parts":[{"text":"$text"}]}${if (reason != null) ",\"finishReason\":\"$reason\"" else ""}}]}""")
+    suspend fun gRead(vararg answers: HttpResponse): Pair<Any, Fake> {
+        val f = Fake(answers.toMutableList())
+        return (try { GeminiEngine(f, "K", "gemini-3.5-flash-lite").recognize(img) } catch (e: OcrError) { e }) to f
+    }
+    // «أر» of «أريد أمي»: the answer stopped by a filter is not the subtitle; sent again at once
+    val (c1, f1) = gRead(gem("أر", "RECITATION"), gem("أريد أمي", "STOP"))
+    check("cut answer («أر», RECITATION) → sent again, the whole answer kept", c1 == "أريد أمي" && f1.seen.size == 2, c1.toString())
+    val (c2, f2) = gRead(gem("أر", "SAFETY"), gem("أر", "SAFETY"))
+    check("cut twice → this image fails with the reason (no «أر» in the SRT)", c2 is OcrError.Failed && (c2 as OcrError).message!!.contains("SAFETY") && f2.seen.size == 2, (c2 as? OcrError)?.message ?: c2.toString())
+    val (c3, _) = gRead(gem("بخير بخير", "MAX_TOKENS"), gem("بخير بخير أجل أنا بخير", "STOP"))
+    check("length limit → sent again", c3 == "بخير بخير أجل أنا بخير", c3.toString())
+    val (c4, _) = gRead(r(200, """{"promptFeedback":{"blockReason":"OTHER"}}"""), r(200, """{"promptFeedback":{"blockReason":"OTHER"}}"""))
+    check("picture refused twice → failed, not an empty subtitle", c4 is OcrError.Failed && (c4 as OcrError).message!!.contains("BLOCKED_OTHER"), (c4 as? OcrError)?.message ?: c4.toString())
+    val (c5, f5) = gRead(gem("أريد أمي", null))
+    check("no finish reason given → whole", c5 == "أريد أمي" && f5.seen.size == 1)
+    val (c6, _) = gRead(gem("", "STOP"))
+    check("an empty whole answer (no subtitle) stays empty", c6 == "")
+
+    fun orAns(text: String, reason: String?, native: String? = null) = r(200, """{"choices":[{${if (reason != null) "\"finish_reason\":\"$reason\"," else ""}${if (native != null) "\"native_finish_reason\":\"$native\"," else ""}"message":{"role":"assistant","content":"$text"}}]}""")
+    suspend fun oRead(vararg answers: HttpResponse): Any = try { OpenRouterEngine(Fake(answers.toMutableList()), "K", "google/gemini-3.5-flash-lite").recognize(img) } catch (e: OcrError) { e }
+    check("OpenRouter: cut by length → sent again", oRead(orAns("أر", "length", "MAX_TOKENS"), orAns("أريد أمي", "stop")) == "أريد أمي")
+    val oc = oRead(orAns("أر", "content_filter", "RECITATION"), orAns("أر", "content_filter", "RECITATION"))
+    check("OpenRouter: cut twice → failed with the provider's reason", oc is OcrError.Failed && (oc as OcrError).message!!.contains("RECITATION"), (oc as? OcrError)?.message ?: oc.toString())
+    check("OpenRouter: no finish reason → whole", oRead(orAns("أريد أمي", null)) == "أريد أمي")
 
     println(if (fails == 0) "ALL PASSED" else "$fails FAILED")
 }

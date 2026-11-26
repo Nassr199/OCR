@@ -138,8 +138,8 @@ fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifie
 @Composable
 private fun EnhanceSwitch(vm: MainViewModel, enabled: Boolean) {
     SwitchRow(
-        "تحسين الصور قبل القراءة",
-        "يُبقي شريط الترجمة وحده دون أن يقطع منها شيئًا، ويكبّر الصور الصغيرة، ويحوّلها إلى رمادي بتباين ووضوح أعلى قبل الإرسال.",
+        "تحسين الصورة",
+        "يقصّ شريط الترجمة، ويكبّر الصور الصغيرة، ويزيد وضوحها قبل الإرسال.",
         vm.enhanceEffective(),
         enabled
     ) { vm.setEnhance(it) }
@@ -200,17 +200,17 @@ private fun VisionPanel(vm: MainViewModel, enabled: Boolean) {
 
 // ============================================================================ Gemini / OpenRouter
 
-/** What each reading style does — every claim is what the code does (AiProfile, Cleaner, Merge). */
+/** What each text form gives — every claim is what the code does (AiProfile, Cleaner, Merge). */
 private fun profileHint(p: AiProfile): String = when (p) {
-    AiProfile.EXACT, AiProfile.V26 ->
-        "ينسخ الترجمة كما تظهر في الصورة: أسطرها وشرطات الحوار وعلامات الترقيم والتشكيل الواضح، ولا يُضاف تشكيل غير مرسوم. " +
-            "يُحذف تشكيل الكلمة إذا جاء كثيفًا على أغلب حروفها (علامة تشكيل مختلق)، وتُوحَّد حركات الجملة نفسها في الصور المتتالية على ما تتفق عليه."
-    AiProfile.V21 -> "تعليمات مفصّلة جدًا، ويُبقي الأسطر والتشكيل كما كتبها النموذج دون حذف شيء منه، ولا يدمج إلا الترجمة التي انقسمت إلى صورتين."
-    AiProfile.PRO -> "تعليمات مختصرة بالعربية: النص العربي فقط في سطر واحد، بلا تشكيل ولا شرطات حوار، وتُدمج المقاطع المتتالية المتشابهة."
+    AiProfile.V26 -> "الأسطر وعلامات الترقيم كما في الصورة، والتشكيل الظاهر بوضوح فقط. موصى به."
+    AiProfile.V21 -> "الأسطر وعلامات الترقيم كما في الصورة، وكل تشكيل يكتبه النموذج."
+    AiProfile.PRO -> "النص العربي في سطر واحد، بلا تشكيل ولا شرطات حوار."
 }
 
-/** «minimal» is not offered: Gemini 4 and 3.8 refuse it (a saved one reads as «low»). */
+private val profileOptions = listOf(AiProfile.V26, AiProfile.V21, AiProfile.PRO).map { it to it.title }
+
 private val thinkingOptions = listOf(
+    ThinkingLevel.MINIMAL to "أدنى",
     ThinkingLevel.LOW to "منخفض",
     ThinkingLevel.MEDIUM to "متوسط",
     ThinkingLevel.HIGH to "عالٍ",
@@ -218,15 +218,17 @@ private val thinkingOptions = listOf(
 )
 
 private fun thinkingHint(t: ThinkingLevel): String = when (t) {
-    ThinkingLevel.LOW, ThinkingLevel.MINIMAL -> "الأسرع والأقل تكلفة (موصى به لنسخ الترجمة)."
-    ThinkingLevel.MEDIUM -> "يفكّر النموذج أكثر قبل الإجابة: أبطأ وأغلى من «منخفض»."
-    ThinkingLevel.HIGH -> "أطول تفكير: الأبطأ والأغلى."
-    ThinkingLevel.DEFAULT -> "يُترك المستوى للنموذج نفسه — في Gemini 4 Hydrogen وNeon هو «عالٍ»، فتصبح القراءة أبطأ بكثير."
+    ThinkingLevel.MINIMAL -> "الأسرع والأقل تكلفة. موصى به. Gemini 4 و3.8 Flash لا يدعمانه فيعملان بـ«منخفض»."
+    ThinkingLevel.LOW -> "تفكير قصير قبل الإجابة: أبطأ قليلًا."
+    ThinkingLevel.MEDIUM -> "أبطأ وأعلى تكلفة."
+    ThinkingLevel.HIGH -> "الأبطأ والأعلى تكلفة."
+    ThinkingLevel.DEFAULT -> "مستوى النموذج نفسه (في Gemini 4 Hydrogen وNeon: عالٍ)."
 }
 
 /**
- * Gemini and OpenRouter: the same panel and the same settings (style, thinking, image enhancement) —
- * only the key and the model list differ, and the request is the same (AiRecipe).
+ * Gemini and OpenRouter: one panel, in the order the choices are made — key, model, the text it
+ * gives, thinking level, image enhancement. Only the key and the model list differ between the two;
+ * the request is the same (AiRecipe). One short line under each choice says what it does.
  */
 @Composable
 private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
@@ -237,7 +239,7 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
             steps = listOf(
                 "افتح Google AI Studio وسجّل الدخول بحساب Google.",
                 "اضغط «Create API key» واختر مشروعًا.",
-                "الصق المفتاح هنا ثم اضغط «اختبار» لمعرفة النماذج المتاحة لحسابك."
+                "الصق المفتاح هنا ثم اضغط «حفظ»."
             ),
             linkLabel = "فتح Google AI Studio",
             linkUrl = "https://aistudio.google.com/apikey",
@@ -250,7 +252,7 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
             steps = listOf(
                 "افتح openrouter.ai وسجّل الدخول.",
                 "من Keys اضغط «Create Key».",
-                "الصق المفتاح هنا ثم اضغط «اختبار» لمعرفة حالة المفتاح ورصيده."
+                "الصق المفتاح هنا ثم اضغط «حفظ»."
             ),
             linkLabel = "فتح OpenRouter Keys",
             linkUrl = "https://openrouter.ai/keys",
@@ -265,34 +267,18 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
         selected = if (gemini) vm.geminiModel else vm.openRouterModel
     )
 
-    Spacer(Modifier.height(10.dp))
-    SectionLabel("طريقة القراءة")
-    Segmented(
-        listOf(AiProfile.EXACT to "كما في الصورة", AiProfile.V21 to "حرفي", AiProfile.PRO to "سطر واحد"),
-        vm.currentProfile(),
-        enabled
-    ) { vm.chooseProfile(it) }
+    Spacer(Modifier.height(14.dp))
+    SectionLabel("النص الناتج")
+    Segmented(profileOptions, vm.currentProfile(), enabled) { vm.chooseProfile(it) }
     Hint(profileHint(vm.currentProfile()), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
 
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(14.dp))
     SectionLabel("مستوى التفكير")
     Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
-    Hint(
-        thinkingHint(vm.thinking) + " إن لم يدعم النموذج المستوى المختار يُعدَّل تلقائيًا.",
-        Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
-    )
-    Spacer(Modifier.height(6.dp))
+    Hint(thinkingHint(vm.thinking), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
+
+    Spacer(Modifier.height(8.dp))
     EnhanceSwitch(vm, enabled)
-    Spacer(Modifier.height(4.dp))
-    CheckLine("Gemini وOpenRouter يرسلان الطلب نفسه: الصورة بالدقة العالية، والتعليمات نفسها، ومستوى التفكير نفسه")
-    if (!gemini) {
-        Hint(
-            "إن ظهر «مزوّد النموذج مزدحم الآن (429)» فهو ازدحام عند الجهة التي تشغّل النموذج لدى OpenRouter (Google لنماذج Gemini)، لا نقص في رصيدك: " +
-                "يقلّل التطبيق عدد الصور المرسلة معًا تلقائيًا ويعيد المحاولة. لتجنّبه: اختر Gemini بمفتاحك مباشرة، " +
-                "أو أضف مفتاح Google الخاص بك في إعدادات OpenRouter (BYOK) فتُحسب الحدود على حسابك.",
-            Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
-        )
-    }
 }
 
 // ============================================================================ API key
@@ -447,79 +433,114 @@ private fun KeyPanel(
 // ============================================================================ model picker
 
 /**
- * Current models grouped by family (Gemini 4, Gemini 3); the account's other models after
- * «تحديث القائمة»; and a typed name for anything else.
+ * The chosen model on one line, with «تغيير». The list opens below it: current models by family
+ * (Gemini 4, Gemini 3), the account's other models after «تحديث من حسابك», and a typed name.
+ * Choosing closes the list again.
  */
 @Composable
 private fun ModelPicker(vm: MainViewModel, enabled: Boolean, models: List<ModelInfo>, selected: String) {
+    var open by remember { mutableStateOf(selected.isBlank()) }
     var custom by remember { mutableStateOf(false) }
     var showExtras by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf("") }
     val extras = vm.extraModels()
-    val known = models.any { it.id == selected } || selected in extras
+    val chosen = models.firstOrNull { it.id == selected }
+    val choose: (String) -> Unit = { vm.chooseModel(it); open = false; custom = false }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         SectionLabel("النموذج", Modifier.weight(1f))
-        if (vm.loadingModels) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-        TextButton(onClick = { vm.fetchModels() }, enabled = enabled && !vm.loadingModels) {
-            Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
-            Text("تحديث من حسابك", style = MaterialTheme.typography.labelLarge)
-        }
-    }
-    var family = ""
-    for (m in models) {
-        if (m.family != family) {
-            family = m.family
-            Text(
-                family, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp, top = 6.dp, bottom = 2.dp)
-            )
-        }
-        ModelRow(m.name, m.id, m.note, m.id == selected, enabled) { vm.chooseModel(m.id) }
-    }
-    if (!known && selected.isNotBlank()) {
-        ModelRow(selected, selected, "نموذج أدخلته يدويًا (ليس في القائمة)", true, enabled) {}
-    }
-
-    if (extras.isNotEmpty()) {
-        TextButton(onClick = { showExtras = !showExtras }) {
-            Text((if (showExtras) "▾ " else "▸ ") + "نماذج أخرى في حسابك (${extras.size})")
-        }
-        AnimatedVisibility(
-            visible = showExtras,
-            enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
-            exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
-        ) {
-            Column {
-                if (extras.size > 20) {
-                    OutlinedTextField(
-                        value = filter, onValueChange = { filter = it }, singleLine = true,
-                        placeholder = { Text("بحث…") }, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
-                val shown = extras.filter { filter.isBlank() || it.contains(filter.trim(), ignoreCase = true) }
-                for (id in shown.take(60)) ModelRow(id, id, null, id == selected, enabled) { vm.chooseModel(id) }
-                if (shown.size > 60) Hint("و${shown.size - 60} نموذجًا آخر — اكتب جزءًا من الاسم للبحث", Modifier.padding(start = 8.dp))
+        if (open) {
+            if (vm.loadingModels) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            TextButton(onClick = { vm.fetchModels() }, enabled = enabled && !vm.loadingModels) {
+                Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
+                Text("تحديث من حسابك", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
 
-    TextButton(onClick = { custom = !custom }) { Text((if (custom) "▾ " else "▸ ") + "إدخال اسم نموذج يدويًا") }
+    if (selected.isNotBlank()) {
+        val scheme = MaterialTheme.colorScheme
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(scheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
+                .clickable(enabled = enabled) { open = !open }
+                .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(chosen?.name ?: selected, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val note = chosen?.note ?: if (selected in extras) "من نماذج حسابك" else "اسم أُدخل يدويًا"
+                Hint(note, maxLines = 2)
+                if (chosen == null || chosen.id != chosen.name) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Text(selected, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = scheme.onSurfaceVariant, maxLines = 1)
+                    }
+                }
+            }
+            TextButton(onClick = { open = !open }, enabled = enabled) { Text(if (open) "إغلاق" else "تغيير") }
+        }
+    }
+
     AnimatedVisibility(
-        visible = custom,
+        visible = open,
         enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
         exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
     ) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = { vm.chooseModel(it.trim()) },
-            singleLine = true,
-            enabled = enabled,
-            label = { Text("اسم النموذج كما في الـ API") },
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            var family = ""
+            for (m in models) {
+                if (m.family != family) {
+                    family = m.family
+                    Text(
+                        family, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp, top = 6.dp, bottom = 2.dp)
+                    )
+                }
+                ModelRow(m.name, m.id, m.note, m.id == selected, enabled) { choose(m.id) }
+            }
+
+            if (extras.isNotEmpty()) {
+                TextButton(onClick = { showExtras = !showExtras }) {
+                    Text((if (showExtras) "▾ " else "▸ ") + "نماذج أخرى في حسابك (${extras.size})")
+                }
+                AnimatedVisibility(
+                    visible = showExtras,
+                    enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
+                    exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
+                ) {
+                    Column {
+                        if (extras.size > 20) {
+                            OutlinedTextField(
+                                value = filter, onValueChange = { filter = it }, singleLine = true,
+                                placeholder = { Text("بحث…") }, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        val shown = extras.filter { filter.isBlank() || it.contains(filter.trim(), ignoreCase = true) }
+                        for (id in shown.take(60)) ModelRow(id, id, null, id == selected, enabled) { choose(id) }
+                        if (shown.size > 60) Hint("و${shown.size - 60} نموذجًا آخر — اكتب جزءًا من الاسم للبحث", Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+
+            TextButton(onClick = { custom = !custom }) { Text((if (custom) "▾ " else "▸ ") + "كتابة اسم نموذج") }
+            AnimatedVisibility(
+                visible = custom,
+                enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
+                exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
+            ) {
+                OutlinedTextField(
+                    value = selected,
+                    onValueChange = { vm.chooseModel(it.trim()) },
+                    singleLine = true,
+                    enabled = enabled,
+                    label = { Text("اسم النموذج كما في الـ API") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 

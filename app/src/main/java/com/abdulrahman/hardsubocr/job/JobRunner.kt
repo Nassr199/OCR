@@ -105,7 +105,7 @@ class JobRunner(
             EngineKind.VISION -> append(if (req.visionDocument) " • DOCUMENT_TEXT_DETECTION" else " • TEXT_DETECTION")
                 .append(" • نموذج ").append(req.visionModel.ifEmpty { "builtin/stable" })
         }
-        append(" • لغة ").append(req.lang).append(" • طريقة القراءة ").append(req.profile ?: "—").append('\n')
+        append(" • لغة ").append(req.lang).append(" • النص الناتج ").append(req.profile?.title ?: "—").append('\n')
         append("المصدر: ").append(
             when (val s = req.source) {
                 is Source.Image -> "صورة ${s.name}"
@@ -131,11 +131,11 @@ class JobRunner(
         )
         // Gemini and OpenRouter: the same request recipe, style and thinking level (AiRecipe)
         EngineKind.GEMINI -> GeminiEngine(
-            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.EXACT, req.mediaHigh, req.lang,
+            Net.transport, req.geminiKey, req.geminiModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh, req.lang,
             usage = aiUsage
         )
         EngineKind.OPENROUTER -> OpenRouterEngine(
-            Net.transport, req.openRouterKey, req.openRouterModel, req.thinking, req.profile ?: AiProfile.EXACT, req.mediaHigh, req.lang,
+            Net.transport, req.openRouterKey, req.openRouterModel, req.thinking, req.profile ?: AiProfile.V26, req.mediaHigh, req.lang,
             usage = aiUsage
         )
         EngineKind.VISION -> VisionEngine(

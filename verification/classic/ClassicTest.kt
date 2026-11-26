@@ -148,7 +148,7 @@ fun main() = runBlocking {
     check("engine: English subtitles never get the Arabic looks", LensEngine(enHttp, "en", "US", views = views).recognize(PreparedImage(byteArrayOf(0), "image/png", 1230, 201, "z")) == "Hi")
     val failingViews = FakeHttp(ArrayDeque(listOf(lensAnswer(Triple("بي", floatArrayOf(0.5f, 0.67f, 0.04f, 0.25f), 1)))))
     check("engine: looks that fail leave the first reading", LensEngine(failingViews, "ar", "US", views = views).recognize(PreparedImage(byteArrayOf(0), "image/png", 1230, 201, "w")) == "بي")
-    check("cache id: classic version and multi-view in it", e.cacheId == "lens:ar:US:c$CLASSIC_OCR_VERSION:mv" && LensEngine(FakeHttp(ArrayDeque()), "ar", "US").cacheId == "lens:ar:US:c$CLASSIC_OCR_VERSION", e.cacheId)
+    check("cache id: classic version and multi-view in it", e.cacheId == "lens:ar:US:c$CLASSIC_OCR_VERSION:w2:mv" && LensEngine(FakeHttp(ArrayDeque()), "ar", "US").cacheId == "lens:ar:US:c$CLASSIC_OCR_VERSION:w2", e.cacheId)
 
     println(if (fails == 0) "ALL PASSED" else "$fails FAILED")
 }

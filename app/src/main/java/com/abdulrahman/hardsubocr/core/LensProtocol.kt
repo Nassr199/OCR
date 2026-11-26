@@ -66,9 +66,15 @@ object LensProtocol {
     }.toByteArray()
 
     data class Box(val cx: Float, val cy: Float, val w: Float, val h: Float, val rotation: Float)
-    data class Line(val text: String, val box: Box?)
+    /** One word of a line: its text, the separator Lens puts after it, and its own box. */
+    data class Word(val text: String, val sep: String = "", val box: Box? = null)
+    data class Line(val text: String, val box: Box?, val words: List<Word> = emptyList())
     data class Paragraph(val lines: List<Line>, val box: Box?)
-    data class Result(val paragraphs: List<Paragraph>, val language: String, val serverError: Int?) {
+    data class Result(
+        val paragraphs: List<Paragraph>, val language: String, val serverError: Int?,
+        /** Words Lens gave a second time for the same place, left out of their line ([withoutRepeats]). */
+        val repeats: List<String> = emptyList()
+    ) {
         val lines: List<Line> get() = paragraphs.flatMap { it.lines }
 
         /** Same assembly as chrome-lens-py: lines joined by '\n', paragraphs by '\n'. */
@@ -83,6 +89,19 @@ object LensProtocol {
                 else "${l.text}[" + listOf(b.cx, b.cy, b.w, b.h).joinToString(",") { "%.3f".format(java.util.Locale.US, it) } + " p$pi]"
             }
         }.take(1500)
+
+        /**
+         * Diagnostic file: the words a line still has twice, in two places (a repeat the subtitle says —
+         * «هل تسمعينني؟ هل تسمعينني؟» — kept), with their boxes, so a copy the boxes did not show can be
+         * told apart later. Empty when there is none.
+         */
+        fun twiceKept(): String = lines.mapNotNull { l ->
+            val same = l.words.filter { letterKey(it.text).isNotEmpty() }.groupBy { letterKey(it.text) }.values.filter { it.size >= 2 }
+            if (same.isEmpty()) null
+            else same.flatten().joinToString(" ") { w ->
+                "«${w.text}»" + (w.box?.let { b -> "[" + listOf(b.cx, b.cy, b.w, b.h).joinToString(",") { "%.3f".format(java.util.Locale.US, it) } + "]" } ?: "[-]")
+            }
+        }.joinToString(" | ")
 
         /** Lines [readingText] drops as fragments of the background (see [withoutStrays]). */
         fun strays(width: Int, height: Int): Int = lines.size - withoutStrays(lines, width, height).size
@@ -248,6 +267,13 @@ object LensProtocol {
         return Box(f(1), f(2), f(3), f(4), f(5))
     }
 
+    /** A line's text as Lens assembles it: every word followed by its separator. */
+    private fun joinWords(words: List<Word>): String {
+        val sb = StringBuilder()
+        for (w in words) sb.append(w.text).append(w.sep)
+        return sb.toString().trim()
+    }
+
     fun parseResponse(data: ByteArray): Result {
         val root = ProtoReader.parse(data)
         val error = root.firstOf(1)?.asMessage()?.firstOf(1)?.asInt()
@@ -255,20 +281,161 @@ object LensProtocol {
         val text = objects.firstOf(3)?.asMessage() ?: return Result(emptyList(), "", error)
         val language = text.firstOf(2)?.asString() ?: ""
         val layout = text.firstOf(1)?.asMessage() ?: return Result(emptyList(), language, error)
-        val paragraphs = layout.allOf(1).map { pf ->
+        val read = layout.allOf(1).map { pf ->
             val p = pf.asMessage()
             val lines = p.allOf(2).map { lf ->
                 val l = lf.asMessage()
-                val sb = StringBuilder()
-                for (wf in l.allOf(1)) {
+                val words = l.allOf(1).map { wf ->
                     val w = wf.asMessage()
-                    sb.append(w.firstOf(2)?.asString() ?: "")
-                    sb.append(w.firstOf(3)?.asString() ?: "")
+                    Word(w.firstOf(2)?.asString() ?: "", w.firstOf(3)?.asString() ?: "", parseBox(w.firstOf(4)))
                 }
-                Line(sb.toString().trim(), parseBox(l.firstOf(2)))
-            }.filter { it.text.isNotEmpty() }
+                Line(joinWords(words), parseBox(l.firstOf(2)), words)
+            }
             Paragraph(lines, parseBox(p.firstOf(3)))
-        }.filter { it.lines.isNotEmpty() }
-        return Result(paragraphs, language, error)
+        }
+        val (kept, repeats) = withoutRepeats(read)
+        val paragraphs = kept.map { p -> p.copy(lines = p.lines.filter { it.text.isNotEmpty() }) }.filter { it.lines.isNotEmpty() }
+        return Result(paragraphs, language, error, repeats)
+    }
+
+    // ------------------------------------------------------------------ words read twice
+
+    /** The letters of a word for comparing two readings: no marks, tashkeel or tatweel; one form of alef, ya, ta marbuta. */
+    private fun letterKey(s: String): String {
+        val sb = StringBuilder(s.length)
+        for (c in s) {
+            if (!c.isLetterOrDigit() || c == 'ـ') continue
+            sb.append(
+                when (c) {
+                    'أ', 'إ', 'آ', 'ٱ' -> 'ا'
+                    'ى', 'ئ' -> 'ي'
+                    'ة' -> 'ه'
+                    'ؤ' -> 'و'
+                    else -> c
+                }
+            )
+        }
+        return sb.toString()
+    }
+
+    private fun left(b: Box) = b.cx - b.w / 2
+    private fun right(b: Box) = b.cx + b.w / 2
+    private fun top(b: Box) = b.cy - b.h / 2
+    private fun bottom(b: Box) = b.cy + b.h / 2
+
+    /** Overlap of two boxes (fractions of the picture: the ratios below mean the same on any picture). */
+    private fun overlap(a: Box, b: Box): Float {
+        val w = minOf(right(a), right(b)) - maxOf(left(a), left(b))
+        val h = minOf(bottom(a), bottom(b)) - maxOf(top(a), top(b))
+        return if (w <= 0f || h <= 0f) 0f else w * h
+    }
+
+    /**
+     * [a] is a second reading of the place of [b] — the letters and their outline or shadow read as two
+     * words — not a word of its own: the boxes cover each other and the letters are the same (or the one
+     * is a piece of the other, inside it). Two real words are never on one place; a word said twice in
+     * the subtitle («هل تسمعينني؟ هل تسمعينني؟») stands in two places and is never touched.
+     */
+    private fun copyOf(a: Word, b: Word): Boolean {
+        val x = a.box ?: return false
+        val y = b.box ?: return false
+        val i = overlap(x, y)
+        if (i <= 0f) return false
+        val ax = x.w * x.h; val ay = y.w * y.h
+        val iou = i / (ax + ay - i)
+        val ka = letterKey(a.text); val kb = letterKey(b.text)
+        if (ka.isEmpty() || kb.isEmpty()) {
+            // a mark (dash, «؟», «،») is a copy only of the same mark there
+            return ka.isEmpty() && kb.isEmpty() && a.text.trim() == b.text.trim() && iou >= 0.5f
+        }
+        if (ka == kb) return iou >= 0.5f || i / minOf(ax, ay) >= 0.8f
+        // a piece of the same word, lying inside it («تسمعين» on «تسمعينني»)
+        val shortIsA = ka.length < kb.length
+        val s = if (shortIsA) ka else kb
+        val l = if (shortIsA) kb else ka
+        return s.length >= 2 && l.contains(s) && i / (if (shortIsA) ax else ay) >= 0.8f
+    }
+
+    /**
+     * Lens can give the same place twice — the letters and their outline or drop shadow — and put the
+     * second reading into a line together with the first: «… انظري إلي هل تسمعينني؟ هل», «… على الجرح
+     * الجرح». A word lying on a word already read with the same letters is that second reading and is
+     * left out (of the two, the fuller text is kept, on the first one's place); the line's text and box
+     * are then made of its remaining words. Fuller lines are taken first, so a line that is a partial
+     * copy of another loses its words, not the full one. Words without a box of their own (or with the
+     * line's box) are never compared. Returns the paragraphs and the words left out.
+     */
+    fun withoutRepeats(paragraphs: List<Paragraph>): Pair<List<Paragraph>, List<String>> {
+        fun usable(line: Line, w: Word): Boolean {
+            val b = w.box ?: return false
+            if (b.w <= 0f || b.h <= 0f) return false
+            val lb = line.box ?: return true
+            return line.words.size < 2 || lb.w <= 0f || b.w < lb.w * 0.9f
+        }
+        /** [w] does not sit on the row of the other words of its line (a copy put into another line). */
+        fun offRow(line: Line, w: Word): Boolean {
+            val b = w.box ?: return false
+            val others = line.words.filter { it !== w && it.box != null && letterKey(it.text).isNotEmpty() }.map { it.box!!.cy }.sorted()
+            if (others.isEmpty()) return false
+            return Math.abs(b.cy - others[others.size / 2]) > b.h * 0.5f
+        }
+        val order = paragraphs.indices.flatMap { p -> paragraphs[p].lines.indices.map { p to it } }
+            .sortedByDescending { (p, l) -> letterKey(paragraphs[p].lines[l].text).length }
+        class Kept(var p: Int, var l: Int, var w: Int, var word: Word, var text: String)
+        val kept = ArrayList<Kept>()
+        val dropped = HashSet<Triple<Int, Int, Int>>()
+        val repeats = ArrayList<String>()
+        for ((p, l) in order) {
+            val line = paragraphs[p].lines[l]
+            for ((wi, w) in line.words.withIndex()) {
+                if (!usable(line, w)) continue
+                val k = kept.firstOrNull { copyOf(w, it.word) }
+                if (k == null) { kept.add(Kept(p, l, wi, w, w.text)); continue }
+                val fuller = if (letterKey(w.text).length > letterKey(k.text).length) w.text else k.text
+                // of the two, the one on its own line's row stays (a copy put into the next line goes,
+                // even when that line is the fuller one); else the first one stays
+                val kLine = paragraphs[k.p].lines[k.l]
+                if ((k.p != p || k.l != l) && offRow(kLine, k.word) && !offRow(line, w)) {
+                    dropped.add(Triple(k.p, k.l, k.w)); repeats.add(k.word.text)
+                    k.p = p; k.l = l; k.w = wi; k.word = w
+                } else {
+                    dropped.add(Triple(p, l, wi)); repeats.add(w.text)
+                }
+                k.text = fuller
+            }
+        }
+        val text = HashMap<Triple<Int, Int, Int>, String>()
+        for (k in kept) if (k.text != k.word.text) text[Triple(k.p, k.l, k.w)] = k.text
+        if (dropped.isEmpty()) return paragraphs to emptyList()
+        val out = paragraphs.mapIndexed { p, par ->
+            par.copy(lines = par.lines.mapIndexed { l, line ->
+                if (line.words.indices.none { Triple(p, l, it) in dropped } && line.words.indices.none { Triple(p, l, it) in text }) line
+                else {
+                    val words = ArrayList<Word>()
+                    for ((wi, w) in line.words.withIndex()) {
+                        val key = Triple(p, l, wi)
+                        if (key in dropped) {
+                            // a space that only the left-out word carried stays between its neighbours
+                            val last = words.lastOrNull()
+                            if (last != null && last.sep.isEmpty() && w.sep.isNotEmpty() && line.words.indices.any { it > wi && Triple(p, l, it) !in dropped }) {
+                                words[words.size - 1] = last.copy(sep = w.sep)
+                            }
+                            continue
+                        }
+                        words.add(text[key]?.let { w.copy(text = it) } ?: w)
+                    }
+                    val boxes = words.map { it.box }
+                    val shrunk = line.words.indices.any { Triple(p, l, it) in dropped }
+                    val box = if (!shrunk || words.isEmpty() || boxes.any { it == null } || line.box == null) line.box else {
+                        val bs = boxes.filterNotNull()
+                        val x0 = bs.minOf { left(it) }; val x1 = bs.maxOf { right(it) }
+                        val y0 = bs.minOf { top(it) }; val y1 = bs.maxOf { bottom(it) }
+                        Box((x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0, line.box.rotation)
+                    }
+                    Line(joinWords(words), box, words)
+                }
+            })
+        }
+        return out to repeats
     }
 }

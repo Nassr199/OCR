@@ -28,7 +28,6 @@ import com.abdulrahman.hardsubocr.core.PreparedImage
 import com.abdulrahman.hardsubocr.core.VisionEngine
 import com.abdulrahman.hardsubocr.core.isClassicOcr
 import com.abdulrahman.hardsubocr.data.Choice
-import com.abdulrahman.hardsubocr.data.CleanChoice
 import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import com.abdulrahman.hardsubocr.data.FileOcrCache
 import com.abdulrahman.hardsubocr.data.FolderRef
@@ -355,7 +354,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EngineKind.LENS, EngineKind.VISION -> emptyList()
     }
 
-    /** The same style for Gemini and OpenRouter. */
+    /** The same text form for Gemini and OpenRouter. */
     fun chooseProfile(p: AiProfile) {
         aiProfile = p; s.aiProfile = p
     }
@@ -374,9 +373,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         s.enhanceChoice = enhanceChoice
     }
 
-    fun chooseEnhanceChoice(c: EnhanceChoice) {
-        enhanceChoice = c; s.enhanceChoice = c
-    }
 
     fun dismissErrorReport() {
         lastErrorReport = null; s.lastErrorReport = null
@@ -837,16 +833,4 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Choice.NONE -> "بدون دمج إطلاقًا"
     }
 
-    fun cleanLabel(c: CleanChoice): String = when (c) {
-        CleanChoice.AUTO -> "حسب طريقة القراءة (موصى به)"
-        CleanChoice.V26 -> "حماية التشكيل"
-        CleanChoice.STRICT_OR_PRECISE -> "حرفي متعدد الأسطر"
-        CleanChoice.PRO -> "سطر واحد بلا تشكيل"
-    }
-
-    fun enhanceLabel(c: EnhanceChoice): String = when (c) {
-        EnhanceChoice.AUTO -> "تلقائي (حسب طريقة القراءة)"
-        EnhanceChoice.ON -> "دائمًا"
-        EnhanceChoice.OFF -> "أبدًا"
-    }
 }

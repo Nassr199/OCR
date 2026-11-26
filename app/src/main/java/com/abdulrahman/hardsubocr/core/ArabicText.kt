@@ -332,7 +332,7 @@ object ArabicText {
             c in '0'..'9' || pyIsSpace(c) || ".,!?:؛،؟\"()%[]-/#".indexOf(c) >= 0
 
     /**
-     * The exact reading (AiProfile.EXACT) also keeps the punctuation Arabic subtitles use that v2.1/v2.6
+     * The default AI reading (AiProfile.V26) also keeps the punctuation Arabic subtitles use that v2.1/v2.6
      * dropped: «…» (one character), «» quotes, the en/em dash of a dialogue, the apostrophe and «;».
      */
     fun isAllowedExact(c: Char): Boolean = isAllowedPrecise(c) || "…«»–—';".indexOf(c) >= 0

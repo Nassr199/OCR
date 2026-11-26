@@ -137,9 +137,12 @@ private fun lensRaw(body: ByteArray): String {
                 sb.append(" «").append(w.firstOf(2)?.asString() ?: "").append("»")
                 val sep = w.firstOf(3)?.asString()
                 if (!sep.isNullOrEmpty()) sb.append("+sep«").append(sep).append("»")
-                // word box centre x (field 4 → geometry → box → cx)
-                val cx = w.firstOf(4)?.asMessage()?.firstOf(1)?.asMessage()?.firstOf(1)?.takeIf { it.wire == 5 }?.asFloat()
-                if (cx != null) sb.append("@").append("%.3f".format(java.util.Locale.US, cx))
+                // word box (field 4 → geometry → bounding box: centre x, centre y, width, height)
+                val bb = w.firstOf(4)?.asMessage()?.firstOf(1)?.asMessage()
+                if (bb == null) sb.append("@-")
+                else sb.append("@").append((1..4).joinToString(",") { n ->
+                    "%.3f".format(java.util.Locale.US, bb.firstOf(n)?.takeIf { it.wire == 5 }?.asFloat() ?: 0f)
+                })
             }
             sb.append('\n')
         }
@@ -147,7 +150,10 @@ private fun lensRaw(body: ByteArray): String {
     return sb.toString()
 }
 
-private suspend fun lens(http: HttpTransport, png: Png): LensProtocol.Result? {
+private suspend fun lens(http: HttpTransport, png: Png): LensProtocol.Result? = lensBody(http, png)?.let { LensProtocol.parseResponse(it) }
+
+/** The raw Lens answer (protobuf), or null. */
+private suspend fun lensBody(http: HttpTransport, png: Png): ByteArray? {
     val body = LensProtocol.buildRequest(png.bytes, png.w, png.h, "ar", "US", "America/New_York")
     val r = runCatching {
         http.execute(
@@ -163,7 +169,7 @@ private suspend fun lens(http: HttpTransport, png: Png): LensProtocol.Result? {
     }.getOrNull() ?: return null
     if (r.code != 200) return null
     kotlinx.coroutines.delay(400)
-    return LensProtocol.parseResponse(r.body)
+    return r.body
 }
 
 fun main(args: Array<String>) = runBlocking {
@@ -210,13 +216,16 @@ fun main(args: Array<String>) = runBlocking {
         sb.append("truth: «").append(one(truth)).append("»\n\n")
 
         // ---------------------------------------------------------------- Google Lens: one look (raw)
-        val res = lens(http, png)
+        val body = lensBody(http, png)
+        val res = body?.let { LensProtocol.parseResponse(it) }
         if (res == null) sb.append("- Lens one look: failed\n") else {
             val reading = res.readingText(png.w, png.h)
             sb.append("- Lens one look ").append(score("lens one look", reading, truth)).append(' ').append(shape("lens one look", reading, truth))
                 .append(" «").append(one(norm(reading))).append("» strays ").append(res.strays(png.w, png.h)).append('\n')
             sb.append("    full «").append(one(res.fullText)).append("»\n")
             sb.append("    lines ").append(res.describe()).append('\n')
+            if (res.repeats.isNotEmpty()) sb.append("    read twice in the same place, left out: ").append(res.repeats.joinToString(" ") { "«$it»" }).append('\n')
+            sb.append("    words (Lens's own lines, word by word with its box)\n").append(lensRaw(body))
         }
         // ---------------------------------------------------------------- Google Lens: the app (multi-view)
         run {
