@@ -1,6 +1,7 @@
-# OCR bench — commit 2b2acf4f746c8de49178d127506837ab99ded734 — 2026-11-26T00:12:14.333234477Z
+# OCR bench — commit 8d6e3dabd42c8cda1d65d41db17d6b95ae2f6fac — 2026-11-26T00:41:36.064418477Z
 
 Vision: no VISION_API_KEY secret — Lens only
+AI: not run (needs the secrets and [bench-ai] in the commit message) — the app's exact reading (picture enhanced as in the app, thinking low)
 
 ## 01_habibi_credits_bg0.jpg — credits both sides, background variant 0
 truth: «حبيبي، هل أنت بخير؟»
@@ -15,7 +16,7 @@ truth: «حبيبي، هل أنت بخير؟»
 
 - Lens one look ✓ shape ✓ «حبيبي، هل أنت بخير؟» strays 0
     full «Saç Tasarım ⏎ Mustafa Gümüş ⏎ حبيبي، هل أنت بخير؟ ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu»
-    lines Saç Tasarım[0.187,0.413,0.087,0.090 p0] Mustafa Gümüş[0.189,0.652,0.243,0.254 p1] حبيبي، هل أنت بخير؟[0.499,0.663,0.337,0.254 p2] Makyaj Tasarım[0.820,0.413,0.115,0.100 p3] Beste Bayoğlu[0.822,0.602,0.219,0.169 p4]
+    lines Saç Tasarım[0.187,0.413,0.087,0.090 p0] Mustafa Gümüş[0.189,0.652,0.243,0.254 p1] حبيبي، هل أنت بخير؟[0.499,0.663,0.337,0.254 p2] Makyaj Tasarım[0.820,0.413,0.115,0.100 p3] Beste Bayoğlu[0.823,0.602,0.220,0.169 p4]
 - Lens app ✓ shape ✓ «حبيبي، هل أنت بخير؟»
 
 ## 01_habibi_credits_bg2.jpg — credits both sides, background variant 2
@@ -41,7 +42,7 @@ truth: «أبي»
     full «Yardımcı Yönetmen ⏎ Gökhan Yılmaz ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Tuğberk Süel»
     lines Yardımcı Yönetmen[0.190,0.399,0.139,0.070 p0] Gökhan Yılmaz[0.192,0.584,0.231,0.149 p1] Yapım Koordinatörü[0.499,0.410,0.141,0.095 p2] 2. Ekip Görüntü Yönetmeni[0.809,0.408,0.188,0.100 p3] Tuğberk Süel[0.810,0.596,0.203,0.179 p4]
 - Lens app ✓ shape ✓ «أبي»
-    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | الوسط «en ⏎ Yapım Koordinatörü ⏎ 2. Ek ⏎ maz Dan أبي ines Tu» → ×2
+    looks: الصورة «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | ×2 «Yardımcı Yönetmen ⏎ Yapım Koordinatörü ⏎ 2. Ekip Görüntü Yönetmeni ⏎ Gökhan Yılm» | الوسط «en ⏎ Yapım Koordinatörü ⏎ 2. Ek ⏎ maz Dan أبي ineş Tu» → ×2
 
 ## 03_abi_over_credit_a150.jpg — box covers the middle of a credit name, credit alpha 150
 truth: «أبي»
