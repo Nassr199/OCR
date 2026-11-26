@@ -1,4 +1,4 @@
-# OCR bench — commit 1758d631736666b98ffc313e5262f2ab27dbde39 — 2026-11-26T10:54:12.484257133Z
+# OCR bench — commit 2c3c9e36447389aa428d1784e49d407c3b9a3f77 — 2026-11-26T10:57:54.069977468Z
 
 Vision: no VISION_API_KEY secret — Lens only
 AI: not run (needs the secrets and [bench-ai] in the commit message) — the app's exact reading (picture enhanced as in the app, thinking low)
@@ -287,17 +287,17 @@ truth: «ماذا؟»
     lines Sanat Yönetmeni[0.191,0.401,0.115,0.075 p0] İsmail Durmaz[0.192,0.570,0.226,0.159 p1] Kostüm[0.499,0.401,0.058,0.065 p2] an ماذا؟ Hi[0.500,0.605,0.173,0.164 p3] Kostüm Sorumlusu[0.809,0.399,0.131,0.070 p4] Hilcen Can[0.811,0.580,0.168,0.139 p5]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Sanat»+sep« »@0.152,0.396,0.037,0.075 «Yönetmeni»+sep« »@0.211,0.396,0.073,0.075
+      line: «Sanat»+sep« »@0.152,0.401,0.037,0.075 «Yönetmeni»+sep« »@0.211,0.401,0.073,0.075
     p1 dir=null lang=null
-      line: «İsmail»+sep« »@0.126,0.568,0.095,0.149 «Durmaz»+sep« »@0.245,0.571,0.119,0.154
+      line: «İsmail»+sep« »@0.126,0.571,0.095,0.154 «Durmaz»+sep« »@0.245,0.574,0.119,0.159
     p2 dir=null lang=null
       line: «Kostüm»+sep« »@0.499,0.401,0.058,0.065
     p3 dir=1 lang=null
       line: «an»+sep« »@0.568,0.605,0.036,0.164 «ماذا»@0.511,0.605,0.060,0.164 «؟»+sep« »@0.472,0.604,0.017,0.164 «Hi»+sep« »@0.433,0.605,0.039,0.164
     p4 dir=null lang=null
-      line: «Kostüm»+sep« »@0.772,0.396,0.055,0.075 «Sorumlusu»+sep« »@0.839,0.396,0.072,0.075
+      line: «Kostüm»+sep« »@0.772,0.398,0.055,0.070 «Sorumlusu»+sep« »@0.839,0.398,0.072,0.070
     p5 dir=null lang=null
-      line: «Hilcen»+sep« »@0.776,0.574,0.099,0.149 «Can»@0.867,0.573,0.056,0.149
+      line: «Hilcen»+sep« »@0.776,0.581,0.099,0.134 «Can»@0.867,0.580,0.056,0.134
 - Lens app ✓ shape ✓ «ماذا؟»
     looks: الصورة «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | ×2 «Sanat Yönetmeni ⏎ Kostüm ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ an ماذا؟ Hi ⏎ Hilc» | حول الترجمة «Kostüm ⏎ an ماذا؟ Hi» | شريط الترجمة «İsmail Durmaz ⏎ Hi ⏎ an ماذا؟ ⏎ Hilcen Can» → الصورة
 
@@ -309,17 +309,17 @@ truth: «حسنًا»
     lines Sanat Yönetmeni[0.191,0.398,0.115,0.070 p0] İsmail Durmaz[0.192,0.570,0.226,0.159 p1] Yapımcı[0.497,0.410,0.061,0.095 p2] Ketay[0.502,0.604,0.198,0.159 p3] Kostüm Sorumlusu[0.809,0.399,0.130,0.070 p4] Hilcen Can[0.811,0.580,0.170,0.139 p5]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Sanat»+sep« »@0.152,0.403,0.037,0.090 «Yönetmeni»+sep« »@0.211,0.403,0.074,0.090
+      line: «Sanat»+sep« »@0.152,0.398,0.037,0.070 «Yönetmeni»+sep« »@0.211,0.398,0.074,0.070
     p1 dir=null lang=null
-      line: «İsmail»+sep« »@0.126,0.581,0.095,0.204 «Durmaz»+sep« »@0.246,0.584,0.118,0.209
+      line: «İsmail»+sep« »@0.126,0.571,0.095,0.154 «Durmaz»+sep« »@0.246,0.574,0.118,0.159
     p2 dir=null lang=null
-      line: «Yapımcı»+sep« »@0.497,0.401,0.061,0.104
+      line: «Yapımcı»+sep« »@0.497,0.410,0.061,0.095
     p3 dir=null lang=null
-      line: «Ketay»+sep« »@0.502,0.584,0.198,0.209
+      line: «Ketay»+sep« »@0.502,0.604,0.198,0.159
     p4 dir=null lang=null
-      line: «Kostüm»+sep« »@0.772,0.398,0.055,0.090 «Sorumlusu»+sep« »@0.839,0.398,0.071,0.090
+      line: «Kostüm»+sep« »@0.772,0.398,0.055,0.070 «Sorumlusu»+sep« »@0.839,0.398,0.071,0.070
     p5 dir=null lang=null
-      line: «Hilcen»+sep« »@0.776,0.581,0.099,0.204 «Can»@0.867,0.580,0.057,0.204
+      line: «Hilcen»+sep« »@0.776,0.581,0.099,0.134 «Can»@0.867,0.580,0.057,0.134
 - Lens app ✓ shape ✓ «حسنا»
     looks: الصورة «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ketay ⏎ Hilcen Ca» | ×2 «Sanat Yönetmeni ⏎ Yapımcı ⏎ Kostüm Sorumlusu ⏎ İsmail Durmaz ⏎ Ker ⏎ tay حسنًا ⏎» | الوسط «Yapımcı ⏎ H ⏎ tay ⏎ حسنًا ⏎ Kei ⏎ maz» → ×2
 
@@ -472,17 +472,17 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     lines Görüntü Yönetmeni[0.140,0.402,0.136,0.075 p0] Selin Aydın[0.142,0.599,0.171,0.169 p1] هوليا[0.491,0.530,0.069,0.154 p2] - ابتعدي يا جوليزار[0.498,0.770,0.250,0.179 p3] Kurgu[0.860,0.412,0.048,0.095 p4] Ali Kaya[0.859,0.594,0.128,0.154 p5]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Görüntü»+sep« »@0.102,0.399,0.059,0.090 «Yönetmeni»+sep« »@0.171,0.399,0.074,0.090
+      line: «Görüntü»+sep« »@0.102,0.401,0.059,0.075 «Yönetmeni»+sep« »@0.171,0.401,0.074,0.075
     p1 dir=null lang=null
-      line: «Selin»+sep« »@0.095,0.593,0.076,0.169 «Aydın»+sep« »@0.186,0.593,0.084,0.169
+      line: «Selin»+sep« »@0.095,0.598,0.076,0.169 «Aydın»+sep« »@0.186,0.598,0.084,0.169
     p2 dir=1 lang=null
       line: «هوليا»+sep« »@0.491,0.530,0.069,0.154
     p3 dir=1 lang=null
       line: «-»+sep« »@0.618,0.769,0.009,0.174 «ابتعدي»+sep« »@0.560,0.768,0.083,0.174 «يا»+sep« »@0.496,0.769,0.017,0.174 «جوليزار»+sep« »@0.424,0.771,0.102,0.179
     p4 dir=null lang=null
-      line: «Kurgu»+sep« »@0.860,0.407,0.048,0.095
+      line: «Kurgu»+sep« »@0.860,0.412,0.048,0.095
     p5 dir=null lang=null
-      line: «Ali»+sep« »@0.817,0.594,0.043,0.159 «Kaya»@0.887,0.600,0.073,0.159
+      line: «Ali»+sep« »@0.817,0.591,0.043,0.154 «Kaya»@0.887,0.597,0.073,0.154
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
     looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
@@ -494,7 +494,7 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     lines Görüntü Yönetmeni[0.140,0.401,0.136,0.075 p0] Selin Aydın[0.143,0.596,0.172,0.164 p1] هوليا[0.492,0.550,0.050,0.144 p2] - ابتعدي يا جوليزار[0.498,0.785,0.193,0.169 p3] Kurgu[0.859,0.419,0.047,0.090 p4] Ali Kaya[0.860,0.594,0.127,0.154 p5]
     words (Lens's own lines, word by word with its box)
     p0 dir=null lang=null
-      line: «Görüntü»+sep« »@0.102,0.401,0.059,0.075 «Yönetmeni»+sep« »@0.171,0.401,0.074,0.075
+      line: «Görüntü»+sep« »@0.102,0.403,0.059,0.090 «Yönetmeni»+sep« »@0.171,0.403,0.074,0.090
     p1 dir=null lang=null
       line: «Selin»+sep« »@0.095,0.595,0.076,0.164 «Aydın»+sep« »@0.186,0.595,0.085,0.164
     p2 dir=1 lang=null
@@ -502,9 +502,9 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
     p3 dir=1 lang=null
       line: «-»+sep« »@0.589,0.784,0.010,0.164 «ابتعدي»+sep« »@0.544,0.783,0.066,0.164 «يا»+sep« »@0.497,0.784,0.011,0.164 «جوليزار»+sep« »@0.441,0.786,0.080,0.169
     p4 dir=null lang=null
-      line: «Kurgu»+sep« »@0.859,0.419,0.047,0.090
+      line: «Kurgu»+sep« »@0.859,0.412,0.047,0.095
     p5 dir=null lang=null
-      line: «Ali»+sep« »@0.818,0.593,0.042,0.149 «Kaya»@0.887,0.594,0.072,0.149
+      line: «Ali»+sep« »@0.818,0.591,0.042,0.164 «Kaya»@0.887,0.592,0.072,0.164
 - Lens app ✓ shape ✓ «هوليا ابتعدي يا جوليزار»
     looks: الصورة «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليزار» | ×2 «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» | حول الترجمة «- هوليا ⏎ - ابتعدي يا جوليزار» | شريط الترجمة «Goruntu Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز» → الصورة + شرطة حوار من قراءة أخرى «Görüntü Yönetmeni ⏎ Kurgu ⏎ Selin Aydın ⏎ - هوليا ⏎ Ali Kaya ⏎ - ابتعدي يا جوليز»
 
