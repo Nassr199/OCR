@@ -183,6 +183,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var videoMode by mutableStateOf(s.videoMode)
         private set
     private var previewJob: Job? = null
+
+    /** The region screen's timeline strip: one small frame per slot across the video (null while loading). */
+    var filmstrip by mutableStateOf<List<Bitmap?>>(emptyList())
+        private set
+    private var filmJob: Job? = null
+    private var filmKey: String? = null
     private var maskJob: Job? = null
 
     // ------------------------------------------------------------------ messages & editor
@@ -500,6 +506,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val f = PickedFile(uri, Saf.displayName(ctx, uri))
         video = f; s.lastVideo = f.ser()
         preview = null; maskOverlay = null
+        filmJob?.cancel(); filmKey = null; filmstrip = emptyList()
         loadVideoInfo(uri)
     }
 
@@ -536,6 +543,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             preview = bmp
             recomputeMask()
         }
+    }
+
+    /**
+     * Fills the timeline strip with [count] frames spread over the video, one after another (the
+     * strip shows each as it arrives). Display only, on its own decoder: the extraction is untouched.
+     */
+    fun loadFilmstrip(count: Int) {
+        val v = video ?: return
+        val dur = videoInfo?.durationUs ?: return
+        if (count <= 0 || dur <= 0) return
+        val key = "${v.uri}|$count|$dur"
+        if (key == filmKey) return
+        filmKey = key
+        filmJob?.cancel()
+        filmstrip = List(count) { null }
+        filmJob = viewModelScope.launch {
+            for (i in 0 until count) {
+                val t = (dur * (i + 0.5) / count).toLong()
+                val bmp = withContext(Dispatchers.Default) { runCatching { FramePreview.thumb(ctx, v.uri, t) }.getOrNull() }
+                filmstrip = filmstrip.toMutableList().also { if (i < it.size) it[i] = bmp }
+            }
+        }
+    }
+
+    /** Tests only: the region screen with a given frame, video and strip (no video file in a test). */
+    @androidx.annotation.VisibleForTesting
+    internal fun showPreviewForTest(frame: Bitmap, info: VideoInfo, strip: List<Bitmap?>, atUs: Long) {
+        videoInfo = info
+        previewTimeUs = atUs
+        preview = frame
+        filmstrip = strip
+        recomputeMask()
     }
 
     fun setRoi(r: RoiRect, persist: Boolean) {

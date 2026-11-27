@@ -101,6 +101,59 @@ class ScreenShots {
         JobManager.preview(JobState.Idle)
     }
 
+    /** A frame of a drama with a two-line subtitle, the upper line high in the picture. */
+    private fun sampleFrame(w: Int, h: Int, shade: Int = 0): Bitmap {
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
+            android.graphics.Color.rgb(70 + shade, 92, 104), android.graphics.Color.rgb(176, 140 - shade, 112), android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        p.shader = null
+        p.color = android.graphics.Color.rgb(60, 44, 38)
+        c.drawCircle(w * 0.62f, h * 0.42f, h * 0.30f, p)
+        p.color = android.graphics.Color.rgb(32, 30, 34)
+        c.drawCircle(w * 0.30f, h * 0.55f, h * 0.36f, p)
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        p.textSize = h * 0.075f
+        for ((line, y) in listOf("- لم أنظر إلى أي امرأة غيرك قط" to h * 0.70f, "- أعرف ذلك" to h * 0.82f)) {
+            p.style = android.graphics.Paint.Style.STROKE; p.strokeWidth = h * 0.012f; p.color = android.graphics.Color.BLACK
+            c.drawText(line, w / 2f, y, p)
+            p.style = android.graphics.Paint.Style.FILL; p.color = android.graphics.Color.WHITE
+            c.drawText(line, w / 2f, y, p)
+        }
+        return b
+    }
+
+    private fun roiShot(name: String) {
+        rule.setContent {
+            AppTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    val vm: MainViewModel = viewModel()
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        val info = com.abdulrahman.hardsubocr.video.VideoInfo(2_532_000_000L, 1920, 1080, 0, 23.976f, "video/avc")
+                        vm.showPreviewForTest(sampleFrame(1280, 720), info, List(16) { sampleFrame(240, 135, it * 6) }, 755_340_000L)
+                    }
+                    RoiScreen(vm, onBack = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.waitForIdle()
+        val view = rule.activity.window.decorView
+        val bmp = runCatching { hardwareShot(view) }.getOrElse {
+            Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { b -> view.draw(android.graphics.Canvas(b)) }
+        }
+        val dir = File("build/shots").apply { mkdirs() }
+        FileOutputStream(File(dir, "$name.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** The region screen: picture with grips, the edges in numbers, presets, the timeline strip and steps. */
+    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_11_region() = roiShot("phone_11_region")
+
+    @Test @Config(qualifiers = "w891dp-h411dp-land-night-xxhdpi") fun land_6_region() = roiShot("land_6_region")
+
     /**
      * The window drawn by the GPU renderer (Robolectric's native HardwareRenderer), as on a phone: render
      * nodes and the frosted glass's blur included. (captureToImage waits for a frame Robolectric never

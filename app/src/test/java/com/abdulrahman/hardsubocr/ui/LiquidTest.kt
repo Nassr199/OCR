@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.IntSize
@@ -143,6 +145,57 @@ class LiquidTest {
     @Test
     @Config(qualifiers = "w891dp-h411dp-land-night-xxhdpi")
     fun rail_drag_reaches_every_tab() = barDragReachesEveryTab(vertical = true)
+
+    /**
+     * Every move of the lens is liquid, however it was chosen. 3.0.1 snapped the lens onto a tapped item
+     * (the tap re-laid the items before the move began), so a tap jumped; only right after a drag, with
+     * the lens still settling, did it travel. Here three taps, each after a wait: each must travel lifted
+     * into glass and land at rest.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi")
+    fun every_tap_moves_the_lens_as_liquid_glass() {
+        var sel by mutableIntStateOf(0)
+        var g = 0f
+        var peak = 0f
+        rule.setContent {
+            AppTheme {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    LiquidSelector(sel, { sel = it }, LensRest.fill(Color.Gray)) {
+                        // read on every frame the lens changes: the highest value of each move is kept
+                        g = glass
+                        peak = maxOf(peak, g)
+                        androidx.compose.foundation.layout.Row {
+                            for (i in 0 until 3) {
+                                Box(
+                                    Modifier.size(80.dp, 48.dp).liquidItem(i)
+                                        .selectable(selected = i == sel, interactionSource = null, indication = null) { sel = i },
+                                    contentAlignment = Alignment.Center
+                                ) { Text("خيار $i") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.waitForIdle()
+        fun tapPeak(text: String): Float {
+            peak = 0f
+            rule.onNodeWithText(text).performClick()
+            rule.waitForIdle() // runs every frame of the move
+            val p = peak
+            rule.mainClock.advanceTimeBy(3_000) // and a wait: the next tap starts from rest
+            rule.waitForIdle()
+            return p
+        }
+        val peaks = listOf(tapPeak("خيار 1"), tapPeak("خيار 2"), tapPeak("خيار 1"))
+        println("glass at its peak on each tap: $peaks")
+        assertEquals("the last tap chose", 1, sel)
+        for (p in peaks) assertTrue("each tap lifts the lens into glass (peaks $peaks)", p >= HOP - 0.02f)
+        assertTrue("and it lands at rest", g < 0.05f)
+    }
 
     @Test
     @Config(qualifiers = "w891dp-h411dp-land-night-xxhdpi")

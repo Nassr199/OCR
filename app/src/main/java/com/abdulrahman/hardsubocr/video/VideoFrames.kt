@@ -321,6 +321,22 @@ class VideoDecoder(private val context: Context, private val uri: Uri) {
 }
 
 object FramePreview {
+    /**
+     * A small picture for the timeline strip of the region screen: the key frame at or just before
+     * [timeUs] (one frame decoded, so it is quick), <= [maxWidth] px wide, in the same orientation as
+     * the preview. Display only: nothing of the extraction uses it.
+     */
+    fun thumb(context: Context, uri: Uri, timeUs: Long, maxWidth: Int = 240): Bitmap? {
+        var bmp: Bitmap? = null
+        VideoDecoder(context, uri).decode(
+            startUs = timeUs,
+            isActive = { true },
+            want = { true },
+            onFrame = { _, img -> bmp = Yuv.previewBitmap(img, maxWidth); false }
+        )
+        return bmp
+    }
+
     /** First frame at or after [timeUs], down-scaled to <= 1280 px wide. */
     fun grab(context: Context, uri: Uri, timeUs: Long): Bitmap? {
         var bmp: Bitmap? = null

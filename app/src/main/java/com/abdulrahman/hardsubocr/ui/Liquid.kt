@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -88,6 +90,10 @@ class LensRest(val below: Boolean, val draw: DrawScope.(rect: Rect, corner: Floa
     }
 }
 
+/** How far a moving lens lifts (0 rest, 1 held), and the share of the way left when it lands. */
+internal const val HOP = 0.8f
+private const val LAND_AT = 0.3f
+
 /** Hold this long without moving to pick the lens up in a control inside a scrolling page. */
 private const val HOLD_MS = 280L
 
@@ -109,6 +115,8 @@ internal class SelectorState(val scope: CoroutineScope) {
     private val resizeSpec: AnimationSpec<Size> = spring(dampingRatio = 0.72f, stiffness = 420f)
     private val followSpec: AnimationSpec<Offset> = spring(dampingRatio = 0.82f, stiffness = 1400f)
     private val followSizeSpec: AnimationSpec<Size> = spring(dampingRatio = 0.8f, stiffness = 800f)
+    private val liftSpec: AnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 1100f)
+    private val landSpec: AnimationSpec<Float> = spring(dampingRatio = 0.6f, stiffness = 300f)
 
     fun rect(i: Int): Rect? {
         val h = host ?: return null
@@ -130,29 +138,56 @@ internal class SelectorState(val scope: CoroutineScope) {
         return best
     }
 
-    /** Puts the lens on item [i] at once (first layout, a new size of the control). */
+    /** The item the lens rests on; a new choice is reached only by [moveTo], never by a snap. */
+    private var restingOn = -1
+
+    /**
+     * Puts the lens on item [i] at once: its first layout, or a new layout of the item it rests on
+     * (rotation, a new size). Never onto a newly chosen item: a tap re-lays the items before the move
+     * starts, and 3.0.1 snapped the lens there, so a tap jumped instead of travelling as liquid glass
+     * (only after a drag, while the lens was still settling, did a tap travel).
+     */
     fun snapTo(i: Int) {
+        if (placed && i != restingOn) return
         val r = rect(i) ?: return
         if (placed && (center.value - r.center).getDistance() < 0.5f && abs(size.value.width - r.width) < 0.5f && abs(size.value.height - r.height) < 0.5f) return
         scope.launch {
             center.snapTo(r.center)
             size.snapTo(r.size)
             placed = true
+            restingOn = i
         }
     }
 
+    /**
+     * Moves the lens to item [i] the same way every time, however the choice was made (a tap, a drag
+     * let go, a restored setting): it lifts into liquid glass as it leaves, travels lifted, and lands
+     * as it arrives. (3.0.0 lifted it only for a drag, so a tap right after a drag looked liquid and a
+     * later tap did not.)
+     */
     suspend fun moveTo(i: Int) {
         val r = rect(i) ?: return
         if (!placed) {
             center.snapTo(r.center)
             size.snapTo(r.size)
             placed = true
+            restingOn = i
             return
         }
+        val distance = (r.center - center.value).getDistance()
         coroutineScope {
             launch { size.animateTo(r.size, resizeSpec) }
+            launch {
+                if (dragging) return@launch
+                if (distance > 2f) {
+                    held.animateTo(max(held.value, HOP), liftSpec)
+                    snapshotFlow { (center.value - r.center).getDistance() }.first { it <= distance * LAND_AT }
+                }
+                if (!dragging) held.animateTo(0f, landSpec)
+            }
             center.animateTo(r.center, moveSpec)
         }
+        restingOn = i
     }
 
     /** After a drag: lands on [target]; if the choice was not taken, goes back to the chosen item. */
@@ -412,12 +447,13 @@ private suspend fun PointerInputScope.lensGestures(
         }
     } finally {
         state.dragging = false
-        state.release()
-        // the item under the finger where it lifts (the lens trails the finger a little)
+        // the item under the finger where it lifts (the lens trails the finger a little); it lands there
         val target = state.nearest(last)
         if (target != null) {
             if (completed && target != state.selected) onSelect(target)
             state.settle(target)
+        } else {
+            state.release()
         }
     }
 }
@@ -450,7 +486,22 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
     val base = scheme.surfaceContainer
     val alpha = if (enabled) 1f else 0.45f
 
-    LaunchedEffect(checked) { if (!dragging) pos.animateTo(if (checked) 1f else 0f, spring(dampingRatio = 0.62f, stiffness = 520f)) }
+    // a new value (a tap, a restored setting): the thumb lifts into glass, slides, and lands, every time
+    LaunchedEffect(checked) {
+        if (dragging) return@LaunchedEffect
+        val target = if (checked) 1f else 0f
+        val distance = abs(pos.value - target)
+        coroutineScope {
+            launch {
+                if (distance > 0.05f) {
+                    held.animateTo(max(held.value, HOP), spring(dampingRatio = 0.8f, stiffness = 1100f))
+                    snapshotFlow { abs(pos.value - target) }.first { it <= distance * LAND_AT }
+                }
+                held.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 300f))
+            }
+            pos.animateTo(target, spring(dampingRatio = 0.62f, stiffness = 520f))
+        }
+    }
 
     // Draws the track; [w] is its rim width in px, converted by the caller (the track is also drawn inside
     // the thumb's glass recording; 3.0.0 converted it there, which looped in Compose: StackOverflowError).
