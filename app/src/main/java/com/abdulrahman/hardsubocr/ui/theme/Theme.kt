@@ -2,13 +2,21 @@ package com.abdulrahman.hardsubocr.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
 
 val Teal = Color(0xFF5FD4C4)
 val Amber = Color(0xFFF2B544)
@@ -69,10 +77,35 @@ private val LightScheme = lightColorScheme(
     outlineVariant = Color(0xFFBEC9C6)
 )
 
+/**
+ * Titles in Thmanyah Serif Display (display, headline and title styles: tab titles, page titles,
+ * card titles, the big numbers); everything read at length (body, labels, hints, logs) stays in the
+ * system's Arabic face. Without the font in this build, Material's defaults.
+ */
+fun appTypography(display: FontFamily?): Typography {
+    val t = Typography()
+    if (display == null) return t
+    val trim = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
+    fun TextStyle.d(w: FontWeight, lh: Float = 1.32f) =
+        copy(fontFamily = display, fontWeight = w, lineHeight = (fontSize.value * lh).sp, lineHeightStyle = trim, letterSpacing = 0.sp)
+    return t.copy(
+        displayLarge = t.displayLarge.d(FontWeight.Black),
+        displayMedium = t.displayMedium.d(FontWeight.Black),
+        displaySmall = t.displaySmall.d(FontWeight.Bold),
+        headlineLarge = t.headlineLarge.d(FontWeight.Bold),
+        headlineMedium = t.headlineMedium.d(FontWeight.Bold),
+        headlineSmall = t.headlineSmall.d(FontWeight.Bold),
+        titleLarge = t.titleLarge.d(FontWeight.Bold),
+        titleMedium = t.titleMedium.d(FontWeight.Bold, 1.36f)
+    )
+}
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
-    MaterialTheme(colorScheme = if (dark) DarkScheme else LightScheme) {
+    val context = LocalContext.current
+    val typography = remember { appTypography(AppFonts.display(context)) }
+    MaterialTheme(colorScheme = if (dark) DarkScheme else LightScheme, typography = typography) {
         // The whole interface is Arabic: force right-to-left even on an English phone.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             content()

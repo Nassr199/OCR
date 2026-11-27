@@ -12,3 +12,6 @@ captures/
 # built in CI (native/build_android.sh)
 app/src/main/jniLibs/
 native/classify.spv.inc
+
+# the title font, packed in CI from the encrypted copy (tools/fonts.sh); never committed
+app/src/main/assets/type/

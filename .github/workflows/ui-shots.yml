@@ -24,11 +24,16 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Render the screens
+      - name: Title font (Thmanyah, decrypted only with the repository secret)
+        env:
+          THMANYAH_FONT_KEY: ${{ secrets.THMANYAH_FONT_KEY }}
+        run: bash tools/fonts.sh
+
+      - name: Render the screens, test the liquid glass
         continue-on-error: true
         run: |
           set -o pipefail
-          ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.abdulrahman.hardsubocr.ui.ScreenShots" 2>&1 | tee shots.log
+          ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.abdulrahman.hardsubocr.ui.*" 2>&1 | tee shots.log
 
       - name: Publish (branch ui-shots-results)
         if: always()

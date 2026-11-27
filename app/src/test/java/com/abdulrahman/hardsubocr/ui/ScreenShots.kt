@@ -8,6 +8,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.job.JobManager
@@ -68,7 +72,7 @@ class ScreenShots {
         stopped = false, elapsedSec = 412.0, summary = "اكتمل الاستخراج: 612 ترجمة"
     )
 
-    private fun shot(name: String, tab: Tab, state: JobState = JobState.Idle) {
+    private fun shot(name: String, tab: Tab, state: JobState = JobState.Idle, before: (() -> Unit)? = null) {
         JobManager.preview(state)
         rule.setContent {
             AppTheme {
@@ -81,6 +85,10 @@ class ScreenShots {
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(2_000)
         rule.waitForIdle()
+        if (before != null) {
+            before()
+            rule.waitForIdle()
+        }
         val view = rule.activity.window.decorView
         val bmp = runCatching { hardwareShot(view) }.getOrElse {
             println("hardware capture failed for $name: $it — software drawing")
@@ -134,6 +142,28 @@ class ScreenShots {
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_5_settings() = shot("phone_5_settings", Tab.SETTINGS)
     @Test @Config(qualifiers = "w411dp-h891dp-port-notnight-xxhdpi") fun phone_6_extract_light() = shot("phone_6_extract_light", Tab.EXTRACT)
     @Test @Config(qualifiers = "w360dp-h780dp-port-night-xxhdpi") fun phone_7_small_running() = shot("phone_7_small_running", Tab.PROCESS, running)
+
+    /** The tab bar's lens held and dragged halfway from the first tab toward the second. */
+    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_8_lens_held() = shot("phone_8_lens_held", Tab.EXTRACT) {
+        val a = rule.onNodeWithText("الاستخراج").fetchSemanticsNode().boundsInRoot.center
+        val b = rule.onNodeWithText("المعالجة").fetchSemanticsNode().boundsInRoot.center
+        rule.onRoot().performTouchInput {
+            down(a)
+            for (i in 1..8) moveTo(a + (b - a) * (i / 16f))
+        }
+        rule.mainClock.advanceTimeBy(600)
+    }
+
+    /** A settings page: options, segmented control, switches. */
+    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_9_settings_video() = shot("phone_9_settings_video", Tab.SETTINGS) {
+        rule.onNodeWithText("الفيديو").performClick()
+        rule.mainClock.advanceTimeBy(1_500)
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp-port-notnight-xxhdpi") fun phone_10_settings_video_light() = shot("phone_10_settings_video_light", Tab.SETTINGS) {
+        rule.onNodeWithText("الفيديو").performClick()
+        rule.mainClock.advanceTimeBy(1_500)
+    }
 
     // phone on its side (2340 × 1080, dark)
     @Test @Config(qualifiers = "w891dp-h411dp-land-night-xxhdpi") fun land_1_extract() = shot("land_1_extract", Tab.EXTRACT)

@@ -197,11 +197,16 @@ private fun videoEngineLabel(e: VideoEngine) = when (e) {
     VideoEngine.CLASSIC -> "حساس لكل تغيير"
 }
 
-/** One settings page: large title that folds into the bar while scrolling, content in 16 dp margins. */
+/**
+ * One settings page: large title that folds into the bar while scrolling, content in 16 dp margins.
+ * A phone on its side has little height: a one-line bar that stays (its own pinned scroll behaviour;
+ * a collapsing behaviour with no large bar attached to it would swallow every upward scroll).
+ */
 @Composable
-private fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
     val chrome = LocalChrome.current
-    val bar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val bar = if (chrome.short) TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    else TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     Scaffold(
         modifier = Modifier.padding(start = chrome.start).nestedScroll(bar.nestedScrollConnection),
         // the tab's own surface (the app background) shows through, under the frosted bar
@@ -215,7 +220,11 @@ private fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @C
             if (chrome.short) {
                 TopAppBar(
                     title = titleText, navigationIcon = back,
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f)
+                    ),
+                    scrollBehavior = bar
                 )
             } else {
                 LargeTopAppBar(
@@ -277,16 +286,11 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
                 ) { u.vEngine = it; s.videoEngine = it }
             }
             SettingsCard("تحليل الإطارات") {
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for ((n, label) in listOf(1 to "كل إطار", 2 to "كل 2", 3 to "كل 3", 4 to "كل 4")) {
-                        FilterChip(
-                            selected = u.every == n,
-                            onClick = { u.every = n; s.analyzeEvery = n },
-                            label = { Text(label) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                Segmented(
+                    listOf(1 to "كل إطار", 2 to "كل 2", 3 to "كل 3", 4 to "كل 4"),
+                    u.every,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) { u.every = it; s.analyzeEvery = it }
                 Hint("«كل إطار» = أدق توقيت. الباقي أسرع على الأجهزة الضعيفة.")
                 Spacer(Modifier.height(12.dp))
                 SliderRow(
@@ -312,10 +316,8 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
                 OutlinedButton(onClick = { vm.testGpu() }, enabled = !vm.gpuTesting, modifier = Modifier.fillMaxWidth()) {
                     Text(if (vm.gpuTesting) "جارٍ الاختبار…" else "اختبار المعالج الرسومي")
                 }
-                vm.gpuTest?.let { r ->
-                    Spacer(Modifier.height(6.dp))
-                    Text(r, style = MaterialTheme.typography.bodySmall)
-                }
+                val gpu = vm.gpuTest
+                ResultLine(gpu, ok = gpu != null && !gpu.contains("✖") && !gpu.contains("⚠"))
             }
         }
 
@@ -413,6 +415,12 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
                 "مفاتيح API محفوظة مشفّرة على جهازك، ولا تُرسل إلا إلى الخدمة التي تختارها.",
                 style = MaterialTheme.typography.bodySmall
             )
+            Spacer(Modifier.height(8.dp))
+            val context = LocalContext.current
+            if (remember { com.abdulrahman.hardsubocr.ui.theme.AppFonts.display(context) } != null) {
+                Hint("خط العناوين: خط ثمانية، © ثمانية للنشر والتوزيع، مستخدم وفق ترخيصه.")
+            }
+            Hint("الزجاج السائل: تظليل خاص بالتطبيق على معالج الجوال الرسومي، مستوحى من مشروع liquidglass مفتوح المصدر (Apache 2.0).")
         }
     }
 }

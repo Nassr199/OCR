@@ -80,27 +80,17 @@ fun engineName(e: EngineKind) = when (e) {
 @Composable
 fun EngineCard(vm: MainViewModel, enabled: Boolean, modifier: Modifier = Modifier) {
     SectionCard("محرك القراءة", "🔎", modifier) {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectTile(
-                "⚡", "Google Lens", "بلا مفتاح", vm.engine == EngineKind.LENS, enabled,
-                Modifier.weight(1f).fillMaxHeight()
-            ) { vm.chooseEngine(EngineKind.LENS) }
-            SelectTile(
-                "👁", "Google Vision", "Cloud Vision API", vm.engine == EngineKind.VISION, enabled,
-                Modifier.weight(1f).fillMaxHeight()
-            ) { vm.chooseEngine(EngineKind.VISION) }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectTile(
-                "✨", "Gemini", "يحفظ التشكيل", vm.engine == EngineKind.GEMINI, enabled,
-                Modifier.weight(1f).fillMaxHeight(), badge = "Gemini 4"
-            ) { vm.chooseEngine(EngineKind.GEMINI) }
-            SelectTile(
-                "🌐", "OpenRouter", "نماذج متعددة", vm.engine == EngineKind.OPENROUTER, enabled,
-                Modifier.weight(1f).fillMaxHeight()
-            ) { vm.chooseEngine(EngineKind.OPENROUTER) }
-        }
+        val engines = listOf(EngineKind.LENS, EngineKind.VISION, EngineKind.GEMINI, EngineKind.OPENROUTER)
+        LiquidTiles(
+            listOf(
+                TileSpec("⚡", "Google Lens", "بلا مفتاح"),
+                TileSpec("👁", "Google Vision", "Cloud Vision API"),
+                TileSpec("✨", "Gemini", "يحفظ التشكيل", badge = "Gemini 4"),
+                TileSpec("🌐", "OpenRouter", "نماذج متعددة")
+            ),
+            selected = engines.indexOf(vm.engine),
+            enabled = enabled
+        ) { vm.chooseEngine(engines[it]) }
         Spacer(Modifier.height(14.dp))
         AnimatedContent(
             targetState = vm.engine,

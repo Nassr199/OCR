@@ -34,6 +34,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Thmanyah's license forbids hosting its font files: the repository holds an encrypted copy,
+      # decrypted here with the repository secret THMANYAH_FONT_KEY and packed scrambled into the APK.
+      # Without the secret the app is built with the system font.
+      - name: Title font (Thmanyah)
+        env:
+          THMANYAH_FONT_KEY: ${{ secrets.THMANYAH_FONT_KEY }}
+        run: bash tools/fonts.sh
+
       - name: Build Vulkan library (NDK clang + glslc, all ABIs)
         run: bash native/build_android.sh
 
@@ -81,6 +89,7 @@ jobs:
             echo "SubScan marker (subscan worker) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'subscan')"
             echo "English prompt marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'precise OCR engine for subtitles')"
             echo "Vulkan libraries: $(unzip -l "$f" | grep -c 'libhsocrvk.so')"
+            echo "Title font (scrambled weights): $(unzip -l "$f" | grep -c 'assets/type/t')  — plain font files: $(unzip -l "$f" | grep -ci '\.otf')"
             unzip -l "$f" | grep 'libhsocrvk.so' || true
           done
 

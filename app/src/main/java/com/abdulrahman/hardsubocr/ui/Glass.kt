@@ -14,8 +14,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
@@ -77,36 +78,41 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
-// ============================================================================ frosted glass
+// ============================================================================ backdrops and frosted glass
 //
-// The bar and the rail are frosted glass over the screen, as in iOS's Liquid Glass and X's latest
-// tab bar: what scrolls under them shows through, blurred and tinted, with a light rim. The screen's
-// content is recorded once per frame into a graphics layer ([backdropSource]); each glass surface
-// draws that layer again behind itself, blurred, clipped to its shape ([glass]). The blur is a GPU
-// RenderEffect (Android 12+); on Android 8–11 the glass is an opaque tint with the same rim.
+// The bar, the rail and the start button are glass over the screen: what scrolls under them shows
+// through. The screen's content is recorded once per frame into a graphics layer ([backdropSource]);
+// each glass surface draws that layer again behind itself. On Android 13+ that is the liquid glass of
+// LiquidGlass.kt; on Android 12 the frosted blur below ([glass]); on Android 8–11 a tint with a rim.
 
 /** Android 12+ blurs on the GPU; before that the glass is a solid tint. */
 val glassBlur: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-/** What the glass shows through: the content under it, and where that content sits on the screen. */
+/**
+ * What the glass shows through: the content under it, and where that content sits on the screen.
+ * [under] is drawn first: a control's own backdrop over the page's.
+ */
 @Stable
-class Backdrop {
+class Backdrop(internal val under: Backdrop? = null) {
     internal var layer: GraphicsLayer? by mutableStateOf(null)
     internal var origin by mutableStateOf(Offset.Zero)
+
+    /** Draws what this backdrop holds, in the coordinates of an element whose top-left is at [at] (root coordinates). */
+    internal fun drawAt(scope: DrawScope, at: Offset) {
+        under?.drawAt(scope, at)
+        val l = layer ?: return
+        val o = origin - at
+        scope.translate(o.x, o.y) { drawLayer(l) }
+    }
 }
 
 @Composable
@@ -152,11 +158,9 @@ fun Modifier.glass(backdrop: Backdrop, shape: Shape, tint: Color, blur: Dp = 30.
         .onGloballyPositioned { origin = it.positionInRoot() }
         .drawBehind {
             val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawBehind)) }
-            val src = backdrop.layer
-            if (blurLayer != null && src != null && drawContext.canvas.nativeCanvas.isHardwareAccelerated) {
+            if (blurLayer != null && backdrop.layer != null && drawContext.canvas.nativeCanvas.isHardwareAccelerated) {
                 blurLayer.renderEffect = BlurEffect(blurPx, blurPx, TileMode.Clamp)
-                val o = origin - backdrop.origin
-                blurLayer.record { translate(-o.x, -o.y) { drawLayer(src) } }
+                blurLayer.record { backdrop.drawAt(this, origin) }
                 clipPath(path) { drawLayer(blurLayer) }
                 drawPath(path, tint)
             } else {
@@ -175,11 +179,24 @@ fun glassTint(): Color =
 
 class NavItem(val label: String, val icon: ImageVector, val progress: Float? = null)
 
+/** The bar's and the rail's glass: frosted in the middle, bending the page at its rim. */
+@Composable
+fun barLook(): GlassLook {
+    val dark = isDarkScheme()
+    return GlassLook(
+        tint = if (dark) Color(0xFF0B1413).copy(alpha = 0.52f) else Color(0xFFF7FBFA).copy(alpha = 0.56f),
+        frost = 1f, blur = 24.dp, band = 16.dp, depth = 10.dp, split = 0.10f, vibrance = 1.5f,
+        specular = if (dark) 0.55f else 0.7f, edge = 1.6.dp,
+        fallbackTint = glassTint()
+    )
+}
+
 /**
- * The tabs on frosted glass, with a liquid lens under the selected one. The lens moves on a spring
- * and stretches with its speed along the way, squeezing a little across it, like a drop; it grows
- * while pressed and can be dragged across the tabs, landing on the nearest one. Horizontal at the
- * bottom of a phone, vertical at the side of a wide screen.
+ * The tabs on liquid glass, with the liquid lens under the selected one (see Liquid.kt): it moves on
+ * a spring, stretching with its speed; pressed it lifts out of the bar, grows and magnifies the tab
+ * under it; dragged across the tabs it follows the finger and lands on the nearest one, which is then
+ * chosen — from any tab to any tab, in both directions. Horizontal at the bottom of a phone, vertical
+ * at the side of a wide screen.
  */
 @Composable
 fun GlassTabs(
@@ -190,124 +207,81 @@ fun GlassTabs(
     vertical: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val dark = isDarkScheme()
     val primary = MaterialTheme.colorScheme.primary
     val lensFill = if (dark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.055f)
     val lensRim = if (dark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.9f)
-    val pos = remember { Animatable(selected.toFloat()) }
-    val grow = remember { Animatable(1f) }
-    var dragging by remember { mutableStateOf(false) }
-    val lensSpring = spring<Float>(dampingRatio = 0.58f, stiffness = 380f)
-    LaunchedEffect(selected) { if (!dragging) pos.animateTo(selected.toFloat(), lensSpring) }
-
+    val rest = remember(dark, primary) {
+        LensRest(below = true) { r, c, a ->
+            val glow = max(r.width, r.height) * 0.62f
+            drawCircle(Brush.radialGradient(listOf(primary.copy(alpha = (if (dark) 0.34f else 0.22f) * a), Color.Transparent), r.center, glow), glow, r.center)
+            drawRoundRect(lensFill.copy(alpha = lensFill.alpha * a), r.topLeft, r.size, CornerRadius(c))
+            drawRoundRect(
+                Brush.verticalGradient(listOf(lensRim.copy(alpha = lensRim.alpha * a), lensRim.copy(alpha = lensRim.alpha * 0.25f * a)), r.top, r.bottom),
+                r.topLeft, r.size, CornerRadius(c), style = Stroke(1.dp.toPx())
+            )
+        }
+    }
     val shape = RoundedCornerShape(percent = 50)
     val itemW = if (vertical) 66.dp else 70.dp
     val itemH = if (vertical) 62.dp else 56.dp
-    val n = items.size
-    val container: @Composable (@Composable () -> Unit) -> Unit = { content ->
-        if (vertical) Column(verticalArrangement = Arrangement.Center) { content() } else Row(verticalAlignment = Alignment.CenterVertically) { content() }
-    }
-    Box(
-        modifier
-            .shadow(18.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
-            .glass(backdrop, shape, glassTint())
-            .padding(5.dp)
+    LiquidSelector(
+        selected = selected,
+        onSelect = onSelect,
+        rest = rest,
+        modifier = modifier.shadow(18.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f)),
+        axis = if (vertical) LensAxis.Vertical else LensAxis.Horizontal,
+        // held, the lens grows out of the bar across it, as on iOS
+        growX = if (vertical) 0.24f else 0.16f,
+        growY = if (vertical) 0.06f else 0.28f,
+        under = backdrop,
+        base = MaterialTheme.colorScheme.background,
+        background = Modifier.liquidGlass(backdrop, barLook())
     ) {
-        Box(
-            Modifier
-                .drawBehind {
-                    val step = if (vertical) size.height / n else size.width / n
-                    val p = pos.value.coerceIn(-0.35f, n - 0.65f)
-                    val stretch = (abs(pos.velocity) * 0.055f).coerceAtMost(0.42f)
-                    val g = grow.value
-                    var w = if (vertical) size.width else step
-                    var h = if (vertical) step else size.height
-                    if (vertical) { h *= 1 + stretch; w *= 1 - stretch * 0.16f } else { w *= 1 + stretch; h *= 1 - stretch * 0.16f }
-                    w *= g; h *= g
-                    val along = step * (p + 0.5f)
-                    val c = if (vertical) Offset(size.width / 2, along) else Offset(if (rtl) size.width - along else along, size.height / 2)
-                    val tl = Offset(c.x - w / 2, c.y - h / 2)
-                    val r = CornerRadius(min(w, h) / 2)
-                    drawCircle(
-                        Brush.radialGradient(listOf(primary.copy(alpha = if (dark) 0.34f else 0.22f), Color.Transparent), c, max(w, h) * 0.62f),
-                        max(w, h) * 0.62f, c
-                    )
-                    drawRoundRect(lensFill, tl, Size(w, h), r)
-                    drawRoundRect(
-                        Brush.verticalGradient(listOf(lensRim, lensRim.copy(alpha = lensRim.alpha * 0.25f)), tl.y, tl.y + h),
-                        tl, Size(w, h), r, style = Stroke(1.dp.toPx())
-                    )
-                }
-                .pointerInput(n, vertical, rtl) {
-                    val step = if (vertical) size.height.toFloat() / n else size.width.toFloat() / n
-                    detectDragGestures(
-                        onDragStart = {
-                            dragging = true
-                            scope.launch { grow.animateTo(1.1f, spring(0.6f, Spring.StiffnessMedium)) }
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            val target = pos.value.roundToInt().coerceIn(0, n - 1)
-                            scope.launch { grow.animateTo(1f, spring(0.55f, Spring.StiffnessMedium)) }
-                            scope.launch { pos.animateTo(target.toFloat(), lensSpring) }
-                            if (target != selected) {
+        val tabs: @Composable () -> Unit = {
+            items.forEachIndexed { i, item ->
+                val on = i == selected
+                val src = remember { MutableInteractionSource() }
+                val pressed by src.collectIsPressedAsState()
+                val scale by animateFloatAsState(if (pressed) 0.86f else 1f, spring(0.5f, Spring.StiffnessMedium), label = "tabPress")
+                val tint by animateColorAsState(
+                    if (on) primary else MaterialTheme.colorScheme.onSurfaceVariant, Motion.quick(), label = "tabTint"
+                )
+                Column(
+                    Modifier
+                        .size(itemW, itemH)
+                        .liquidItem(i)
+                        .selectable(selected = on, interactionSource = src, indication = null, role = Role.Tab) {
+                            if (i != selected) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelect(target)
+                                onSelect(i)
                             }
                         },
-                        onDragCancel = {
-                            dragging = false
-                            scope.launch { grow.animateTo(1f); pos.animateTo(selected.toFloat(), lensSpring) }
-                        }
-                    ) { change, drag ->
-                        change.consume()
-                        val d = if (vertical) drag.y / step else (if (rtl) -drag.x else drag.x) / step
-                        scope.launch { pos.snapTo((pos.value + d).coerceIn(-0.35f, n - 0.65f)) }
-                    }
-                }
-        ) {
-            container {
-                items.forEachIndexed { i, item ->
-                    val on = i == selected
-                    val src = remember { MutableInteractionSource() }
-                    val pressed by src.collectIsPressedAsState()
-                    val scale by animateFloatAsState(if (pressed) 0.86f else 1f, spring(0.5f, Spring.StiffnessMedium), label = "tabPress")
-                    val tint by animateColorAsState(
-                        if (on) primary else MaterialTheme.colorScheme.onSurfaceVariant, Motion.quick(), label = "tabTint"
-                    )
-                    Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
                         Modifier
-                            .size(itemW, itemH)
-                            .clickable(interactionSource = src, indication = null) {
-                                if (i != selected) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onSelect(i)
-                                }
-                            }
-                            .semantics { this.selected = on; this.contentDescription = item.label },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .size(30.dp)
+                            .graphicsLayer { scaleX = scale; scaleY = scale },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            Modifier
-                                .size(30.dp)
-                                .graphicsLayer { scaleX = scale; scaleY = scale },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            item.progress?.let { f -> ProgressHalo(f, tint) }
-                            Icon(item.icon, null, Modifier.size(if (item.progress != null) 18.dp else 24.dp), tint = tint)
-                        }
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            item.label, fontSize = 11.sp, color = tint, maxLines = 1,
-                            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium
-                        )
+                        item.progress?.let { f -> ProgressHalo(f, tint) }
+                        Icon(item.icon, null, Modifier.size(if (item.progress != null) 18.dp else 24.dp), tint = tint)
                     }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        item.label, fontSize = 11.sp, color = tint, maxLines = 1,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium
+                    )
                 }
             }
+        }
+        if (vertical) {
+            Column(Modifier.padding(5.dp), verticalArrangement = Arrangement.Center) { tabs() }
+        } else {
+            Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) { tabs() }
         }
     }
 }
@@ -359,7 +333,13 @@ fun GlassAction(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(16.dp, shape, clip = false, ambientColor = tint, spotColor = tint)
-            .glass(backdrop, shape, tint)
+            .liquidGlass(
+                backdrop,
+                GlassLook(
+                    tint = tint.copy(alpha = 0.80f), frost = 1f, blur = 18.dp, band = 14.dp, depth = 8.dp, split = 0.12f,
+                    vibrance = 1.25f, specular = 0.9f, edge = 1.5.dp, fallbackTint = tint
+                )
+            )
             .clickable(interactionSource = src, indication = null) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()

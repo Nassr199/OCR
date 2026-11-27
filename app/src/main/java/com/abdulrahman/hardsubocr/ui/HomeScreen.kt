@@ -258,7 +258,7 @@ fun TabHeader(
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 27.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2)
         }
         if (status != null) {
@@ -333,7 +333,7 @@ private fun ReadyCard(vm: MainViewModel, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(10.dp))
             Text(
                 if (problem == null) "جاهز للاستخراج" else problem.removeSuffix("."),
-                fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f)
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp), modifier = Modifier.weight(1f)
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -382,7 +382,7 @@ private fun RunningBanner(fraction: Float, onShow: () -> Unit, modifier: Modifie
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text("استخراج قيد التشغيل", fontWeight = FontWeight.Bold)
+            Text("استخراج قيد التشغيل", style = MaterialTheme.typography.titleMedium)
             Hint("الإعدادات مقفلة حتى ينتهي أو توقفه.")
         }
         TextButton(onClick = onShow) { Text("عرض التقدم") }
@@ -449,23 +449,17 @@ private fun SourceCard(
             else "مضبوط للإنجليزية: كشف الحروف اللاتينية وقراءتها وتنظيفها.",
             Modifier.padding(top = 4.dp, bottom = 10.dp, start = 4.dp)
         )
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectTile("🖼", "صورة", "صورة واحدة", vm.sourceMode == SourceMode.IMAGE, enabled, Modifier.weight(1f).fillMaxHeight()) {
-                vm.chooseSource(SourceMode.IMAGE)
-            }
-            SelectTile("📁", "مجلد صور", "صور بتوقيت في الاسم", vm.sourceMode == SourceMode.FOLDER, enabled, Modifier.weight(1f).fillMaxHeight()) {
-                vm.chooseSource(SourceMode.FOLDER)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectTile("🗂", "مجلدات متعددة", "حلقات كاملة دفعة واحدة", vm.sourceMode == SourceMode.MULTI, enabled, Modifier.weight(1f).fillMaxHeight()) {
-                vm.chooseSource(SourceMode.MULTI)
-            }
-            SelectTile("🎬", "فيديو", "اكتشاف تلقائي للترجمة", vm.sourceMode == SourceMode.VIDEO, enabled, Modifier.weight(1f).fillMaxHeight()) {
-                vm.chooseSource(SourceMode.VIDEO)
-            }
-        }
+        val modes = listOf(SourceMode.IMAGE, SourceMode.FOLDER, SourceMode.MULTI, SourceMode.VIDEO)
+        LiquidTiles(
+            listOf(
+                TileSpec("🖼", "صورة", "صورة واحدة"),
+                TileSpec("📁", "مجلد صور", "صور بتوقيت في الاسم"),
+                TileSpec("🗂", "مجلدات متعددة", "حلقات كاملة دفعة واحدة"),
+                TileSpec("🎬", "فيديو", "اكتشاف تلقائي للترجمة")
+            ),
+            selected = modes.indexOf(vm.sourceMode),
+            enabled = enabled
+        ) { vm.chooseSource(modes[it]) }
         Spacer(Modifier.height(12.dp))
         when (vm.sourceMode) {
             SourceMode.IMAGE -> {

@@ -3,6 +3,17 @@
 package com.abdulrahman.hardsubocr.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.Role
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -63,6 +74,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -151,6 +163,28 @@ fun Modifier.pressScale(source: MutableInteractionSource): Modifier {
 
 // ============================================================================ surfaces
 
+/**
+ * A card as a slab of glass over the app's background: a translucent fill that lets the background's
+ * glow through, a faint sheen at the top, and a hairline rim lit from above.
+ */
+@Composable
+fun Modifier.glassCard(shape: Shape = RoundedCornerShape(24.dp)): Modifier {
+    val scheme = MaterialTheme.colorScheme
+    val dark = isDarkScheme()
+    val fill = scheme.surfaceContainer.copy(alpha = if (dark) 0.80f else 0.78f)
+    val sheen = Color.White.copy(alpha = if (dark) 0.045f else 0.32f)
+    val rimTop = Color.White.copy(alpha = if (dark) 0.15f else 0.85f)
+    val rimBottom = Color.White.copy(alpha = if (dark) 0.03f else 0.25f)
+    return this
+        .clip(shape)
+        .drawBehind {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            drawOutline(outline, fill)
+            drawOutline(outline, Brush.verticalGradient(listOf(sheen, Color.Transparent), 0f, size.height * 0.45f))
+            drawOutline(outline, Brush.verticalGradient(listOf(rimTop, rimBottom)), style = Stroke(1.dp.toPx()))
+        }
+}
+
 @Composable
 fun SectionCard(
     title: String,
@@ -166,8 +200,7 @@ fun SectionCard(
     Column(
         modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(24.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+            .glassCard()
             .animateContentSize(Motion.soft())
             .padding(16.dp)
     ) {
@@ -234,8 +267,7 @@ fun SettingsGroup(title: String?, modifier: Modifier = Modifier, content: @Compo
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer),
+                .glassCard(),
             content = content
         )
     }
@@ -249,8 +281,7 @@ fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Compos
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .glassCard()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             content = content
         )
@@ -366,7 +397,10 @@ fun StatusPill(text: String, color: Color, busy: Boolean = false) {
     }
 }
 
-/** Big selectable tile (engine / source choice). */
+/**
+ * Big selectable tile (engine / source choice). [ringed]: the tile sits in a [LiquidTiles] grid, whose
+ * lens draws the selected ring, so the tile draws only its own surface.
+ */
 @Composable
 fun SelectTile(
     emoji: String,
@@ -376,24 +410,26 @@ fun SelectTile(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    ringed: Boolean = false,
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(20.dp)
     val src = remember { MutableInteractionSource() }
     val bg by animateColorAsState(
-        if (selected) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surfaceContainerHigh, Motion.quick(), label = "tileBg"
+        if (selected) scheme.primaryContainer.copy(alpha = if (ringed) 0.42f else 0.55f) else scheme.surfaceContainerHigh, Motion.quick(), label = "tileBg"
     )
     val edge by animateColorAsState(
-        if (selected) scheme.primary else scheme.outlineVariant.copy(alpha = 0.5f), Motion.quick(), label = "tileEdge"
+        if (selected && !ringed) scheme.primary else scheme.outlineVariant.copy(alpha = 0.5f), Motion.quick(), label = "tileEdge"
     )
-    val edgeW by animateDpAsState(if (selected) 2.dp else 1.dp, Motion.quick(), label = "tileEdgeW")
+    val edgeW by animateDpAsState(if (selected && !ringed) 2.dp else 1.dp, Motion.quick(), label = "tileEdgeW")
     Column(
         modifier
             .pressScale(src)
             .background(bg, shape)
             .border(edgeW, edge, shape)
-            .clickable(interactionSource = src, indication = LocalIndication.current, enabled = enabled, onClick = onClick)
+            .clip(shape)
+            .selectable(selected = selected, interactionSource = src, indication = LocalIndication.current, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -445,7 +481,7 @@ fun StatTile(label: String, value: String, color: Color, modifier: Modifier = Mo
                     (slideOutVertically(Motion.quick()) { -it / 2 } + fadeOut(tween(Motion.FAST)))
             },
             label = "stat"
-        ) { v -> Text(v, color = color, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1) }
+        ) { v -> Text(v, color = color, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp), maxLines = 1) }
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
@@ -467,7 +503,7 @@ fun ProgressRing(fraction: Float, label: String, modifier: Modifier = Modifier) 
             strokeCap = StrokeCap.Round
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(String.format(java.util.Locale.US, "%.1f%%", f * 100), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(String.format(java.util.Locale.US, "%.1f%%", f * 100), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp))
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -542,8 +578,8 @@ fun SwitchRow(title: String, subtitle: String?, checked: Boolean, enabled: Boole
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Hint(subtitle)
         }
-        Spacer(Modifier.width(8.dp))
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        Spacer(Modifier.width(10.dp))
+        LiquidSwitch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 
@@ -600,31 +636,61 @@ fun RowSpaced(content: @Composable RowScope.() -> Unit) {
     ) { content() }
 }
 
-/** Short outcome line (test results…): green for success, red for failure, fades in. */
+/**
+ * Outcome of a test (key, GPU…): green for success, red for failure. It can be hidden («إخفاء») and
+ * shown again («إظهار النتيجة») for as long as it stands; a new result shows itself.
+ */
 @Composable
 fun ResultLine(text: String?, ok: Boolean) {
+    var hidden by rememberSaveable(text) { mutableStateOf(false) }
     AnimatedVisibility(
         visible = text != null,
         enter = fadeIn(Motion.quick()) + expandVertically(Motion.soft()),
         exit = fadeOut(tween(Motion.FAST)) + shrinkVertically(Motion.soft())
     ) {
         val c = if (ok) Good else MaterialTheme.colorScheme.error
-        Text(
-            text ?: "",
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp)
-                .background(c.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            color = c,
-            style = MaterialTheme.typography.bodySmall
-        )
+        AnimatedContent(
+            targetState = hidden,
+            transitionSpec = { (fadeIn(tween(Motion.NORMAL, delayMillis = 60)) togetherWith fadeOut(tween(Motion.FAST))).using(SizeTransform(clip = false)) },
+            label = "resultHidden"
+        ) { isHidden ->
+            if (isHidden) {
+                TextButton(onClick = { hidden = false }, modifier = Modifier.padding(top = 2.dp)) {
+                    Box(Modifier.size(8.dp).background(c, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text("إظهار النتيجة", style = MaterialTheme.typography.labelLarge)
+                    Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp))
+                }
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                        .background(c.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                        .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text ?: "",
+                        modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+                        color = c,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    IconButton(onClick = { hidden = true }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Filled.Close, "إخفاء النتيجة", Modifier.size(16.dp), tint = c)
+                    }
+                }
+            }
+        }
     }
 }
 
 // ============================================================================ choices
 
-/** Compact segmented control that never clips its labels (equal-width cells, 2 lines max). */
+/**
+ * Segmented control (equal-width cells, labels never clipped, 2 lines max). The chosen cell is marked
+ * by the liquid lens: it slides between cells, and can be dragged across them.
+ */
 @Composable
 fun <T> Segmented(
     options: List<Pair<T, String>>,
@@ -634,34 +700,49 @@ fun <T> Segmented(
     onSelect: (T) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier
-            .fillMaxWidth()
-            .background(scheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    val index = options.indexOfFirst { it.first == selected }
+    val currentOptions by rememberUpdatedState(options)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    LiquidSelector(
+        selected = index,
+        onSelect = { i -> currentOptions.getOrNull(i)?.let { currentOnSelect(it.first) } },
+        rest = remember(scheme.primary) { LensRest.fill(scheme.primary) },
+        modifier = modifier.fillMaxWidth(),
+        enabled = enabled,
+        axis = LensAxis.Horizontal,
+        corner = 12.dp,
+        growX = 0.05f,
+        growY = 0.22f,
+        base = scheme.surfaceContainer,
+        background = Modifier.background(scheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
     ) {
-        for ((value, label) in options) {
-            val on = value == selected
-            val bg by animateColorAsState(if (on) scheme.primary else Color.Transparent, Motion.quick(), label = "seg")
-            val fg by animateColorAsState(if (on) scheme.onPrimary else scheme.onSurfaceVariant, Motion.quick(), label = "segText")
-            Box(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 40.dp)
-                    .background(bg, RoundedCornerShape(12.dp))
-                    .clickable(enabled = enabled) { onSelect(value) }
-                    .padding(horizontal = 4.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    label,
-                    color = fg,
-                    fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 12.5.sp,
-                    maxLines = 2,
-                    textAlign = TextAlign.Center
-                )
+        val g = glass
+        Row(
+            Modifier.fillMaxWidth().padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            options.forEachIndexed { i, (value, label) ->
+                val on = i == index
+                val sel by animateFloatAsState(if (on) 1f else 0f, Motion.quick(), label = "seg")
+                val fg = lerp(scheme.onSurfaceVariant, lerp(scheme.onPrimary, scheme.onSurface, g), sel)
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 40.dp)
+                        .liquidItem(i)
+                        .selectable(selected = on, interactionSource = null, indication = null, enabled = enabled, role = Role.RadioButton) { onSelect(value) }
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        color = fg,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 12.5.sp,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -669,27 +750,97 @@ fun <T> Segmented(
 
 data class ChoiceItem<T>(val value: T, val title: String, val subtitle: String? = null)
 
-/** Vertical radio list, used where labels are long (settings). */
+/**
+ * Vertical list of options (settings, where labels are long). The chosen row is marked by the liquid
+ * lens; holding a row picks the lens up, and it can be slid to another row.
+ */
 @Composable
 fun <T> ChoiceList(items: List<ChoiceItem<T>>, selected: T, enabled: Boolean = true, onSelect: (T) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        for (it in items) {
-            val on = it.value == selected
-            val bg by animateColorAsState(
-                if (on) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color.Transparent, Motion.quick(), label = "choice"
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(bg, RoundedCornerShape(14.dp))
-                    .clickable(enabled = enabled) { onSelect(it.value) }
-                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = on, onClick = { onSelect(it.value) }, enabled = enabled)
-                Column(Modifier.weight(1f)) {
-                    Text(it.title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-                    it.subtitle?.let { sub -> Hint(sub) }
+    val scheme = MaterialTheme.colorScheme
+    val index = items.indexOfFirst { it.value == selected }
+    val currentItems by rememberUpdatedState(items)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    LiquidSelector(
+        selected = index,
+        onSelect = { i -> currentItems.getOrNull(i)?.let { currentOnSelect(it.value) } },
+        rest = remember(scheme.primaryContainer) { LensRest.fill(scheme.primaryContainer.copy(alpha = 0.45f)) },
+        modifier = Modifier.fillMaxWidth(),
+        enabled = enabled,
+        axis = LensAxis.Vertical,
+        holdToDrag = true,
+        corner = 14.dp,
+        growX = 0.02f,
+        growY = 0.06f,
+        base = scheme.surfaceContainer
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            items.forEachIndexed { i, it ->
+                val on = i == index
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .liquidItem(i)
+                        .clip(RoundedCornerShape(14.dp))
+                        .selectable(
+                            selected = on, interactionSource = null, indication = LocalIndication.current,
+                            enabled = enabled, role = Role.RadioButton
+                        ) { onSelect(it.value) }
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = on, onClick = null, enabled = enabled, modifier = Modifier.padding(12.dp))
+                    Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                        Text(it.title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                        it.subtitle?.let { sub -> Hint(sub) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice of a [LiquidTiles] grid. */
+class TileSpec(val emoji: String, val title: String, val subtitle: String, val badge: String? = null)
+
+/**
+ * Big choice tiles (engine, source) in a grid. The chosen tile is ringed by the liquid lens, which
+ * flows from tile to tile; holding a tile picks it up, and it can be slid to another tile.
+ */
+@Composable
+fun LiquidTiles(
+    tiles: List<TileSpec>,
+    selected: Int,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    columns: Int = 2,
+    onSelect: (Int) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    LiquidSelector(
+        selected = selected,
+        onSelect = { currentOnSelect(it) },
+        rest = remember(scheme.primary) { LensRest.ring(scheme.primary) },
+        modifier = modifier.fillMaxWidth(),
+        enabled = enabled,
+        axis = LensAxis.Both,
+        holdToDrag = true,
+        corner = 20.dp,
+        growX = 0.05f,
+        growY = 0.06f,
+        base = scheme.surfaceContainer
+    ) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            tiles.chunked(columns).forEachIndexed { row, chunk ->
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    chunk.forEachIndexed { col, t ->
+                        val i = row * columns + col
+                        SelectTile(
+                            t.emoji, t.title, t.subtitle, i == selected, enabled,
+                            Modifier.weight(1f).fillMaxHeight().liquidItem(i), badge = t.badge, ringed = true
+                        ) { onSelect(i) }
+                    }
+                    repeat(columns - chunk.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
