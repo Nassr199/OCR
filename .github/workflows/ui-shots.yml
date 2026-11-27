@@ -33,7 +33,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.abdulrahman.hardsubocr.ui.*" 2>&1 | tee shots.log
+          ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.abdulrahman.hardsubocr.ui.*" --tests "com.abdulrahman.hardsubocr.core.*" 2>&1 | tee shots.log
 
       - name: Publish (branch ui-shots-results)
         if: always()

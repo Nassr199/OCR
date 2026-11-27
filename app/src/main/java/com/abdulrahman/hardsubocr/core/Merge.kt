@@ -4,8 +4,8 @@ data class SubEntry(val startMs: Long, val endMs: Long, val text: String)
 
 /**
  * PRO    = merge repeats: neighbours within 350 ms whose texts are >= 90 % similar.
- * STRICT = merge split frames only (safe): touching pieces (gap <= 10 ms, VSF writes 1 ms) of the
- *          SAME text. Different texts are never merged.
+ * STRICT = merge split frames only (safe): pieces of the SAME text that touch (VSF writes 1 ms) or
+ *          are a blink apart (<= [Merge.BLINK_GAP_MS]). Different texts are never merged.
  * NONE   = no merging at all: every image is its own subtitle, exactly as named.
  */
 enum class MergeMode { PRO, STRICT, NONE }
@@ -37,17 +37,26 @@ object Merge {
     }
 
     /**
+     * A hole this short between two pieces of the same line is not a pause: the line blinks on screen.
+     * A burned-in subtitle does not vanish for a few pictures; the detector lost it there (a flash,
+     * text-like scenery moving behind it — a number plate, chrome — or a 25 fps film repeated in a
+     * 60 fps file). 150 ms = 3–4 pictures of a 24–25 fps film. Two lines of the same text further
+     * apart than that stay two lines (the 200 ms case of the merge test).
+     */
+    const val BLINK_GAP_MS = 150L
+
+    /**
      * Safe split-frame merge (replaces v2.1's rules in the app).
      *
      * v2.1 rule 2E merged two DIFFERENT sentences whenever they were 70–90 % similar and kept only
      * the first one, so the second subtitle silently disappeared ("هل أنت بخير؟" + "هل أنت متأكد؟").
      * Because VideoSubFinder writes back-to-back subtitles with a 1 ms gap, almost every pair hit it.
      *
-     * Here two pieces are joined only when they touch (gap <= [maxGapMs]) and are the same text
-     * ([sameThreshold] after removing tashkeel/punctuation case-insensitively). The kept text is
-     * the one of the longer piece (more frames = the fully visible state, not a fade).
+     * Here two pieces are joined only when they touch or are a blink apart (gap <= [maxGapMs]) and are
+     * the same text ([sameThreshold] after removing tashkeel/punctuation case-insensitively). The kept
+     * text is the one of the longer piece (more frames = the fully visible state, not a fade).
      */
-    fun mergeSplits(items: List<SubEntry>, maxGapMs: Long = 10, sameThreshold: Double = 0.92): List<SubEntry> {
+    fun mergeSplits(items: List<SubEntry>, maxGapMs: Long = BLINK_GAP_MS, sameThreshold: Double = 0.92): List<SubEntry> {
         val sorted = items.filter { it.text.isNotBlank() }.sortedBy { it.startMs }
         val out = ArrayList<SubEntry>(sorted.size)
         val keys = ArrayList<String>(sorted.size)
