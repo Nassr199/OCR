@@ -151,6 +151,9 @@ class JobRunner(
 
     /** Tokens (and OpenRouter's cost) of the AI engines, summed over the job. */
     private val aiUsage = AiUsage()
+    /** AI cross-check over the whole job: images whose two readings agreed / that a third reading decided. */
+    private val crossAgreed = java.util.concurrent.atomic.AtomicInteger()
+    private val crossDecided = java.util.concurrent.atomic.AtomicInteger()
 
     /**
      * Image enhancement is part of what an AI engine reads; it enters the resume-memory key only when
@@ -190,6 +193,7 @@ class JobRunner(
         retry = RetryPolicy(maxRetries = req.retries),
         cache = cache,
         keySuffix = keySuffix,
+        crossCheck = !req.engine.isClassicOcr && req.aiCrossCheck,
         listener = object : PipelineListener {
             override fun onItem(item: OcrItem, outcome: ItemOutcome) {
                 when (outcome) {
@@ -197,6 +201,19 @@ class JobRunner(
                     is ItemOutcome.Empty -> addLog("○ " + item.name.take(28) + "  —  لا توجد ترجمة")
                     is ItemOutcome.Failed -> addLog("✖ " + item.name.take(28) + "  —  " + outcome.message.take(80))
                 }
+            }
+
+            override fun onCrossAgreed(item: OcrItem) {
+                crossAgreed.incrementAndGet()
+            }
+
+            override fun onCrossCheck(item: OcrItem, texts: List<String>, chosen: String) {
+                crossDecided.incrementAndGet()
+                addLog(
+                    "⚖ " + item.name.take(28) + "  —  اختلفت القراءتان، وحسمت الثالثة: «" + chosen.replace('\n', ' ').take(60) + "»" +
+                        texts.filter { it != chosen }.joinToString("") { "  ·  «" + it.replace('\n', ' ').take(40) + "»" }
+                )
+                DiagLog.i("ai", "cross-check ${item.name}: " + texts.joinToString(" | ") { it.replace('\n', '⏎') } + " → " + chosen.replace('\n', '⏎'))
             }
 
             override fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {
@@ -359,6 +376,9 @@ class JobRunner(
 
     private fun endLog(how: String, outputs: List<JobOutput>) {
         aiUsage.summary()?.let { addLog("🧮 ${if (req.engine == EngineKind.OPENROUTER) "OpenRouter" else "Gemini"}: $it") }
+        if (crossAgreed.get() + crossDecided.get() > 0) {
+            addLog("⚖ التحقق المزدوج: اتفقت القراءتان في ${crossAgreed.get()} صورة، وحسمت قراءة ثالثة ${crossDecided.get()} صورة")
+        }
         val st = pipeline?.stats
         DiagLog.i(
             "Job",

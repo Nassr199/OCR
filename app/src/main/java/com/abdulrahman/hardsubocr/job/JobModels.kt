@@ -58,7 +58,9 @@ data class JobRequest(
     val profile: AiProfile?,
     val enhance: Boolean,
     val mediaHigh: Boolean,
-    val stabilize: Boolean
+    val stabilize: Boolean,
+    /** Gemini/OpenRouter: the cross-check (two readings, a third when they differ). */
+    val aiCrossCheck: Boolean = true
 )
 
 /** One line of the live log; [id] keeps the list smooth when new lines arrive. */

@@ -526,8 +526,8 @@ object AiRecipe {
 
     /**
      * Version of what the AI reads (picture and instructions). Part of the resume-memory key: readings
-     * made by an older recipe are not taken again. 2 = 2.9.0 (the subtitle framed, instructions for
-     * every line, names and punctuation as drawn).
+     * made by an older recipe are not taken again. 2 = 2.9.0 (the original picture instead of v2.6's
+     * grayscale one; the cross-check adds "|x" to the key).
      */
     const val READING_VERSION = 2
 

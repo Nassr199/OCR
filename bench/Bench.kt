@@ -165,7 +165,7 @@ private fun colorPicture(jpeg: ByteArray, name: String, frame: Boolean): com.abd
 }
 
 /** How the picture is made for a variant. */
-private enum class Pic { V26, V26_FRAMED, V26_FRAMED_NO_UPSCALE, COLOR, COLOR_FRAMED }
+private enum class Pic { V26, V26_FRAMED, V26_FRAMED_NO_UPSCALE, COLOR, COLOR_FRAMED, CROSS }
 
 /** The AI instructions of 2.8.0, to compare with today's (Prompts.SUBTITLE_PROMPT). */
 private const val PROMPT_280: String =
@@ -201,9 +201,8 @@ private val PROMPT_EVERY_LINE: String = PROMPT_280.replace(
 private val MIN = com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL
 private val AI_VARIANTS = listOf(
     AiVariant("2.8.0", Pic.V26, PROMPT_280, MIN),
-    AiVariant("color", Pic.COLOR, PROMPT_280, MIN),
-    AiVariant("color framed", Pic.COLOR_FRAMED, PROMPT_280, MIN),
-    AiVariant("color framed every line", Pic.COLOR_FRAMED, PROMPT_EVERY_LINE, MIN),
+    AiVariant("2.9.0 one reading", Pic.COLOR, null, MIN),
+    AiVariant("2.9.0 cross-check", Pic.CROSS, null, MIN),
 )
 private const val AI_RUNS = 3
 
@@ -306,6 +305,7 @@ fun main(args: Array<String>) = runBlocking {
     val aiFaults = LinkedHashMap<String, IntArray>()
     val aiGate = kotlinx.coroutines.sync.Semaphore(2)
     val aiUsage = com.abdulrahman.hardsubocr.core.AiUsage()
+    val crossLog = java.util.concurrent.ConcurrentLinkedQueue<String>()
     /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
     fun shape(name: String, got: String, truth: String): String {
         val s = shapes.getOrPut(name) { IntArray(2) }
@@ -395,12 +395,24 @@ fun main(args: Array<String>) = runBlocking {
                         try {
                             val engine = if (label == "gemini") com.abdulrahman.hardsubocr.core.GeminiEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
                             else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
-                            var r = runCatching { engine.recognize(pics[v.pic]!!) }
-                            var tries = 0
-                            while (tries < 6 && r.exceptionOrNull() is com.abdulrahman.hardsubocr.core.OcrError.Retryable) {
-                                kotlinx.coroutines.delay((r.exceptionOrNull() as com.abdulrahman.hardsubocr.core.OcrError.Retryable).retryAfterMs ?: (2000L shl tries).coerceAtMost(20_000))
-                                tries++
-                                r = runCatching { engine.recognize(pics[v.pic]!!) }
+                            suspend fun once(img: com.abdulrahman.hardsubocr.core.PreparedImage): String {
+                                var r = runCatching { engine.recognize(img) }
+                                var tries = 0
+                                while (tries < 6 && r.exceptionOrNull() is com.abdulrahman.hardsubocr.core.OcrError.Retryable) {
+                                    kotlinx.coroutines.delay((r.exceptionOrNull() as com.abdulrahman.hardsubocr.core.OcrError.Retryable).retryAfterMs ?: (2000L shl tries).coerceAtMost(20_000))
+                                    tries++
+                                    r = runCatching { engine.recognize(img) }
+                                }
+                                return r.getOrThrow()
+                            }
+                            val r = runCatching {
+                                if (v.pic == Pic.CROSS) {
+                                    val o = com.abdulrahman.hardsubocr.core.AiConsensus.read(listOf(pics[Pic.COLOR]!!, pics[Pic.V26]!!, pics[Pic.COLOR_FRAMED]!!)) { img ->
+                                        Cleaner.clean(once(img), CleanMode.EXACT)
+                                    }
+                                    crossLog.add("$file ${o.readings} readings: " + o.texts.joinToString(" | ") { one(it) } + " → " + one(o.text))
+                                    o.text
+                                } else once(pics[v.pic]!!)
                             }
                             Triple(v, n, r)
                         } finally { aiGate.release() }
@@ -506,6 +518,11 @@ fun main(args: Array<String>) = runBlocking {
     }
     if (aiFaults.isNotEmpty()) {
         aiUsage.summary()?.let { sb.append("AI usage of this run: ").append(it).append("\n\n") }
+        if (crossLog.isNotEmpty()) {
+            sb.append("Cross-check decisions:\n\n")
+            for (l in crossLog) sb.append("- ").append(l).append('\n')
+            sb.append('\n')
+        }
         sb.append("## AI faults (runs)\n\n| variant | line left out | «خوليا» | dot at a line start | letters wrong | failed |\n|---|---|---|---|---|---|\n")
         for ((k, f) in aiFaults) sb.append("| $k | ${f[0]} | ${f[1]} | ${f[2]} | ${f[3]} | ${f[4]} |\n")
         sb.append('\n')

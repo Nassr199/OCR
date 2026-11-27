@@ -148,6 +148,10 @@ sealed class ItemOutcome {
 interface PipelineListener {
     fun onItem(item: OcrItem, outcome: ItemOutcome) {}
     fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {}
+    /** The AI cross-check needed a third reading for [item]; [texts] are the readings, [chosen] the decision. */
+    fun onCrossCheck(item: OcrItem, texts: List<String>, chosen: String) {}
+    /** The AI cross-check's two readings of [item] agreed. */
+    fun onCrossAgreed(item: OcrItem) {}
 
     /** The number of requests sent at once changed ([AdaptiveLimit]): [limit] of [workers]. */
     fun onLimit(limit: Int, workers: Int) {}
@@ -165,6 +169,9 @@ class PipelineStats {
     val failed = AtomicInteger()
     val cached = AtomicInteger()
     val retries = AtomicInteger()
+    /** AI cross-check: images whose two readings agreed, and images a third reading decided. */
+    val crossAgreed = AtomicInteger()
+    val crossDecided = AtomicInteger()
 }
 
 class OcrPipeline(
@@ -180,7 +187,9 @@ class OcrPipeline(
     /** After this many images in a row fail for good, the job stops (service is refusing us). */
     private val breakerThreshold: Int = 12,
     /** Extra part of the resume-memory key (settings that change the reading but not the engine id). */
-    private val keySuffix: String = ""
+    private val keySuffix: String = "",
+    /** Gemini/OpenRouter: read each image from two pictures, a third deciding when they differ ([AiConsensus]). */
+    private val crossCheck: Boolean = false
 ) {
     private val workers = concurrency.coerceIn(1, 16)
 
@@ -205,7 +214,7 @@ class OcrPipeline(
     private val cooldownUntil = AtomicLong(0)
     private val consecutiveFailures = AtomicInteger(0)
 
-    private fun cacheKey(item: OcrItem) = "${engine.cacheId}|$cleanMode|$stripDiacritics|${item.key}$keySuffix"
+    private fun cacheKey(item: OcrItem) = "${engine.cacheId}|$cleanMode|$stripDiacritics|${item.key}$keySuffix" + (if (crossCheck) "|x" else "")
 
     /** Every resume-memory key of this engine and its settings starts with this. */
     val cachePrefix: String get() = "${engine.cacheId}|"
@@ -239,12 +248,29 @@ class OcrPipeline(
         }
 
         val outcome: ItemOutcome = try {
-            val prepared = withContext(Dispatchers.IO) { item.load() }.let { bytes ->
-                preparer.prepare(bytes, item.name, engine.kind)
-            }.let { PreparedImage(it.bytes, it.mime, it.width, it.height, item.name) }
-            val raw = recognizeWithRetry(item, prepared)
-            val text = Cleaner.clean(raw, cleanMode, stripDiacritics)
-            logDropped(item, raw, text)
+            val bytes = withContext(Dispatchers.IO) { item.load() }
+            val text = if (crossCheck && !engine.kind.isClassicOcr) {
+                val views = withContext(Dispatchers.IO) { preparer.views(bytes, item.name, engine.kind) }
+                    .map { PreparedImage(it.bytes, it.mime, it.width, it.height, item.name) }
+                val outcome = AiConsensus.read(views) { img ->
+                    val raw = recognizeWithRetry(item, img)
+                    Cleaner.clean(raw, cleanMode, stripDiacritics).also { logDropped(item, raw, it) }
+                }
+                if (outcome.agreed) {
+                    stats.crossAgreed.incrementAndGet()
+                    listener.onCrossAgreed(item)
+                }
+                else if (outcome.readings > 2) {
+                    stats.crossDecided.incrementAndGet()
+                    listener.onCrossCheck(item, outcome.texts, outcome.text)
+                }
+                outcome.text
+            } else {
+                val prepared = preparer.prepare(bytes, item.name, engine.kind)
+                    .let { PreparedImage(it.bytes, it.mime, it.width, it.height, item.name) }
+                val raw = recognizeWithRetry(item, prepared)
+                Cleaner.clean(raw, cleanMode, stripDiacritics).also { logDropped(item, raw, it) }
+            }
             cache?.put(ck, text)
             consecutiveFailures.set(0)
             if (text.isNotEmpty()) ItemOutcome.Text(text, false) else ItemOutcome.Empty(false)

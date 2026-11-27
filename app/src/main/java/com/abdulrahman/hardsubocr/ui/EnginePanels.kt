@@ -206,7 +206,7 @@ private fun thinkingHint(t: ThinkingLevel): String = when (t) {
 }
 
 /**
- * Gemini and OpenRouter: one panel — key, model, thinking level. Both read the
+ * Gemini and OpenRouter: one panel — key, model, thinking level, the cross-check. Both read the
  * same way (AiRecipe): the subtitle band, enlarged and sharpened as in ocr_windows_v2.6.py, with its
  * instructions. Only the key and the model list differ.
  */
@@ -251,6 +251,14 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
     SectionLabel("مستوى التفكير")
     Segmented(thinkingOptions, vm.thinking, enabled) { vm.chooseThinking(it) }
     Hint(thinkingHint(vm.thinking), Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
+
+    Spacer(Modifier.height(8.dp))
+    SwitchRow(
+        "التحقق المزدوج",
+        "يقرأ النموذج كل صورة مرتين بنظرتين مختلفتين: الصورة الأصلية، ونسخة محسّنة منها. إن اتفقت القراءتان قُبلت، وإن اختلفتا حسمت قراءة ثالثة للترجمة وحدها. أدق، وتكلفته قرابة الضعف.",
+        vm.aiCrossCheck,
+        enabled
+    ) { vm.chooseAiCrossCheck(it) }
 }
 
 // ============================================================================ API key

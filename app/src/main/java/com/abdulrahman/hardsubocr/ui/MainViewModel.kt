@@ -61,6 +61,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val job: StateFlow<JobState> = JobManager.state
 
     /** The log of the last job, kept after it ends: the processing tab shows it under the result. */
+    /** Gemini/OpenRouter: «التحقق المزدوج». */
+    var aiCrossCheck by mutableStateOf(s.aiCrossCheck)
+        private set
+
+    fun chooseAiCrossCheck(on: Boolean) {
+        aiCrossCheck = on; s.aiCrossCheck = on
+    }
+
     var lastLog by mutableStateOf<List<com.abdulrahman.hardsubocr.job.LogLine>>(emptyList())
         private set
 
@@ -665,7 +673,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             profile = s.profileFor(e),
             enhance = s.enhanceFor(e),
             mediaHigh = true,
-            stabilize = s.stabilizeFor(e)
+            stabilize = s.stabilizeFor(e),
+            aiCrossCheck = aiCrossCheck
         )
         JobManager.start(ctx, req)
     }
