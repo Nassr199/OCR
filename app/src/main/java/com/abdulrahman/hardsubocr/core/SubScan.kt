@@ -95,13 +95,17 @@ data class ScanParams(
      */
     val carryText: Boolean = true,
     /**
-     * Proof that a line never left the screen between two pieces of the detector (a short line over a
-     * fast scene: a number plate or chrome moving behind it is cut into many pieces): text pixels on
-     * screen without a break since the earlier piece began still form a line, and nothing that stood
-     * still has gone. Moving scenery cannot give this proof — it does not stay on a pixel. Each piece
-     * only CARRIES the proof ([ScanSegment.continuesId]); whether the two pieces are one line is
-     * decided by what is read on them ([Arbiter.joinUnbroken]). Only with [repairSplits]; no decision
-     * of the detector changes.
+     * A line cut into pieces by moving scenery (a number plate or chrome passing behind a short line
+     * over a fast scene) is ONE subtitle again — one piece, one picture — when the detector sees that
+     * it never left the screen: the pixels on screen without a break since the first piece began still
+     * form a line; nothing that stood still has left without something standing beside it (a subtitle
+     * replaced, the line gone); nothing new has come and stayed far from that line (a word or a line
+     * added, the next subtitle). Moving scenery does not stay on a pixel, so it gives no such proof.
+     * Pieces are joined only once this has been watched long enough; where it fails, they are left as
+     * found. Only with [repairSplits], in 2.1's way ([legacy21]); no other decision of the detector
+     * changes. The proof also goes
+     * with the pieces it does not join ([ScanSegment.continuesId]): if they read the same, they are
+     * one line ([Arbiter.joinUnbroken]).
      */
     val joinUnbroken: Boolean = true
 ) {
@@ -572,8 +576,39 @@ class SubtitleTracker(private val p: ScanParams) {
 
     /** Proof of an unbroken line (see [ScanParams.joinUnbroken]). */
     private val proof = p.repairSplits && p.joinUnbroken
+    /** The detector itself joins such a line (2.1's way of reading frames, one frame of persistence). */
+    private val chain = proof && p.stableNeed <= 1
+
+    /** Pieces joined into the line they continue (one subtitle, one picture) — for the report. */
+    var joinedPieces = 0
+        private set
+    /** Pieces that started with their line still on screen (linked) / refused: no line stayed, something left, something new. */
+    var linkOk = 0
+        private set
+    var linkNoLine = 0
+        private set
+    var linkGone = 0
+        private set
+    var linkNew = 0
+        private set
+    /** Joins undone while watching: nothing stayed as a line, something left, something new came and stayed. */
+    var breakVoid = 0
+        private set
+    var breakGone = 0
+        private set
+    var breakNew = 0
+        private set
     /** Per pixel of the frame's text mask: since when it has been there without a break (-1 = not now). */
     private var since = LongArray(0)
+    private var leavingBuf = IntArray(256)
+    private var leavingFrom = LongArray(256)
+
+    /** Per pixel: when it last left after standing still with nothing standing still beside it (a line gone)... */
+    private var goneAt = LongArray(0)
+    /** ...and since when it had been there. */
+    private var goneFrom = LongArray(0)
+    /** The usual time between two analysed frames. */
+    private var frameDtUs = 40_000L
 
     private inner class Seg(val id: Int, var startUs: Long, val isText: Boolean, w: Int, h: Int, val startFrame: Int) {
         /** frame index at which this state was created (startFrame may be an inherited age baseline) */
@@ -599,10 +634,40 @@ class SubtitleTracker(private val p: ScanParams) {
         var pool = 0
         var lastPoolUs = Long.MIN_VALUE / 2
         var growFrames = 0
-        /** What stood still on screen when this piece ended (pixels without a break for [STILL_US]). */
-        var stillAtEnd: BooleanArray? = null
-        /** The piece this one continues: its text never left the screen in between (proven at this one's start). */
+        /** The held piece whose line this one continues, as far as can be told yet (see [link], [watch]). */
         var continues: Seg? = null
+        /** Pieces of the same line joined into this one; their ids go when this one is final. */
+        val parts = ArrayList<Seg>(0)
+        /** This piece's own end, before [parts] were joined into it. */
+        var ownEndUs = -1L
+        /** Nothing more joins this one (its line left, something new came, or no line stayed). */
+        var chainClosed = false
+        /** Its chain's line left at this time: it joins only if it ended by then. */
+        var endCap = Long.MAX_VALUE
+        /** Its chain was watched until only what stands still was left of it, and that was a line ([seenCount] pixels). */
+        var lineSeen = false
+        var seenCount = 0
+        /** Its line was looked at once, [LINE_US] after it began. */
+        var lineChecked = false
+        /**
+         * With [continues]: what was new when this piece began (what made the detector start it) and
+         * since when. If it stays, this piece is a subtitle (or a still thing) of its own, not scenery
+         * passing behind the line; when it has left, it was scenery ([ownLeft]).
+         */
+        var own: IntArray? = null
+        var ownFrom = 0L
+        var ownLeft = false
+        /** The chain this piece was joined into (its picture and times are that one's). */
+        var joinedInto: Seg? = null
+        /**
+         * The piece just before this one, when a text line never left the screen in between (pixels on
+         * screen without a break since that piece began still form a line when this one starts, and
+         * what stood still when it ended is that line). Goes with the piece ([ScanSegment.continuesId]):
+         * the reading joins the two if they read the same ([Arbiter.joinUnbroken]).
+         */
+        var proofPrev: Seg? = null
+        /** What stood still on screen when this piece ended (pixels without a break for [STATIC_US]). */
+        var stillAtEnd: BooleanArray? = null
 
         fun reseed(m: TextMask) {
             java.util.Arrays.fill(counts, 0.toShort())
@@ -835,12 +900,8 @@ class SubtitleTracker(private val p: ScanParams) {
      */
     fun pushRaw(ptsUs: Long, raw: TextMask): ScanDecision {
         framesSeen++
-        if (proof) {
-            if (since.size != raw.bits.size) since = LongArray(raw.bits.size) { -1L }
-            val b = raw.bits
-            for (i in since.indices) since[i] = if (!b[i]) -1L else if (since[i] < 0) ptsUs else since[i]
-        }
         gw = raw.width; gh = raw.height
+        if (proof) trackPixels(ptsUs, raw.bits)
         val before = prevPtsUs
         prevPtsUs = ptsUs
 
@@ -865,6 +926,7 @@ class SubtitleTracker(private val p: ScanParams) {
         val captures = ArrayList<Capture>(2)
         val closed = ArrayList<ScanSegment>(1)
         val discarded = ArrayList<Int>(1)
+        if (chain) watch(ptsUs, closed, discarded)
 
         val cur = current
         if (cur != null) {
@@ -898,7 +960,8 @@ class SubtitleTracker(private val p: ScanParams) {
                     hold(cur, closed, discarded)
                     val seg = Seg(nextId++, at, true, gw, gh, cur.startFrame)
                     seg.dormant = cur.dormant
-                    seg.continues = held?.takeIf { unbroken(it, seg) }
+                    seg.proofPrev = held?.let { lastPiece(it) }?.takeIf { unbroken(it, seg) }
+                    seg.continues = link(held, seg, ptsUs, BooleanArray(m.bits.size) { m.bits[it] && !cur.stable[it] }, at)
                     seg.lastUs = ptsUs
                     seg.add(m)
                     seg.bestScore = m.count.toDouble()
@@ -1017,20 +1080,23 @@ class SubtitleTracker(private val p: ScanParams) {
             val h = held
             val om = cc.own ?: cc.mask
             val oDil = cc.ownDil ?: cc.dil
-            if (p.repairSplits && h != null && backDate(cc.startUs) - h.endUs <= p.bridgeMs * 1000 &&
-                !isChange(MaskCompare.compare(h.stable, h.stableCount, h.stableDil, om.bits, om.count, oDil, gw, gh))
+            val last = h?.let { lastPiece(it) }
+            if (p.repairSplits && h != null && last != null && backDate(cc.startUs) - h.endUs <= p.bridgeMs * 1000 &&
+                !isChange(MaskCompare.compare(last.stable, last.stableCount, last.stableDil, om.bits, om.count, oDil, gw, gh))
             ) {
                 // Same subtitle again after a flash / short blank / false change: continue it.
                 held = null
-                h.endUs = -1
-                h.lastUs = ptsUs
-                h.add(om)
-                current = h
-                planCaptures(h, ptsUs, om, cmpTo(h, om, oDil), captures)
+                val r = resumeChain(h, last, discarded, closed)
+                r.endUs = -1
+                r.lastUs = ptsUs
+                r.add(om)
+                current = r
+                planCaptures(r, ptsUs, om, cmpTo(r, om, oDil), captures)
                 return ScanDecision(captures, closed, discarded)
             }
             val seg = Seg(nextId++, start, true, gw, gh, cc.startFrame)
-            seg.continues = held?.takeIf { unbroken(it, seg) }
+            seg.proofPrev = held?.let { lastPiece(it) }?.takeIf { unbroken(it, seg) }
+            seg.continues = link(held, seg, ptsUs, om.bits, cc.startUs)
             seg.carry = cc.carry
             if (cc.carry == null && cur != null) seg.dormant = cur.carry ?: cur.dormant
             seg.lastUs = ptsUs
@@ -1062,37 +1128,21 @@ class SubtitleTracker(private val p: ScanParams) {
 
     /** Pixels of [a] with no pixel of [b] within [r] (square window); stops counting at [stopAt]. */
     private fun farCount(a: BooleanArray, b: BooleanArray, r: Int, stopAt: Int): Int {
-        val w = gw
-        val h = gh
-        val stride = w + 1
-        if (integral.size != stride * (h + 1)) integral = IntArray(stride * (h + 1))
-        val ii = integral
-        for (y in 0 until h) {
-            var run = 0
-            val row = y * w
-            val o = (y + 1) * stride
-            for (x in 0 until w) {
-                if (b[row + x]) run++
-                ii[o + x + 1] = ii[o - stride + x + 1] + run
-            }
-        }
         var n = 0
-        for (y in 0 until h) {
-            val y0 = maxOf(0, y - r)
-            val y1 = minOf(h, y + r + 1)
-            val row = y * w
-            for (x in 0 until w) {
+        forEachFar(a, b, r) { n++; n < stopAt }
+        return n
+    }
+
+    /** Calls [f] for each pixel of [a] with no pixel of [b] within [r] (a square); stops when [f] says false. */
+    private inline fun forEachFar(a: BooleanArray, b: BooleanArray, r: Int, f: (Int) -> Boolean) {
+        buildIntegralOf(b)
+        for (y in 0 until gh) {
+            val row = y * gw
+            for (x in 0 until gw) {
                 if (!a[row + x] || b[row + x]) continue
-                val x0 = maxOf(0, x - r)
-                val x1 = minOf(w, x + r + 1)
-                val sum = ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0]
-                if (sum == 0) {
-                    n++
-                    if (n >= stopAt) return n
-                }
+                if (windowCount(x, y, r) == 0 && !f(row + x)) return
             }
         }
-        return n
     }
 
     private fun planCaptures(s: Seg, ptsUs: Long, m: TextMask, c: MaskCmp, out: MutableList<Capture>) {
@@ -1114,7 +1164,12 @@ class SubtitleTracker(private val p: ScanParams) {
     private fun hold(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
         if (proof) s.stillAtEnd = stillNow(prevPtsUs)
         val h = held
-        if (h != null) emit(h, closed, discarded)
+        if (h != null && joins(s, h)) {
+            // its line never left: one subtitle with the held piece (watched until it is final)
+            join(h, s)
+            return
+        }
+        if (h != null) settle(h, prevPtsUs, closed, discarded)
         if (p.repairSplits) held = s else {
             held = null; emit(s, closed, discarded)
         }
@@ -1122,15 +1177,60 @@ class SubtitleTracker(private val p: ScanParams) {
 
     private fun expireHeld(ptsUs: Long, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
         val h = held ?: return
+        if (linked(current, h)) return // kept while the piece that continues its line is on
         if (ptsUs - h.endUs > p.bridgeMs * 1000) {
             held = null
-            emit(h, closed, discarded)
+            settle(h, ptsUs, closed, discarded)
         }
     }
 
+    private fun linked(s: Seg?, h: Seg) = s != null && s.continues === h
+
+    /** [s] (just ended) is one subtitle with [h]: linked, and ended before its line left. */
+    private fun joins(s: Seg, h: Seg) = linked(s, h) && s.endUs <= s.endCap
+
+    private fun lastPiece(h: Seg) = h.parts.lastOrNull() ?: h
+
+    /**
+     * The piece to go on with when the last piece of [h]'s chain ([last]) comes back after a flash
+     * (as before: that piece goes on). With pieces joined into [h] whose scenery has passed, the line
+     * never left: the chain becomes that one piece (from [h]'s start). Otherwise the chain is final
+     * without it.
+     */
+    private fun resumeChain(h: Seg, last: Seg, discarded: MutableList<Int>, closed: MutableList<ScanSegment>): Seg {
+        if (last === h) return h
+        h.parts.remove(last)
+        last.joinedInto = null
+        last.continues = null
+        if (h.lineSeen && h.parts.all { ownStays(it) < minEvidence() } && ownStays(last) < minEvidence()) {
+            for (q in h.parts) discarded.add(q.id)
+            joinedPieces += h.parts.size + 1
+            h.parts.clear()
+            discarded.add(h.id)
+            last.startUs = h.startUs
+            last.proofPrev = h.proofPrev
+            return last
+        }
+        h.endUs = if (h.parts.isEmpty()) h.ownEndUs else h.parts.last().endUs
+        settle(h, prevPtsUs, closed, discarded)
+        return last
+    }
+
+    private fun join(h: Seg, s: Seg) {
+        if (h.parts.isEmpty()) h.ownEndUs = h.endUs
+        h.parts.add(s)
+        s.joinedInto = h
+        h.endUs = maxOf(h.endUs, s.endUs)
+        h.lastUs = maxOf(h.lastUs, s.lastUs)
+    }
+
     private fun emit(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        joinedPieces += s.parts.size
+        for (q in s.parts) discarded.add(q.id)
+        s.parts.clear()
         if (s.endUs - s.startUs >= p.minDurationMs * 1000 && s.stableCount > 0) {
-            closed.add(ScanSegment(s.id, s.startUs, s.endUs, s.mask(gw, gh), s.continues?.id ?: -1))
+            val prev = s.proofPrev?.let { it.joinedInto ?: it }
+            closed.add(ScanSegment(s.id, s.startUs, s.endUs, s.mask(gw, gh), prev?.id ?: -1))
         } else discarded.add(s.id)
     }
 
@@ -1145,60 +1245,449 @@ class SubtitleTracker(private val p: ScanParams) {
             cur.endUs = if (firstMismatchUs >= 0) firstMismatchUs else endUs
             val h = held
             held = null
-            if (h != null) emit(h, closed, discarded)
-            emit(cur, closed, discarded)
+            if (h != null && joins(cur, h)) {
+                join(h, cur)
+                settle(h, prevPtsUs, closed, discarded)
+            } else {
+                if (h != null) settle(h, prevPtsUs, closed, discarded)
+                emit(cur, closed, discarded)
+            }
         } else {
             val h = held
             held = null
-            if (h != null) emit(h, closed, discarded)
+            if (h != null) settle(h, prevPtsUs, closed, discarded)
         }
         firstMismatchUs = -1
         return ScanDecision(emptyList(), closed, discarded)
     }
 
-    /** Pixels on screen without a break for [STILL_US] or more (what moves does not stay on a pixel). */
+    /** Pixels on screen without a break for [STATIC_US] or more (what moves does not stay on a pixel). */
     private fun stillNow(nowUs: Long): BooleanArray {
         val out = BooleanArray(since.size)
-        for (i in since.indices) if (since[i] >= 0 && nowUs - since[i] >= STILL_US) out[i] = true
+        for (i in since.indices) if (since[i] >= 0 && nowUs - since[i] >= STATIC_US) out[i] = true
         return out
     }
 
     /**
-     * Does [b], starting now, continue [a] (held, ended a moment ago)? Proof, on the frame masks:
-     *  1. what has been on screen without a break since [a] began is a text line: a line never left,
-     *     not even in the hole between the two pieces;
-     *  2. everything that stood still when [a] ended belongs to that line: nothing gone (a subtitle
-     *     replaced, another line) and nothing come and settled since [a] began (any doubt: no proof).
-     * What the two pieces SAY is not known here: the reading decides ([Arbiter.joinUnbroken]).
+     * Does [b], starting now, continue [a] (the piece just before, ended a moment ago) — for the
+     * reading ([ScanSegment.continuesId])? On the frame masks: what has been on screen without a
+     * break since [a] began is a text line, and what stood still when [a] ended is that line. What the
+     * two pieces SAY is not known here: the reading decides ([Arbiter.joinUnbroken]). (3.0.4.)
      */
     private fun unbroken(a: Seg, b: Seg): Boolean {
         if (!proof || !a.isText) return false
         if (b.startUs - a.endUs > p.bridgeMs * 1000 || since.size != gw * gh) return false
-        val n = since.size
-        val from = a.startUs + SLACK_US
-        val kept = BooleanArray(n)
-        var keptCount = 0
-        for (i in 0 until n) {
-            val t = since[i]
-            if (t in 0..from) {
-                kept[i] = true; keptCount++
-            }
-        }
-        if (keptCount < p.minTextPixels) return false
+        val kept = heldSince(a.startUs + READ_SLACK_US)
+        if (kept.count < p.minTextPixels) return false
         // 1. a text line has stayed, unbroken
-        if (!ScanMask.isText(ScanMask.lineFilter(TextMask(gw, gh, kept, keptCount), p), p)) return false
+        if (!ScanMask.isText(ScanMask.lineFilter(kept, p), p)) return false
         // 2. what stood still is that line
         val still = a.stillAtEnd ?: return false
-        val minFar = maxOf(p.minTextPixels * 2, (0.05 * keptCount).toInt())
-        return farCount(still, kept, maxOf(2, gh / 40), minFar) < minFar
+        val minFar = maxOf(p.minTextPixels * 2, (0.05 * kept.count).toInt())
+        return farCount(still, kept.bits, maxOf(2, gh / 40), minFar) < minFar
+    }
+
+    // ---- one line cut into pieces by moving scenery (ScanParams.joinUnbroken) ----
+    //
+    // Burned-in text sits on its pixels from the moment it appears until it leaves; moving scenery does
+    // not stay on a pixel. Per pixel the tracker keeps since when it has been on screen without a break
+    // ([since]) and when it last left after standing still with nothing standing still beside it
+    // ([goneAt]: the edge of a sliding bar or a flickering pixel of a subtitle has still neighbours, a
+    // subtitle that leaves or is replaced has none). A chain = the held piece and the pieces joined into
+    // it; its anchor is the held piece's start (+ a frame and a half: the line's pixels come with it).
+
+    private fun lateUs() = maxOf(LATE_MIN_US, frameDtUs * 3 / 2)
+
+    private fun anchorUs(h: Seg) = h.startUs + lateUs()
+
+    private fun rNear() = maxOf(2, gh / 80)
+
+    /** A pixel that leaves with something still standing this close stays with it: an edge that slid, not a line gone. */
+    private fun rStay() = maxOf(2, gh / 30)
+
+    private fun minEvidence() = p.minTextPixels * 2
+
+    private fun trackPixels(ptsUs: Long, bits: BooleanArray) {
+        val n = bits.size
+        if (since.size != n) {
+            since = LongArray(n) { -1L }
+            goneAt = LongArray(n) { Long.MIN_VALUE }
+            goneFrom = LongArray(n)
+        }
+        if (prevPtsUs in 0 until ptsUs) frameDtUs = ptsUs - prevPtsUs
+        // one pass: since when each pixel has been on screen; the ones leaving after standing still
+        var nl = 0
+        for (i in 0 until n) {
+            val t = since[i]
+            if (bits[i]) {
+                if (t < 0) since[i] = ptsUs
+            } else if (t >= 0) {
+                if (ptsUs - t >= STATIC_US) {
+                    if (nl == leavingBuf.size) {
+                        leavingBuf = leavingBuf.copyOf(maxOf(256, nl * 2)); leavingFrom = leavingFrom.copyOf(leavingBuf.size)
+                    }
+                    leavingBuf[nl] = i; leavingFrom[nl] = t; nl++
+                }
+                since[i] = -1L
+            }
+        }
+        // a pixel leaving after standing still is gone, unless the thing it belongs to is still beside
+        // it — slid along (something still standing close by) or moved over (on screen right next to it)
+        if (nl > 0 && chain) {
+            val r = rStay()
+            val rm = rNear()
+            for (k in 0 until nl) {
+                val i = leavingBuf[k]
+                val x = i % gw
+                val y = i / gw
+                if (anyNear(x, y, r) { j -> bits[j] && ptsUs - since[j] >= STATIC_US }) continue
+                if (anyNear(x, y, rm) { j -> bits[j] }) continue
+                goneAt[i] = ptsUs; goneFrom[i] = leavingFrom[k]
+            }
+        }
+    }
+
+    /** What has been on screen without a break since [anchor] (the line of the chain, if it is one). */
+    private fun heldSince(anchor: Long): TextMask {
+        val out = BooleanArray(since.size)
+        var c = 0
+        for (i in since.indices) {
+            val t = since[i]
+            if (t in 0..anchor) {
+                out[i] = true; c++
+            }
+        }
+        return TextMask(gw, gh, out, c)
+    }
+
+    private fun isLine(m: TextMask) = m.count >= p.minTextPixels && ScanMask.isText(ScanMask.lineFilter(m, p), p)
+
+    /** Pixels of [m] in its text line's rows. */
+    private fun lineRows(m: TextMask) = ScanMask.lineFilter(m, p).count
+
+    /**
+     * When (and since when) something on screen since [anchor] left after standing still at least
+     * [LINE_US], with nothing still beside it: the line of the chain gone or replaced. Scenery that came
+     * later is not the line; and a car driving away leaves pixels behind all the time, some after
+     * standing a moment, few after [LINE_US].
+     */
+    private fun goneAfter(anchor: Long): Pair<LongArray, LongArray> {
+        var c = 0
+        for (i in goneAt.indices) if (isGone(i, anchor)) c++
+        val at = LongArray(c)
+        val from = LongArray(c)
+        c = 0
+        for (i in goneAt.indices) if (isGone(i, anchor)) {
+            at[c] = goneAt[i]; from[c] = goneFrom[i]; c++
+        }
+        return at to from
+    }
+
+    private fun isGone(i: Int, anchor: Long) = goneAt[i] > anchor && goneFrom[i] <= anchor && goneAt[i] - goneFrom[i] >= LINE_US
+
+    /**
+     * The most of those that came together and left together (within [GONE_WINDOW_US] both) and the
+     * middle of their leaving: a line came at once and leaves at once; scenery that stood a while
+     * (an edge sliding, a bar thinning as a car drives away) came and leaves a few pixels at a time.
+     */
+    private fun goneBurst(anchor: Long): Pair<Int, Long> {
+        val (at, from) = goneAfter(anchor)
+        if (at.size < minEvidence()) return 0 to 0L
+        val order = at.indices.sortedBy { at[it] }
+        var best = 0
+        var mid = 0L
+        var j = 0
+        val window = LongArray(at.size)
+        for (i in order.indices) {
+            // only at the last pixel that left in a frame (all of that frame are in the window then)
+            if (i + 1 < order.size && at[order[i + 1]] == at[order[i]]) continue
+            while (at[order[i]] - at[order[j]] > GONE_WINDOW_US) j++
+            if (i - j + 1 <= best) continue
+            // within this leaving window: the most that came within one window too
+            var n = 0
+            for (k in j..i) window[n++] = from[order[k]]
+            java.util.Arrays.sort(window, 0, n)
+            var a = 0
+            for (b in 0 until n) {
+                while (window[b] - window[a] > GONE_WINDOW_US) a++
+                if (b - a + 1 > best) {
+                    best = b - a + 1; mid = at[order[(i + j) / 2]]
+                }
+            }
+        }
+        return best to mid
+    }
+
+    /** Arrival times of text that came after [anchor], stayed [NEW_US], has settled and is far from [line]. */
+    private fun newSince(anchor: Long, line: TextMask, nowUs: Long): LongArray {
+        val stay = BooleanArray(since.size)
+        var c = 0
+        for (i in since.indices) {
+            val t = since[i]
+            if (t > anchor && nowUs - t >= NEW_US) {
+                stay[i] = true; c++
+            }
+        }
+        if (c < minEvidence()) return LongArray(0)
+        // settled: nothing newer right beside it (not the growing end of something sliding along)
+        val late = lateUs()
+        val r = rNear()
+        c = 0
+        for (i in stay.indices) if (stay[i]) {
+            if (newerNear(i, since[i] + late, r)) stay[i] = false else c++
+        }
+        if (c < minEvidence()) return LongArray(0)
+        val out = ArrayList<Long>()
+        forEachFar(stay, line.bits, rNear()) { out.add(since[it]); true }
+        return out.toLongArray()
+    }
+
+    private fun median(a: LongArray): Long {
+        a.sort()
+        return a[a.size / 2]
+    }
+
+    /**
+     * May [b], starting now, continue the line of [h] (held, ended a moment ago)? What has been on
+     * screen without a break since [h] began is still a line, nothing that stood still has left
+     * (a subtitle replaced or gone) and nothing new has come and stayed. Early in a chain this also
+     * holds scenery that has not moved away yet: the chain is watched until it is sure ([watch]).
+     */
+    private fun link(h: Seg?, b: Seg, nowUs: Long, new: BooleanArray, newFrom: Long): Seg? {
+        if (h == null || !chain || !h.isText || h.chainClosed) return null
+        if (b.startUs - h.endUs > p.bridgeMs * 1000 || since.size != gw * gh) return null
+        val anchor = anchorUs(h)
+        val line = heldSince(anchor)
+        if (!isLine(line) || (h.lineSeen && lineRows(line) < h.seenCount / 2)) {
+            linkNoLine++; return null
+        }
+        if (goneBurst(anchor).first >= minEvidence()) {
+            linkGone++; return null
+        }
+        if (newSince(anchor, line, nowUs).size >= minEvidence()) {
+            linkNew++; return null
+        }
+        linkOk++
+        // what made the detector start [b], apart from the line itself: if it stays, [b] is no scenery
+        var c = 0
+        for (i in new.indices) if (new[i] && !line.bits[i]) c++
+        val o = IntArray(c)
+        c = 0
+        for (i in new.indices) if (new[i] && !line.bits[i]) o[c++] = i
+        b.own = o
+        b.ownFrom = newFrom
+        return h
+    }
+
+    private enum class Break { VOID, GONE, OWN, NEW }
+
+    /** What, if anything, breaks the chain of [h] now: the kind and the time from which its pieces go. */
+    private fun chainBreak(h: Seg, nowUs: Long): Pair<Break, Long>? {
+        val anchor = anchorUs(h)
+        if (nowUs <= anchor) return null
+        val (gone, goneMid) = goneBurst(anchor)
+        if (gone >= minEvidence()) return Break.GONE to goneMid - lateUs()
+        val line = heldSince(anchor)
+        if (!h.lineSeen && nowUs >= anchor + LINE_US) {
+            // what moves has left by now: what is left of the chain's start stands still — a line, or no chain
+            if (!isLine(line)) return Break.VOID to h.startUs
+            h.lineSeen = true
+            h.seenCount = lineRows(line)
+        }
+        // the line (what stood still since the chain began) has mostly left
+        if (h.lineSeen && lineRows(line) < h.seenCount / 2) return Break.GONE to nowUs - frameDtUs - lateUs()
+        // a piece whose own new content stayed is a subtitle of its own (a word or a line came, the text changed)
+        for (q in h.parts) if (ownStayed(q, nowUs)) return Break.OWN to q.startUs
+        val cur = current
+        if (cur != null && linked(cur, h) && ownStayed(cur, nowUs)) return Break.OWN to cur.startUs
+        val fresh = newSince(anchor, line, nowUs)
+        if (fresh.size >= minEvidence()) return Break.NEW to median(fresh) - lateUs()
+        return null
+    }
+
+    /**
+     * How much of what was new when [s] began is still there, without a break since then, and settled:
+     * nothing newer right beside it. (A long bar sliding along itself keeps the pixels it newly covers
+     * for a while, but it keeps growing beside them; a word that came to stay does not.)
+     */
+    private fun ownStays(s: Seg): Int {
+        val o = s.own ?: return 0
+        if (s.ownLeft) return 0
+        val until = s.ownFrom + lateUs()
+        val late = lateUs()
+        val r = rNear()
+        var c = 0
+        for (i in o) {
+            val t = since[i]
+            if (t in 0..until && !newerNear(i, t + late, r)) c++
+        }
+        if (c < minEvidence()) s.ownLeft = true
+        return c
+    }
+
+    /** Is anything on screen within [r] of pixel [i] that arrived after [t]? */
+    private fun newerNear(i: Int, t: Long, r: Int): Boolean {
+        val x = i % gw
+        val y = i / gw
+        return anyNear(x, y, r) { since[it] > t }
+    }
+
+    private fun ownStayed(s: Seg, nowUs: Long) = !s.ownLeft && nowUs >= s.startUs + STATIC_US && ownStays(s) >= minEvidence()
+
+    /**
+     * Every frame while pieces are joined (or about to be) into the held one: when the chain breaks,
+     * the pieces from the break on are not joined to it. They become a chain of their own (watched
+     * again from its own start), or go on as they were found.
+     */
+    private fun watch(nowUs: Long, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        for (round in 0 until 8) {
+            val h = held ?: return
+            val cur = current
+            if (h.parts.isEmpty() && !linked(cur, h)) {
+                // a held piece alone: once, when what moves has left, see whether its line stayed
+                if (h.isText && !h.lineSeen && !h.lineChecked && nowUs >= anchorUs(h) + LINE_US) {
+                    h.lineChecked = true
+                    val line = heldSince(anchorUs(h))
+                    if (isLine(line) && goneBurst(anchorUs(h)).first < minEvidence()) {
+                        h.lineSeen = true; h.seenCount = lineRows(line)
+                    } else h.chainClosed = true
+                }
+                return
+            }
+            val (kind, cut) = chainBreak(h, nowUs) ?: return
+            h.chainClosed = true
+            val k = h.parts.indexOfFirst { it.startUs >= cut }
+            val curAfter = linked(cur, h) && cur!!.startUs >= cut
+            if (k >= 0 || curAfter) when (kind) {
+                Break.VOID -> breakVoid++
+                Break.GONE -> breakGone++
+                Break.OWN, Break.NEW -> breakNew++
+            }
+            if (k < 0) {
+                // nothing joined after the break. The piece now on screen joins only if it ends by the
+                // time the line left (its end is not the line's end otherwise); after anything else, never
+                if (linked(cur, h)) {
+                    if (kind == Break.GONE) cur!!.endCap = minOf(cur.endCap, cut + lateUs()) else cur!!.continues = null
+                }
+                return
+            }
+            val rest = h.parts.subList(k, h.parts.size).toList()
+            val keep = h.parts.subList(0, k).toList()
+            h.parts.clear()
+            h.parts.addAll(keep)
+            h.endUs = if (keep.isEmpty()) h.ownEndUs else keep.last().endUs
+            for (q in rest) q.joinedInto = null
+            held = null
+            settle(h, nowUs, closed, discarded)
+            // the rest: a chain of its own, its line watched from its own start
+            val nh = rest[0]
+            nh.continues = null
+            nh.ownEndUs = nh.endUs
+            for (q in rest.drop(1)) {
+                nh.parts.add(q)
+                q.continues = nh
+                q.joinedInto = nh
+                nh.endUs = maxOf(nh.endUs, q.endUs)
+                nh.lastUs = maxOf(nh.lastUs, q.lastUs)
+            }
+            held = nh
+            if (curAfter) cur!!.continues = nh
+            // what the new chain's line is: what has been on screen without a break since it began
+            val nl = heldSince(anchorUs(nh))
+            for (q in nh.parts + listOfNotNull(cur?.takeIf { curAfter })) {
+                val o = q.own ?: continue
+                q.own = o.filter { !nl.bits[it] }.toIntArray()
+            }
+        }
+    }
+
+    /**
+     * [h] is final now: it goes with the pieces whose line was watched long enough to be sure; the
+     * others go on as they were found, each with its proof, so the reading can still join them.
+     */
+    private fun settle(h: Seg, nowUs: Long, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        if (h.parts.isNotEmpty()) {
+            if (!h.lineSeen && nowUs >= anchorUs(h) + LINE_US && goneBurst(anchorUs(h)).first < minEvidence()) {
+                val line = heldSince(anchorUs(h))
+                if (isLine(line)) {
+                    h.lineSeen = true; h.seenCount = lineRows(line)
+                }
+            }
+            // a joined piece is sure once what made the detector start it has left (scenery passing by)
+            val k = if (!h.lineSeen) 0 else h.parts.indexOfFirst { ownStays(it) >= minEvidence() }
+            if (k >= 0) {
+                val rest = h.parts.subList(k, h.parts.size).toList()
+                val keep = h.parts.subList(0, k).toList()
+                h.parts.clear()
+                h.parts.addAll(keep)
+                h.endUs = if (keep.isEmpty()) h.ownEndUs else keep.last().endUs
+                for (q in rest) q.joinedInto = null
+                emit(h, closed, discarded)
+                for (q in rest) emit(q, closed, discarded)
+                return
+            }
+        }
+        emit(h, closed, discarded)
+    }
+
+    private fun buildIntegralOf(b: BooleanArray) = buildIntegral { b[it] }
+
+    /** Is there a pixel where [on] holds in the square of radius [r] around (x, y)? */
+    private inline fun anyNear(x: Int, y: Int, r: Int, on: (Int) -> Boolean): Boolean {
+        for (yy in maxOf(0, y - r)..minOf(gh - 1, y + r)) {
+            val row = yy * gw
+            for (xx in maxOf(0, x - r)..minOf(gw - 1, x + r)) if (on(row + xx)) return true
+        }
+        return false
+    }
+
+    /** Summed-area table of the pixels where [on] holds (for [windowCount]). */
+    private inline fun buildIntegral(on: (Int) -> Boolean) {
+        val w = gw
+        val h = gh
+        val stride = w + 1
+        if (integral.size != stride * (h + 1)) integral = IntArray(stride * (h + 1))
+        val ii = integral
+        for (y in 0 until h) {
+            var run = 0
+            val row = y * w
+            val o = (y + 1) * stride
+            for (x in 0 until w) {
+                if (on(row + x)) run++
+                ii[o + x + 1] = ii[o - stride + x + 1] + run
+            }
+        }
+    }
+
+    /** Pixels counted by the last [buildIntegral] in the square of radius [r] around (x, y). */
+    private fun windowCount(x: Int, y: Int, r: Int): Int {
+        val stride = gw + 1
+        val x0 = maxOf(0, x - r)
+        val x1 = minOf(gw, x + r + 1)
+        val y0 = maxOf(0, y - r)
+        val y1 = minOf(gh, y + r + 1)
+        val ii = integral
+        return ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0]
     }
 
     private companion object {
         /** Burned-in text does not move: pixel-exact comparison separates different sentences best. */
         const val DIL = 0
-        /** A pixel of a subtitle appears with it (its first frames): this much after the piece's start still counts. */
-        const val SLACK_US = 100_000L
+        /** The pixels of a line come with its piece: up to this long (or a frame and a half) after the piece began. */
+        const val LATE_MIN_US = 50_000L
+        /** The same for the reading's proof ([unbroken], as in 3.0.4). */
+        const val READ_SLACK_US = 100_000L
         /** On screen without a break this long, it stands still (a moving thing does not stay on a pixel). */
-        const val STILL_US = 200_000L
+        const val STATIC_US = 200_000L
+        /**
+         * New text on screen without a break this long has come to stay. Measured on a car driving
+         * behind a short line (the user's scene): far from the line, at most 9 pixels of the scenery
+         * stay 160 ms, 3 stay 200 ms, none 300 ms; a word added to a subtitle stays with it.
+         */
+        const val NEW_US = 160_000L
+        /** After this long, what was on screen at a chain's start and is still there stands still (nothing moving stays). */
+        const val LINE_US = 300_000L
+        /** What leaves within this long leaves together (a line, even one fading out, leaves at once). */
+        const val GONE_WINDOW_US = 120_000L
     }
 }

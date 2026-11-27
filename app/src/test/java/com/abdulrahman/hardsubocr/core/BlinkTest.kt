@@ -23,9 +23,11 @@ import org.robolectric.annotation.GraphicsMode
  * number plate and chrome (text-like, and bigger than the word) drive away behind the line; the
  * detector takes each step of the car for a change.
  *
- * The fix is not a merge by time: the detector proves, per piece, that the text on screen never left
- * since the piece before (ScanSegment.continuesId), and the reading confirms the same text
- * (Arbiter.joinUnbroken). Without that proof nothing is joined, whatever the gap.
+ * The fix is not a merge by time. 3.0.4: the detector proves, per piece, that the text on screen never
+ * left since the piece before (ScanSegment.continuesId), and the reading confirms the same text
+ * (Arbiter.joinUnbroken). 3.0.5: the detector itself keeps such a line as ONE piece (one picture, one
+ * time range) when it has watched the line stay — and never joins a line that changed, left, or got
+ * a word added. Without proof nothing is joined, whatever the gap.
  *
  * The scene here is drawn, not taken from any video: a car with a plate, chrome and a grille drives
  * away over grass and asphalt while the camera follows; the subtitle band becomes the app's luma grid;
@@ -108,6 +110,54 @@ class BlinkTest {
         println("لا → لا لا: " + r.best.joinToString { "${it.from}-${it.to} ${it.text}" })
         assertEquals(listOf("لا", "لا لا"), r.best.map { it.text })
         assertTrue(kotlin.math.abs(r.best[1].from - 60) <= 3 && kotlin.math.abs(r.best[1].to - 104) <= 3)
+    }
+
+    /**
+     * 3.0.5: the detector itself — not only the reading — keeps the line whole: one piece from the
+     * line's start to its end (one picture in the folder), where 3.0.2/3.0.4 cut it into eight.
+     */
+    @Test
+    fun the_detector_itself_keeps_the_line_as_one_piece() {
+        val word = "أخي"
+        val cases = listOf(
+            Scene.render(1.6, 59.94, 25.0, listOf(Scene.Line(24, 76, word))) to "film 25 fps in a 60 fps file",
+            Scene.render(1.3, 59.94, 25.0, listOf(Scene.Line(18, 70, word)), cutAt = 18) to "a cut into the scene with the line"
+        )
+        for ((v, what) in cases) {
+            val before = Modes.run(v, proof = false).det
+            val now = Modes.run(v, proof = true).det
+            println("$what: detector pieces 3.0.2 ${before.size} → now " + now.joinToString { "${it.from}-${it.to}" })
+            assertEquals("$what: one piece", 1, now.size)
+            val t = v.lines[0]
+            assertEquals(word, now[0].text)
+            assertTrue("$what: start ${now[0].from} vs ${t.from}", kotlin.math.abs(now[0].from - t.from) <= 6)
+            assertTrue("$what: end ${now[0].to} vs ${t.to}", kotlin.math.abs(now[0].to - t.to) <= 3)
+            assertTrue("$what: 3.0.2 cut it", before.size > 1)
+        }
+    }
+
+    /**
+     * 3.0.5: what the detector joins is one line that stayed — a line replaced in the same place with
+     * no gap («أخي» → «أبي»), the same words again after a short gap, a word added («لا» → «لا لا»):
+     * never one piece, over the same moving car.
+     */
+    @Test
+    fun the_detector_never_joins_two_lines() {
+        val cases = listOf(
+            Scene.render(2.4, 59.94, 25.0, listOf(Scene.Line(24, 76, "أخي"), Scene.Line(76, 128, "أبي"))) to "replaced in place",
+            Scene.render(2.4, 59.94, 25.0, listOf(Scene.Line(24, 70, "أخي"), Scene.Line(82, 130, "أخي"))) to "the same words after a gap",
+            Scene.render(2.0, 59.94, 25.0, listOf(Scene.Line(20, 60, "لا"), Scene.Line(60, 104, "لا لا"))) to "a word added"
+        )
+        for ((v, what) in cases) {
+            val r = Modes.run(v, proof = true)
+            println("$what: detector " + r.det.joinToString { "${it.from}-${it.to} ${it.text}" } + " | الأدق " + r.best.joinToString { "${it.from}-${it.to} ${it.text}" })
+            for (d in r.det) {
+                val over = v.lines.count { minOf(d.to, it.to) - maxOf(d.from, it.from) >= 3 }
+                assertTrue("$what: piece ${d.from}-${d.to} spans two lines", over <= 1)
+            }
+            for (t in v.lines) assertTrue("$what: «${t.text}» ${t.from}-${t.to} kept",
+                r.best.any { it.text == t.text && kotlin.math.abs(it.from - t.from) <= 6 && kotlin.math.abs(it.to - t.to) <= 6 })
+        }
     }
 
     /** The scene: what the app's subtitle band looks like, as luma grids (drawn with Skia, as on a phone). */
@@ -237,7 +287,7 @@ class BlinkTest {
 
     /** «الأدق» and «سريع» as VideoScanner + JobRunner run them, frames in, SRT lines out («بدون دمج»). */
     object Modes {
-        class Out(val best: List<Scene.Line>, val fast: List<Scene.Line>)
+        class Out(val best: List<Scene.Line>, val fast: List<Scene.Line>, val det: List<Scene.Line> = emptyList())
 
         fun run(v: Scene.Video, proof: Boolean): Out {
             val fus = (1_000_000.0 / v.fps).toLong()
@@ -284,7 +334,9 @@ class BlinkTest {
             }
             val best = srt(Arbiter.resolve(base, alts, fus, minFrames).map { Triple(it.startUs, it.endUs, it.text) })
             val fast = srt(Arbiter.joinUnbroken(base).map { Triple(it.startUs, it.endUs, it.text ?: "") })
-            return Out(best, fast)
+            // the 2.1 detector's own pieces that show a line (one picture each in the app)
+            val det = v21.map { Scene.Line(it[0], it[1], read(it[0], it[1])) }.filter { it.text.isNotBlank() }
+            return Out(best, fast, det)
         }
     }
 }

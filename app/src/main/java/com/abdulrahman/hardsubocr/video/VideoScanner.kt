@@ -337,6 +337,16 @@ class VideoScanner(
                     report = rep
                     segments += extra
                 } else report = "engine ${engines.joinToString()}: $segments subtitles\n"
+                // 3.0.5: how often 2.1 kept a line whole that moving scenery had cut (for the report)
+                t21?.let { t ->
+                    if (t.linkOk + t.linkNoLine + t.linkGone + t.linkNew > 0) {
+                        val line = "🔗 2.1: ${t.joinedPieces} قطعة صارت مع سطرها قطعة واحدة (سطر لم يغادر الشاشة) — " +
+                            "ربط ${t.linkOk}، رُفض ${t.linkNoLine + t.linkGone + t.linkNew} (لا سطر ثابت ${t.linkNoLine}، غادر ${t.linkGone}، جديد ${t.linkNew})، " +
+                            "فُكّ بعد المراقبة ${t.breakVoid + t.breakGone + t.breakNew}"
+                        if (t.joinedPieces > 0) onLog(line)
+                        report = "== $line\n" + report
+                    }
+                }
                 val gf = gpuFrames.get()
                 if (gf > 0) {
                     val ms = gpuNanos.get() / 1e6 / gf
