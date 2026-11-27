@@ -7,6 +7,10 @@ import android.graphics.RuntimeShader
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -188,6 +192,42 @@ class LiquidTest {
         rule.mainClock.advanceTimeBy(800)
         rule.waitForIdle()
         assertTrue("tapped off", !on)
+    }
+
+    /**
+     * 3.0.0 crashed on every switch (StackOverflowError): the thumb's glass recorded the track through the
+     * node's own draw scope, and the track's dp → px lookup looped inside Compose. The glass now records with
+     * a plain density; what it draws may convert dp. Robolectric's frames never reach the glass (no hardware
+     * canvas), so the recording is called here directly from a node's draw, as on a phone.
+     */
+    @Test
+    fun glass_recording_inside_a_draw_may_convert_dp() {
+        var ran = false
+        var bare: Throwable? = null
+        var glass: Throwable? = null
+        rule.setContent {
+            val parts = rememberGlassParts()
+            val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+            Box(
+                Modifier.size(160.dp).drawBehind {
+                    ran = true
+                    bare = runCatching { layer.record(IntSize(8, 8)) { drawRect(Color.Red, size = Size(1.5.dp.toPx(), 1f)) } }.exceptionOrNull()
+                    glass = runCatching {
+                        drawLiquid(parts!!, Offset(10f, 10f), Size(120f, 60f), 30f, lensLook(true, 1f), Color.Black, true) {
+                            drawRect(Color.Red, size = Size(1.5.dp.toPx(), 1f))
+                        }
+                    }.exceptionOrNull()
+                }
+            )
+        }
+        rule.waitForIdle()
+        val v = rule.activity.window.decorView
+        v.draw(Canvas(Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)))
+        assertTrue("the node drew", ran)
+        println("a layer recorded through the node's scope, converting dp: ${bare ?: "fine"}")
+        println("the glass recording, converting dp: ${glass ?: "fine"}")
+        // drawing the recorded layer onto this software canvas may be refused; looping never
+        assertTrue("the glass recording loops: $glass", glass !is StackOverflowError)
     }
 
     @Test

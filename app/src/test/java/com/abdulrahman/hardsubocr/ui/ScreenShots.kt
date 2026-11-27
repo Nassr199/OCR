@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abdulrahman.hardsubocr.core.SubEntry
 import com.abdulrahman.hardsubocr.job.JobManager
@@ -177,5 +179,16 @@ class ScreenShots {
     @Test @Config(qualifiers = "w1280dp-h800dp-land-night-xhdpi") fun tablet_4_settings() = shot("tablet_4_settings", Tab.SETTINGS)
     @Test @Config(qualifiers = "w800dp-h1280dp-port-night-xhdpi") fun tablet_5_upright_running() = shot("tablet_5_upright_running", Tab.PROCESS, running)
     @Test @Config(qualifiers = "w800dp-h1280dp-port-night-xhdpi") fun tablet_6_upright_extract() = shot("tablet_6_upright_extract", Tab.EXTRACT)
+    /** Settings on a phone on its side, both panes scrolled: the bars above them stay clear (3.0.0 drew dark boxes). */
+    @Test @Config(qualifiers = "w891dp-h411dp-land-night-xxhdpi") fun land_5_settings_scrolled() = shot("land_5_settings_scrolled", Tab.SETTINGS) {
+        rule.onRoot().performTouchInput { swipeUp(startY = height * 0.85f, endY = height * 0.35f, durationMillis = 400) }
+        rule.onRoot().performTouchInput {
+            down(Offset(width * 0.3f, height * 0.85f))
+            for (i in 1..10) moveTo(Offset(width * 0.3f, height * (0.85f - 0.05f * i)))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(1_000)
+    }
+
     @Test @Config(qualifiers = "w891dp-h411dp-land-notnight-xxhdpi") fun land_4_running_light() = shot("land_4_running_light", Tab.PROCESS, running)
 }

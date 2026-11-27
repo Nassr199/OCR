@@ -452,11 +452,12 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
 
     LaunchedEffect(checked) { if (!dragging) pos.animateTo(if (checked) 1f else 0f, spring(dampingRatio = 0.62f, stiffness = 520f)) }
 
-    val drawTrack: DrawScope.(Size, Float) -> Unit = { s, p ->
+    // Draws the track; [w] is its rim width in px, converted by the caller (the track is also drawn inside
+    // the thumb's glass recording; 3.0.0 converted it there, which looped in Compose: StackOverflowError).
+    val drawTrack: DrawScope.(Size, Float, Float) -> Unit = { s, p, w ->
         val r = CornerRadius(s.height / 2f)
         drawRoundRect(lerp(offTrack, onTrack, p).copy(alpha = alpha), size = s, cornerRadius = r)
         if (p < 1f) {
-            val w = 1.5.dp.toPx()
             drawRoundRect(
                 offEdge.copy(alpha = 0.55f * (1f - p) * alpha), Offset(w / 2, w / 2), Size(s.width - w, s.height - w),
                 CornerRadius(s.height / 2f - w / 2), style = Stroke(w)
@@ -523,7 +524,8 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
             .drawBehind {
                 val p = pos.value
                 val h = held.value
-                drawTrack(size, p)
+                val rimW = 1.5.dp.toPx()
+                drawTrack(size, p, rimW)
                 val inset = 3.dp.toPx()
                 val d = size.height - 2f * inset
                 val travelPx = size.width - 2f * inset - d
@@ -545,7 +547,7 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
                     val trackSize = size
                     if (parts != null && drawContext.canvas.nativeCanvas.isHardwareAccelerated) {
                         drawLiquid(parts, thumb.topLeft, thumb.size, th / 2f, lensLook(dark, h), base, dark, alpha = h) {
-                            drawTrack(this, trackSize, p)
+                            drawTrack(this, trackSize, p, rimW)
                         }
                     } else {
                         drawRoundRect(Color.White.copy(alpha = h * 0.85f), thumb.topLeft, thumb.size, r)

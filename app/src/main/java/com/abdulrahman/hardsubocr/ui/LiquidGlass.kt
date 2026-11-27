@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -233,6 +234,13 @@ internal class LiquidMaterial {
 
 /** Whether the real material runs here: Android 13+ and the shader compiled on this device. */
 internal object LiquidShader {
+    /**
+     * Tests only (system property `hsocr.glassPaths`, set by the test task): Robolectric cannot make the
+     * effect, so without this the glass paths would never run there. With it every glass is recorded and
+     * drawn exactly as on a phone, only without the shader on top.
+     */
+    internal val drawPathsWithoutShader: Boolean = System.getProperty("hsocr.glassPaths") == "1"
+
     /** Why the shader is not in use on this device (null when it is, or on Android 12 and older). */
     @Volatile
     var failure: Throwable? = null
@@ -248,21 +256,26 @@ internal object LiquidShader {
     }
 }
 
-/** What one piece of glass keeps between frames: its shader and the two layers it samples. */
-internal class GlassParts(val material: Any, val sampler: GraphicsLayer, val wide: GraphicsLayer)
+/** What one piece of glass keeps between frames: its shader (null only in tests) and the two layers it samples. */
+internal class GlassParts(val material: Any?, val sampler: GraphicsLayer, val wide: GraphicsLayer)
 
 @Composable
 internal fun rememberGlassParts(): GlassParts? {
-    if (Build.VERSION.SDK_INT < 33 || !LiquidShader.available) return null
+    if (Build.VERSION.SDK_INT < 33) return null
+    val real = LiquidShader.available
+    if (!real && !LiquidShader.drawPathsWithoutShader) return null
     val sampler = rememberGraphicsLayer()
     val wide = rememberGraphicsLayer()
-    return remember(sampler, wide) { GlassParts(LiquidMaterial(), sampler, wide) }
+    return remember(sampler, wide) { GlassParts(if (real) LiquidMaterial() else null, sampler, wide) }
 }
 
 /**
  * Draws a piece of liquid glass at [topLeft] / [size] of this scope. [under] draws what lies beneath
  * it, in this scope's coordinates; [base] is the opaque ground under that. [cornerPx] is the corner
  * radius (half the short side for a pill). [alpha] fades the whole piece.
+ *
+ * [under] runs inside the glass's own recording, which has a plain density of its own: it may convert
+ * dp to px like any drawing.
  */
 internal fun DrawScope.drawLiquid(
     parts: GlassParts,
@@ -277,7 +290,7 @@ internal fun DrawScope.drawLiquid(
 ) {
     if (Build.VERSION.SDK_INT < 33) return
     if (size.width < 2f || size.height < 2f || alpha <= 0f) return
-    val material = parts.material as LiquidMaterial
+    val material = parts.material as LiquidMaterial?
     val radius = min(cornerPx, min(size.width, size.height) / 2f)
     // the curved band stays within the corner radius, where the shader's normal is exact
     val band = min(look.band.toPx(), max(radius * 0.95f, 1f))
@@ -291,11 +304,14 @@ internal fun DrawScope.drawLiquid(
     val stripH = if (frosted) ceil(h * ws).toInt() + 2 else 0
     val dx = pad - topLeft.x
     val dy = pad - topLeft.y
+    // Recorded with a plain density, not through the node's own scope: inside a layer recorded from a
+    // node's draw, Compose 1.7 resolves the density in a loop (the 3.0.0 crash on every switch).
+    val plain = Density(density, fontScale)
 
     if (frosted) {
         val blur = look.blur.toPx() * ws
         parts.wide.renderEffect = BlurEffect(blur, blur, TileMode.Clamp)
-        parts.wide.record(IntSize(ceil(w * ws).toInt() + 1, stripH)) {
+        parts.wide.record(plain, layoutDirection, IntSize(ceil(w * ws).toInt() + 1, stripH)) {
             drawRect(base)
             scale(ws, ws, pivot = Offset.Zero) { translate(dx, dy) { under() } }
         }
@@ -306,9 +322,9 @@ internal fun DrawScope.drawLiquid(
         frost = look.frost, mag = look.magnify, tint = look.tint, vibrance = look.vibrance,
         specular = look.specular, edge = look.edge.toPx(), dark = if (dark) 1f else 0f
     )
-    parts.sampler.renderEffect = material.effect(u)
+    parts.sampler.renderEffect = material?.effect(u)
     parts.sampler.alpha = alpha.coerceIn(0f, 1f)
-    parts.sampler.record(IntSize(w, h + stripH + 1)) {
+    parts.sampler.record(plain, layoutDirection, IntSize(w, h + stripH + 1)) {
         drawRect(base, size = Size(w.toFloat(), h.toFloat()))
         clipRect(0f, 0f, w.toFloat(), h.toFloat()) { translate(dx, dy) { under() } }
         if (frosted) translate(0f, stripY.toFloat()) { drawLayer(parts.wide) }

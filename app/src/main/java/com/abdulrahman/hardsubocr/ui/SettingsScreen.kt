@@ -220,16 +220,18 @@ internal fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @
             if (chrome.short) {
                 TopAppBar(
                     title = titleText, navigationIcon = back,
+                    // the page scrolls below the bar (its content is clipped there): the bar stays clear when it
+                    // scrolls, instead of turning into a dark box over the app's background
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f)
+                        scrolledContainerColor = Color.Transparent
                     ),
                     scrollBehavior = bar
                 )
             } else {
                 LargeTopAppBar(
                     title = titleText, navigationIcon = back,
-                    colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
+                    colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
                     scrollBehavior = bar
                 )
             }

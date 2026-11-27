@@ -14,8 +14,8 @@ android {
         applicationId = "com.abdulrahman.hardsubocr"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "3.0.0"
+        versionCode = 23
+        versionName = "3.0.1"
     }
 
     // One fixed key for debug AND release, so every new APK installs over the old one
@@ -70,6 +70,8 @@ android {
                 it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
                 // Robolectric's Skia predates AGSL's `child.eval()`: compile the glass shader in its older form (LiquidGlass.kt)
                 it.systemProperty("hsocr.legacySksl", "1")
+                // and run every glass drawing path there, without the shader Robolectric cannot apply
+                it.systemProperty("hsocr.glassPaths", "1")
                 it.maxHeapSize = "3g"
             }
         }
