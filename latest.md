@@ -1,7 +1,7 @@
-# OCR bench — commit 3299017d780445583c36410ab39105ff7434d4fa — 2026-11-26T20:47:16.719703286Z
+# OCR bench — commit 92c3382da3a42b3a64e202fff85f679ca0c555e8 — 2026-11-27T01:42:11.304138620Z
 
 Vision: no VISION_API_KEY secret — Lens only
-AI: OpenRouter google/gemini-3.5-flash-lite — versions of the reading: 2.8.0 · color · color framed · color framed every line (each 3 times)
+AI: OpenRouter google/gemini-3.5-flash-lite — versions of the reading: 2.8.0 · 2.9.0 one reading · 2.9.0 cross-check (each 3 times)
 
 ## 01_habibi_credits_bg0.jpg — credits both sides, background variant 0
 truth: «حبيبي، هل أنت بخير؟»
@@ -67,32 +67,26 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
 
 ## 09_two_lines_period.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
 truth: «هوليا. ساعدوني ⏎ ماذا حدث؟»
 
 - openrouter pictures: V26 2166×314, V26_FRAMED 974×314, V26_FRAMED_NO_UPSCALE 487×157, COLOR 1230×230, COLOR_FRAMED 487×197
-  - openrouter 2.8.0 #1 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter 2.8.0 #2 ✗ (2) shape ✗ «هوليا، ساعدوني! ⏎ ماذا حدث؟» «هوليا، ساعدوني! ⏎ ماذا حدث؟»
+  - openrouter 2.8.0 #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.8.0 #2 ✗ (1) shape ✗ «هوليا، ساعدوني ماذا حدث؟» «هوليا، ساعدوني ماذا حدث؟»
   - openrouter 2.8.0 #3 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color #2 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color #3 ✗ (1) shape ✗ «هوليا، ساعدوني ماذا حدث؟» «هوليا، ساعدوني ماذا حدث؟»
-  - openrouter color framed #1 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed #3 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #2 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #3 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 one reading #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 one reading #2 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 one reading #3 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #3 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
 
 ## 10_dash_one_line.jpg — outlined white text, the shape (lines, dashes, punctuation) must be kept
 truth: «- لا أعرف»
@@ -146,49 +140,40 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
 
 ## 26_roi_wake_tiles.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (tiles)
 truth: «هوليا. استيقظي»
 
 - openrouter pictures: V26 1920×432, V26_FRAMED 1178×312, V26_FRAMED_NO_UPSCALE 589×156, COLOR 1920×432, COLOR_FRAMED 589×156
-  - openrouter 2.8.0 #1 ✗ (3) shape ✗ «هوليام، استيقظي!» «هوليام، استيقظي!»
-  - openrouter 2.8.0 #2 ✗ (4) shape ✗ «أهوليام، استيقظي!» «أهوليام، استيقظي!»
-  - openrouter 2.8.0 #3 ✗ (3) shape ✗ «أهوليا، استيقظي!» «أهوليا، استيقظي!»
-  - openrouter color #1 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color #2 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color #3 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color framed #1 ✓ shape ✓ «هوليا. استيقظي»
-  - openrouter color framed #2 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color framed #3 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color framed every line #1 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color framed every line #2 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
-  - openrouter color framed every line #3 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.8.0 #1 ✗ (3) shape ✗ «أهوليا، استيقظي.» «أهوليا، استيقظي.»
+  - openrouter 2.8.0 #2 ✗ (3) shape ✗ «هوليام، استيقظي.» «هوليام، استيقظي.»
+  - openrouter 2.8.0 #3 ✗ (2) shape ✗ «هوليام، استيقظي» «هوليام، استيقظي»
+  - openrouter 2.9.0 one reading #1 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.9.0 one reading #2 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.9.0 one reading #3 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.9.0 cross-check #1 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.9.0 cross-check #2 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
+  - openrouter 2.9.0 cross-check #3 ✗ (1) shape ✗ «هوليا، استيقظي» «هوليا، استيقظي»
 
 ## 27_roi_last_worry_lace.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (lace)
 truth: «هوليا هي آخر همي الآن»
 
 - openrouter pictures: V26 1920×432, V26_FRAMED 1630×350, V26_FRAMED_NO_UPSCALE 815×175, COLOR 1920×432, COLOR_FRAMED 815×175
-  - openrouter 2.8.0 #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter 2.8.0 #2 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.8.0 #1 ✗ (1) shape ✗ «خوليا هي آخر همي الآن» «خوليا هي آخر همي الآن»
+  - openrouter 2.8.0 #2 ✗ (1) shape ✗ «خوليا هي آخر همي الآن» «خوليا هي آخر همي الآن»
   - openrouter 2.8.0 #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color #2 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed #2 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed every line #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed every line #2 ✓ shape ✓ «هوليا هي آخر همي الآن»
-  - openrouter color framed every line #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «هوليا هي آخر همي الآن»
+  - openrouter 2.9.0 cross-check #2 ✗ (1) shape ✗ «خوليا هي آخر همي الآن» «خوليا هي آخر همي الآن»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «هوليا هي آخر همي الآن»
 
 ## 28_roi_dialogue_red.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (red_skin)
 truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
@@ -197,15 +182,12 @@ truth: «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
   - openrouter 2.8.0 #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
-  - openrouter color framed every line #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «- هوليا ⏎ - ابتعدي يا جوليزار»
 
 ## 29_roi_help_garden.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (garden)
 truth: «هوليا. ساعدوني ⏎ ماذا حدث؟»
@@ -214,15 +196,12 @@ truth: «هوليا. ساعدوني ⏎ ماذا حدث؟»
   - openrouter 2.8.0 #1 ✗ (1) shape ✗ «هوليا، ساعدوني ماذا حدث؟» «هوليا، ساعدوني ماذا حدث؟»
   - openrouter 2.8.0 #2 ✗ (1) shape ✗ «هوليا، ساعدوني ماذا حدث؟» «هوليا، ساعدوني ماذا حدث؟»
   - openrouter 2.8.0 #3 ✗ (1) shape ✗ «هوليا، ساعدوني ماذا حدث؟» «هوليا، ساعدوني ماذا حدث؟»
-  - openrouter color #1 ✗ (1) shape ✗ «هوليا، ساعدوني ⏎ ماذا حدث؟» «هوليا، ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color #2 ✗ (2) shape ✗ «هوليا، ساعدوني! ⏎ ماذا حدث؟» «هوليا، ساعدوني! ⏎ ماذا حدث؟»
-  - openrouter color #3 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed #1 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed #3 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #1 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
-  - openrouter color framed every line #3 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 one reading #1 ✗ (2) shape ✗ «هوليا، ساعدوني! ماذا حدث؟» «هوليا، ساعدوني! ماذا حدث؟»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 one reading #3 ✗ (2) shape ✗ «هوليا، ساعدوني! ماذا حدث؟» «هوليا، ساعدوني! ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «هوليا. ساعدوني ⏎ ماذا حدث؟»
 
 ## 30_roi_fine_tiles.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (tiles)
 truth: «بخير بخير أجل أنا بخير»
@@ -231,15 +210,12 @@ truth: «بخير بخير أجل أنا بخير»
   - openrouter 2.8.0 #1 ✓ shape ✓ «بخير بخير أجل أنا بخير»
   - openrouter 2.8.0 #2 ✓ shape ✓ «بخير بخير أجل أنا بخير»
   - openrouter 2.8.0 #3 ✓ shape ✓ «بخير بخير أجل أنا بخير»
-  - openrouter color #1 ✓ shape ✓ «بخير بخير أجل أنا بخير»
-  - openrouter color #2 ✓ shape ✓ «بخير بخير أجل أنا بخير»
-  - openrouter color #3 ✓ shape ✓ «بخير بخير أجل أنا بخير»
-  - openrouter color framed #1 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
-  - openrouter color framed #2 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
-  - openrouter color framed #3 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
-  - openrouter color framed every line #1 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
-  - openrouter color framed every line #2 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
-  - openrouter color framed every line #3 ✗ (5) shape ✗ «بخير بخير بخير أجل أنا بخير» «بخير بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «بخير بخير أجل أنا بخير»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «بخير بخير أجل أنا بخير»
 
 ## 31_roi_mom_lace.jpg — video mode area 1920×432, outlined white subtitle on a bright scene (lace)
 truth: «أريد أمي»
@@ -248,41 +224,65 @@ truth: «أريد أمي»
   - openrouter 2.8.0 #1 ✓ shape ✓ «أريد أمي»
   - openrouter 2.8.0 #2 ✓ shape ✓ «أريد أمي»
   - openrouter 2.8.0 #3 ✓ shape ✓ «أريد أمي»
-  - openrouter color #1 ✓ shape ✓ «أريد أمي»
-  - openrouter color #2 ✓ shape ✓ «أريد أمي»
-  - openrouter color #3 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed #1 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed #2 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed #3 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed every line #1 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed every line #2 ✓ shape ✓ «أريد أمي»
-  - openrouter color framed every line #3 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 one reading #1 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 one reading #2 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 one reading #3 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 cross-check #1 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 cross-check #2 ✓ shape ✓ «أريد أمي»
+  - openrouter 2.9.0 cross-check #3 ✓ shape ✓ «أريد أمي»
 
-AI usage of this run: 108 صورة • لكل صورة في المتوسط: إدخال 1364 وحدة، إخراج 10، تفكير 0 • التكلفة 0.0469$
+AI usage of this run: 116 صورة • لكل صورة في المتوسط: إدخال 1351 وحدة، إخراج 9، تفكير 0 • التكلفة 0.0499$
+
+Cross-check decisions:
+
+- 08_dialogue_dashes.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 08_dialogue_dashes.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 08_dialogue_dashes.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 09_two_lines_period.jpg 2 readings: هوليا، ساعدوني ⏎ ماذا حدث؟ | هوليا، ساعدوني ⏎ ماذا حدث؟ → هوليا، ساعدوني ⏎ ماذا حدث؟
+- 09_two_lines_period.jpg 3 readings: هوليا، ساعدوني ⏎ ماذا حدث؟ | هوليا. ساعدوني ⏎ ماذا حدث؟ | هوليا. ساعدوني ⏎ ماذا حدث؟ → هوليا. ساعدوني ⏎ ماذا حدث؟
+- 09_two_lines_period.jpg 3 readings: هوليا. ساعدوني ⏎ ماذا حدث؟ | هوليا، ساعدوني ماذا حدث؟ | هوليا، ساعدوني ⏎ ماذا حدث؟ → هوليا، ساعدوني ⏎ ماذا حدث؟
+- 25_frame_dialogue.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 25_frame_dialogue.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 25_frame_dialogue.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 26_roi_wake_tiles.jpg 3 readings: هوليا، استيقظي | هوليام، استيقظي. | هوليا، استيقظي → هوليا، استيقظي
+- 26_roi_wake_tiles.jpg 3 readings: هوليا، استيقظي | هوليام، استيقظي | هوليا. استيقظي → هوليا، استيقظي
+- 26_roi_wake_tiles.jpg 3 readings: هوليا، استيقظي | أهوليام، استيقظي! | خوليا، استيقظي → هوليا، استيقظي
+- 27_roi_last_worry_lace.jpg 2 readings: هوليا هي آخر همي الآن | هوليا هي آخر همي الآن → هوليا هي آخر همي الآن
+- 27_roi_last_worry_lace.jpg 2 readings: خوليا هي آخر همي الآن | خوليا هي آخر همي الآن → خوليا هي آخر همي الآن
+- 27_roi_last_worry_lace.jpg 3 readings: خوليا هي آخر همي الآن | هوليا هي آخر همي الآن | هوليا هي آخر همي الآن → هوليا هي آخر همي الآن
+- 28_roi_dialogue_red.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 28_roi_dialogue_red.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 28_roi_dialogue_red.jpg 2 readings: - هوليا ⏎ - ابتعدي يا جوليزار | - هوليا ⏎ - ابتعدي يا جوليزار → - هوليا ⏎ - ابتعدي يا جوليزار
+- 29_roi_help_garden.jpg 3 readings: هوليا. ساعدوني ⏎ ماذا حدث؟ | هوليا، ساعدوني ماذا حدث؟ | هوليا. ساعدوني ⏎ ماذا حدث؟ → هوليا. ساعدوني ⏎ ماذا حدث؟
+- 29_roi_help_garden.jpg 3 readings: هوليا. ساعدوني ⏎ ماذا حدث؟ | هوليا، ساعدوني ماذا حدث؟ | هوليا. ساعدوني ⏎ ماذا حدث؟ → هوليا. ساعدوني ⏎ ماذا حدث؟
+- 29_roi_help_garden.jpg 2 readings: هوليا. ساعدوني ⏎ ماذا حدث؟ | هوليا. ساعدوني ⏎ ماذا حدث؟ → هوليا. ساعدوني ⏎ ماذا حدث؟
+- 30_roi_fine_tiles.jpg 2 readings: بخير بخير أجل أنا بخير | بخير بخير أجل أنا بخير → بخير بخير أجل أنا بخير
+- 30_roi_fine_tiles.jpg 2 readings: بخير بخير أجل أنا بخير | بخير بخير أجل أنا بخير → بخير بخير أجل أنا بخير
+- 30_roi_fine_tiles.jpg 2 readings: بخير بخير أجل أنا بخير | بخير بخير أجل أنا بخير → بخير بخير أجل أنا بخير
+- 31_roi_mom_lace.jpg 2 readings: أريد أمي | أريد أمي → أريد أمي
+- 31_roi_mom_lace.jpg 2 readings: أريد أمي | أريد أمي → أريد أمي
+- 31_roi_mom_lace.jpg 2 readings: أريد أمي | أريد أمي → أريد أمي
 
 ## AI faults (runs)
 
 | variant | line left out | «خوليا» | dot at a line start | letters wrong | failed |
 |---|---|---|---|---|---|
-| openrouter 2.8.0 | 3 | 0 | 0 | 8 | 0 |
-| openrouter color | 1 | 0 | 0 | 8 | 0 |
-| openrouter color framed | 0 | 0 | 0 | 6 | 0 |
-| openrouter color framed every line | 0 | 0 | 0 | 8 | 0 |
+| openrouter 2.8.0 | 4 | 2 | 0 | 11 | 0 |
+| openrouter 2.9.0 one reading | 2 | 0 | 0 | 8 | 0 |
+| openrouter 2.9.0 cross-check | 0 | 1 | 0 | 6 | 0 |
 
 ## Summary (after the app's classic cleaning; errors = edit distance to the truth)
 
 | engine | exact | char errors | CER |
 |---|---|---|---|
-| openrouter 2.8.0 | 19/27 | 16 | 2.9% |
-| openrouter color | 19/27 | 9 | 1.6% |
-| openrouter color framed | 21/27 | 18 | 3.3% |
-| openrouter color framed every line | 19/27 | 20 | 3.7% |
+| openrouter 2.8.0 | 16/27 | 16 | 2.9% |
+| openrouter 2.9.0 one reading | 19/27 | 10 | 1.8% |
+| openrouter 2.9.0 cross-check | 21/27 | 6 | 1.1% |
 
 ## Shape kept (lines, dialogue dashes, punctuation — after the app's Lens/Vision cleaning)
 
 | engine | exact shape |
 |---|---|
-| openrouter 2.8.0 (with tashkeel) | 19/27 |
-| openrouter color (with tashkeel) | 19/27 |
-| openrouter color framed (with tashkeel) | 21/27 |
-| openrouter color framed every line (with tashkeel) | 19/27 |
+| openrouter 2.8.0 (with tashkeel) | 16/27 |
+| openrouter 2.9.0 one reading (with tashkeel) | 19/27 |
+| openrouter 2.9.0 cross-check (with tashkeel) | 21/27 |
