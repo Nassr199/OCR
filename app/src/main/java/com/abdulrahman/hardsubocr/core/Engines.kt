@@ -510,13 +510,30 @@ object AiRecipe {
     /** Output room per answer, thinking included (Google: never a small limit with thinking on). */
     const val MAX_OUTPUT_TOKENS = 8192
 
+    /**
+     * The room asked for one answer. A subtitle is a few dozen tokens; with «minimal» or «low»
+     * thinking 2048 leaves the model plenty. OpenRouter holds the price of the whole room against the
+     * account while a request runs ("in-flight budget", 402): asking 8192 for every image made a job
+     * with several images at once wait on a modest balance (2.9.0). Medium, high and the model's own
+     * level keep [MAX_OUTPUT_TOKENS].
+     */
+    fun maxTokens(level: String?): Int = if (level == "minimal" || level == "low") 2048 else MAX_OUTPUT_TOKENS
+
     fun thinkingFor(model: String, level: ThinkingLevel): String? {
         val id = model.trim().substringAfterLast('/').lowercase()
         return if (level == ThinkingLevel.MINIMAL && (id.startsWith("gemini-4") || id.startsWith("gemini-3.8"))) "low" else level.api
     }
 
+    /**
+     * Version of what the AI reads (picture and instructions). Part of the resume-memory key: readings
+     * made by an older recipe are not taken again. 2 = 2.9.0 (the original picture instead of v2.6's
+     * grayscale one; the cross-check adds "|x" to the key).
+     */
+    const val READING_VERSION = 2
+
     fun cacheId(engine: String, model: String, profile: AiProfile, thinking: ThinkingLevel, high: Boolean, lang: SubLang): String =
-        "$engine:$model:${profile.id}:t=${thinking.api ?: "auto"}:${if (high) "hi" else "def"}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}")
+        "$engine:$model:${profile.id}:t=${thinking.api ?: "auto"}:${if (high) "hi" else "def"}" + (if (lang == SubLang.ARABIC) "" else ":${lang.code}") +
+            ":r$READING_VERSION"
 }
 
 class GeminiEngine(
@@ -528,12 +545,14 @@ class GeminiEngine(
     highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens used, for the job's log (optional). */
-    val usage: AiUsage = AiUsage()
+    val usage: AiUsage = AiUsage(),
+    /** Other instructions than the recipe's (the live bench compares versions); null in the app. */
+    promptOverride: String? = null
 ) : OcrEngine {
     val model: String = model.trim().removePrefix("models/")
     override val kind = EngineKind.GEMINI
     override val cacheId = AiRecipe.cacheId("gemini", this.model, profile, thinking, highResolution, lang)
-    private val prompt = AiRecipe.prompt(profile, lang)
+    private val prompt = promptOverride ?: AiRecipe.prompt(profile, lang)
 
     /** Lowered automatically when a model rejects it (Gemini 4 and 3.8 have no "minimal": sent as "low"). */
     @Volatile
@@ -761,9 +780,11 @@ class OpenRouterEngine(
     private val highResolution: Boolean = true,
     private val lang: SubLang = SubLang.ARABIC,
     /** Tokens and cost, for the job's log (optional). */
-    val usage: AiUsage = AiUsage()
+    val usage: AiUsage = AiUsage(),
+    /** Other instructions than the recipe's (the live bench compares versions); null in the app. */
+    promptOverride: String? = null
 ) : OcrEngine {
-    private val prompt = AiRecipe.prompt(profile, lang)
+    private val prompt = promptOverride ?: AiRecipe.prompt(profile, lang)
     val model: String = model.trim().ifBlank { DEFAULT_MODEL }
     override val kind = EngineKind.OPENROUTER
     override val cacheId = AiRecipe.cacheId("openrouter", this.model, profile, thinking, highResolution, lang)
@@ -796,7 +817,8 @@ class OpenRouterEngine(
             }
         }
         // no temperature / top_p: ignored by current Gemini models (see GeminiEngine.buildBody)
-        put("max_tokens", AiRecipe.MAX_OUTPUT_TOKENS)
+        // room held against the balance while the request runs: what the thinking level needs
+        put("max_tokens", AiRecipe.maxTokens(effort))
         // without it OpenRouter lets the model think at its own default (Gemini 4 Hydrogen: high — far slower)
         effort?.let { e -> putJsonObject("reasoning") { put("effort", e); put("exclude", true) } }
     }.toString()

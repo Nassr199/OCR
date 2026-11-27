@@ -10,6 +10,7 @@ import com.abdulrahman.hardsubocr.core.LensProtocol
 import com.abdulrahman.hardsubocr.core.OcrError
 import com.abdulrahman.hardsubocr.core.PngGray
 import com.abdulrahman.hardsubocr.core.PreparedImage
+import com.abdulrahman.hardsubocr.core.SubtitleFrame
 import com.abdulrahman.hardsubocr.core.isClassicOcr
 import java.io.ByteArrayOutputStream
 
@@ -21,6 +22,7 @@ import java.io.ByteArrayOutputStream
  * - enhance = false: Vision gets PNG ≤ 1500 px; Gemini/OpenRouter get the original PNG/JPEG/WebP bytes.
  * - enhance = true : v2.6 prepare_image_for_ocr() (Pillow-identical) → 8-bit grayscale PNG.
  *   [cropBand] keeps only the subtitle band; it is switched off for video crops (already the ROI).
+ *   For Gemini/OpenRouter the picture is then framed on the subtitle itself ([SubtitleFrame], 2.9.0).
  */
 class AndroidImagePreparer(
     private val enhance: Boolean = false,
@@ -36,8 +38,9 @@ class AndroidImagePreparer(
         val mime = bounds.outMimeType ?: "image/png"
         val longest = maxOf(w, h)
 
-        // v2.6 enhancement is Gemini's logic: classic OCR always gets the original picture
-        if (enhance && !kind.isClassicOcr) return enhanced(bytes, w, h, kind)
+        // Gemini/OpenRouter read the original picture (2.9.0): measured live on 3.5 Flash-Lite, v2.6's
+        // grayscale picture lost white letters on light scenes («أهوليام» for «هوليا»). v2.6's picture
+        // is the second view of the cross-check (views).
 
         return when {
             // Google Lens: the JPEG as it came, or encoded once (see above)
@@ -58,6 +61,42 @@ class AndroidImagePreparer(
                 if (passThrough && longest <= 3072) PreparedImage(bytes, mime, w, h)
                 else encodePng(bytes, w, h, 3072)
             }
+        }
+    }
+
+    /**
+     * The AI cross-check's pictures ([AiConsensus]): the original; v2.6's (grayscale, its band, enhanced)
+     * when enhancement is on; the subtitle framed in the original colours ([SubtitleFrame]) to decide.
+     */
+    override fun views(bytes: ByteArray, nameHint: String, kind: EngineKind): List<PreparedImage> {
+        if (kind.isClassicOcr) return listOf(prepare(bytes, nameHint, kind))
+        val original = prepare(bytes, nameHint, kind)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val w = bounds.outWidth
+        val h = bounds.outHeight
+        val v26 = if (enhance) enhanced(bytes, w, h, kind) else original
+        return listOf(original, v26, framed(bytes, w, h) ?: original)
+    }
+
+    /** The subtitle and its margins, in the original colours, as JPEG (quality 95); null when not clear. */
+    private fun framed(bytes: ByteArray, w: Int, h: Int): PreparedImage? {
+        val bmp = decode(bytes, w, h, 3072)
+        try {
+            val bw = bmp.width
+            val bh = bmp.height
+            val px = IntArray(bw * bh)
+            bmp.getPixels(px, 0, bw, 0, 0, bw, bh)
+            val b = SubtitleFrame.find(px, bw, bh) ?: return null
+            val part = Bitmap.createBitmap(bmp, b.left, b.top, b.width, b.height)
+            try {
+                com.abdulrahman.hardsubocr.core.DiagLog.i("image", "AI framed view ${bw}×$bh → ${b.width}×${b.height} · subtitle $b")
+                return PreparedImage(toJpeg(part, 95), "image/jpeg", part.width, part.height)
+            } finally {
+                if (part !== bmp) part.recycle()
+            }
+        } finally {
+            bmp.recycle()
         }
     }
 
@@ -85,7 +124,7 @@ class AndroidImagePreparer(
                 cropBand = cropBand,
                 maxDimension = if (kind.isClassicOcr) LensProtocol.MAX_DIMENSION else 0,
                 // the subtitle band never cuts a line of the subtitle (ImageV26.textSafeBand)
-                keepText = true
+                keepText = true,
             )
         )
         return PreparedImage(PngGray.encode(out), "image/png", out.width, out.height)

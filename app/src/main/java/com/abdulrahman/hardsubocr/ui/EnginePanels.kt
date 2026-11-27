@@ -206,7 +206,7 @@ private fun thinkingHint(t: ThinkingLevel): String = when (t) {
 }
 
 /**
- * Gemini and OpenRouter: one panel — key, model, thinking level, the Google Lens check. Both read the
+ * Gemini and OpenRouter: one panel — key, model, thinking level, the cross-check. Both read the
  * same way (AiRecipe): the subtitle band, enlarged and sharpened as in ocr_windows_v2.6.py, with its
  * instructions. Only the key and the model list differ.
  */
@@ -254,11 +254,11 @@ private fun AiPanel(vm: MainViewModel, enabled: Boolean, gemini: Boolean) {
 
     Spacer(Modifier.height(8.dp))
     SwitchRow(
-        "المراجعة بـ Google Lens",
-        "إذا كرّر النموذج كلمة أو أوقف إجابته قبل نهايتها، يقرأ Google Lens الصورة نفسها مجانًا: يُؤخذ منه عدد التكرار، أو قراءته بدل الإجابة الناقصة.",
-        vm.aiLensCheck,
+        "التحقق المزدوج",
+        "يقرأ النموذج كل صورة مرتين بنظرتين مختلفتين: الصورة الأصلية، ونسخة محسّنة منها. إن اتفقت القراءتان قُبلت، وإن اختلفتا حسمت قراءة ثالثة للترجمة وحدها. أدق، وتكلفته قرابة الضعف.",
+        vm.aiCrossCheck,
         enabled
-    ) { vm.chooseAiLensCheck(it) }
+    ) { vm.chooseAiCrossCheck(it) }
 }
 
 // ============================================================================ API key

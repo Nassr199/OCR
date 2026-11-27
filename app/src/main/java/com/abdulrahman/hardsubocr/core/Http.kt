@@ -68,6 +68,12 @@ class PreparedImage(
 /** Decoding / scaling / re-encoding lives on the platform side (Bitmap on Android). */
 fun interface ImagePreparer {
     fun prepare(bytes: ByteArray, nameHint: String, kind: EngineKind): PreparedImage
+
+    /**
+     * Pictures of the same image for the AI engines' cross-check ([AiConsensus]): two read at once,
+     * a third to decide. One picture where the platform has no others.
+     */
+    fun views(bytes: ByteArray, nameHint: String, kind: EngineKind): List<PreparedImage> = listOf(prepare(bytes, nameHint, kind))
 }
 
 /** Crops a prepared image, in its own pixels (end exclusive); platform side (Bitmap on Android). */

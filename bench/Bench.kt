@@ -12,6 +12,7 @@ import com.abdulrahman.hardsubocr.core.VisionLayout
 import com.abdulrahman.hardsubocr.core.allOf
 import com.abdulrahman.hardsubocr.core.firstOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -131,13 +132,79 @@ private fun transform(src: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int, scale:
 
 private fun one(s: String) = s.replace("\n", " ⏎ ")
 
-/** The app's picture for Gemini/OpenRouter: v2.6 enhancement with the text-safe band (AndroidImagePreparer). */
-private fun aiPicture(jpeg: ByteArray, name: String): com.abdulrahman.hardsubocr.core.PreparedImage {
+/**
+ * The app's picture for Gemini/OpenRouter (AndroidImagePreparer): v2.6 enhancement, the band with the
+ * text-safe edges for an image folder (no band for the video mode's area, "_roi_" frames), and since
+ * 2.9.0 framed on the subtitle itself ([frame]).
+ */
+private fun aiPicture(jpeg: ByteArray, name: String, frame: Boolean, upscale: Boolean = true): com.abdulrahman.hardsubocr.core.PreparedImage {
     val img = ImageIO.read(jpeg.inputStream())
     val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
-    val out = com.abdulrahman.hardsubocr.core.ImageV26.prepare(px, img.width, img.height, com.abdulrahman.hardsubocr.core.ImageV26.Options(keepText = true))
+    val out = com.abdulrahman.hardsubocr.core.ImageV26.prepare(
+        px, img.width, img.height,
+        com.abdulrahman.hardsubocr.core.ImageV26.Options(cropBand = "_roi_" !in name, keepText = true, frame = frame, upscale = upscale)
+    )
     return com.abdulrahman.hardsubocr.core.PreparedImage(com.abdulrahman.hardsubocr.core.PngGray.encode(out), "image/png", out.width, out.height, name)
 }
+
+/** The picture as it came (color JPEG, no v2.6 enhancement); framed on the subtitle when asked. */
+private fun colorPicture(jpeg: ByteArray, name: String, frame: Boolean): com.abdulrahman.hardsubocr.core.PreparedImage {
+    if (!frame) {
+        val img = ImageIO.read(jpeg.inputStream())
+        return com.abdulrahman.hardsubocr.core.PreparedImage(jpeg, "image/jpeg", img.width, img.height, name)
+    }
+    val img = ImageIO.read(jpeg.inputStream())
+    val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
+    val b = com.abdulrahman.hardsubocr.core.SubtitleFrame.find(px, img.width, img.height) ?: return colorPicture(jpeg, name, false)
+    val part = img.getSubimage(b.left, b.top, b.width, b.height)
+    val copy = java.awt.image.BufferedImage(b.width, b.height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    copy.graphics.drawImage(part, 0, 0, null)
+    val out = ByteArrayOutputStream()
+    ImageIO.write(copy, "png", out)
+    return com.abdulrahman.hardsubocr.core.PreparedImage(out.toByteArray(), "image/png", b.width, b.height, name)
+}
+
+/** How the picture is made for a variant. */
+private enum class Pic { V26, V26_FRAMED, V26_FRAMED_NO_UPSCALE, COLOR, COLOR_FRAMED, CROSS }
+
+/** The AI instructions of 2.8.0, to compare with today's (Prompts.SUBTITLE_PROMPT). */
+private const val PROMPT_280: String =
+        "You are performing ULTRA-PRECISE Optical Character Recognition (OCR) on Arabic subtitle images.\n" +
+        "This is PURE PIXEL EXTRACTION - you are a high-precision scanner, NOT an editor or interpreter.\n" +
+        "\n" +
+        "CRITICAL RULES:\n" +
+        "- Extract only the main Arabic subtitle dialogue.\n" +
+        "- Ignore watermarks, logos, channel names, static overlays, and all non-Arabic text. A website, channel or watermark name is never subtitle dialogue, even when it is written in Arabic or placed near the subtitle.\n" +
+        "- Read the base Arabic letters first. Never invent or repair letters.\n" +
+        "- Write every word exactly as many times as it appears in the image. Dialogue often repeats a word or a phrase: count the repetitions in the image and never add or drop one.\n" +
+        "- Preserve punctuation, numbers, brackets, spacing, and line breaks exactly when visible.\n" +
+        "- Arabic diacritics are OPTIONAL, not required.\n" +
+        "- Add a diacritic only if it is unmistakably visible in the pixels and clearly attached to a specific letter.\n" +
+        "- If a diacritic is faint, blurred, stylized, tiny, partially cut, or uncertain, OMIT it.\n" +
+        "- Never add grammatical endings from context.\n" +
+        "- Never split a word into separate letters.\n" +
+        "- Never add tatweel/kashida (ـ).\n" +
+        "- If no Arabic subtitle dialogue exists, output an empty string \"\".\n" +
+        "\n" +
+        "Output only the subtitle text with no commentary.\n" +
+        ""
+
+/** One way of reading with an AI engine: the picture, the instructions, the thinking level. */
+private class AiVariant(val name: String, val pic: Pic, val prompt: String?, val thinking: com.abdulrahman.hardsubocr.core.ThinkingLevel)
+
+/** The 2.8.0 instructions with only "every line" instead of "only the main" dialogue. */
+private val PROMPT_EVERY_LINE: String = PROMPT_280.replace(
+    "- Extract only the main Arabic subtitle dialogue.\n",
+    "- Extract the Arabic subtitle dialogue: every one of its lines, top to bottom, including a short line such as a single name.\n"
+).also { check(it != PROMPT_280) }
+
+private val MIN = com.abdulrahman.hardsubocr.core.ThinkingLevel.MINIMAL
+private val AI_VARIANTS = listOf(
+    AiVariant("2.8.0", Pic.V26, PROMPT_280, MIN),
+    AiVariant("2.9.0 one reading", Pic.COLOR, null, MIN),
+    AiVariant("2.9.0 cross-check", Pic.CROSS, null, MIN),
+)
+private const val AI_RUNS = 3
 
 /** One-line, no tashkeel — the comparison form (the app's classic cleaning). */
 private fun norm(s: String) = Cleaner.clean(s, CleanMode.PRO)
@@ -222,16 +289,23 @@ fun main(args: Array<String>) = runBlocking {
     val openRouterModel = System.getenv("BENCH_OPENROUTER_MODEL")?.trim()?.ifEmpty { null } ?: ("google/" + geminiModel)
     val gemini = if (geminiKey.isBlank()) null else com.abdulrahman.hardsubocr.core.GeminiEngine(http, geminiKey, geminiModel)
     val openRouter = if (openRouterKey.isBlank()) null else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, openRouterKey, openRouterModel)
+    /** "[ai-only]" in the commit message: only the AI engines, on the frames of their faults (and 01–09, 25). */
+    val aiOnly = System.getenv("BENCH_AI_ONLY") == "1" && (geminiKey.isNotBlank() || openRouterKey.isNotBlank())
     val cases = Json.parseToJsonElement(File(dir, "truth.json").readText()).jsonArray
     val sb = StringBuilder()
     sb.append("# OCR bench — commit ").append(System.getenv("GITHUB_SHA") ?: "local").append(" — ").append(java.time.Instant.now()).append("\n\n")
     sb.append("Vision: ").append(if (visionKey.isBlank()) "no VISION_API_KEY secret — Lens only" else "key present (not shown)").append("\n")
     sb.append("AI: ").append(listOfNotNull(gemini?.let { "Gemini $geminiModel" }, openRouter?.let { "OpenRouter $openRouterModel" }).ifEmpty { listOf("not run (needs the secrets and [bench-ai] in the commit message)") }.joinToString(", "))
-        .append(" — the app's exact reading (picture enhanced as in the app, thinking low)\n\n")
+        .append(" — versions of the reading: ").append(AI_VARIANTS.joinToString(" · ") { it.name }).append(" (each $AI_RUNS times)\n\n")
     val scores = LinkedHashMap<String, Score>()
     class Fmt { var n = 0; var failed = 0; var bytes = 0L; val times = ArrayList<Long>() }
     val formats = LinkedHashMap<String, Fmt>()
     val shapes = LinkedHashMap<String, IntArray>()
+    /** AI variants: [line left out, «خوليا», dot at a line start, letters wrong, failed] per run. */
+    val aiFaults = LinkedHashMap<String, IntArray>()
+    val aiGate = kotlinx.coroutines.sync.Semaphore(2)
+    val aiUsage = com.abdulrahman.hardsubocr.core.AiUsage()
+    val crossLog = java.util.concurrent.ConcurrentLinkedQueue<String>()
     /** The subtitle's shape: lines, dashes and punctuation exactly (the app's Lens/Vision cleaning). */
     fun shape(name: String, got: String, truth: String): String {
         val s = shapes.getOrPut(name) { IntArray(2) }
@@ -255,6 +329,8 @@ fun main(args: Array<String>) = runBlocking {
         sb.append("## ").append(file).append(" — ").append(o["note"]!!.jsonPrimitive.content).append('\n')
         sb.append("truth: «").append(one(truth)).append("»\n\n")
 
+        if (aiOnly && !file.contains("_roi_") && !file.startsWith("08") && !file.startsWith("09") && !file.startsWith("25")) continue
+        if (!aiOnly) {
         // ---------------------------------------------------------------- Google Lens: one look (raw)
         val body = lensBody(http, png)
         val res = body?.let { LensProtocol.parseResponse(it) }
@@ -300,23 +376,72 @@ fun main(args: Array<String>) = runBlocking {
             }
         }
 
-        // ---------------------------------------------------------------- Gemini / OpenRouter: the app's exact reading
-        for ((label, engine) in listOf("gemini" to gemini, "openrouter" to openRouter)) {
-            if (engine == null) continue
-            val prepared = aiPicture(File(dir, file).readBytes(), file)
-            val t = runCatching { engine.recognize(prepared) }
-            val raw = t.getOrNull()
-            if (raw == null) {
-                sb.append("- ").append(label).append(": ").append((t.exceptionOrNull()?.message ?: "").replace(geminiKey.ifEmpty { "\u0000" }, "***").replace(openRouterKey.ifEmpty { "\u0000" }, "***")).append('\n')
-                continue
+        }
+        // ---------------------------------------------------------------- Gemini / OpenRouter: versions of the reading
+        // the same picture and instructions as the app, each variant twice (a model is not always the same)
+        for ((label, key, model) in listOf(Triple("gemini", geminiKey, geminiModel), Triple("openrouter", openRouterKey, openRouterModel))) {
+            if (key.isBlank()) continue
+            val src = File(dir, file).readBytes()
+            val pics = mapOf(
+                Pic.V26 to aiPicture(src, file, false), Pic.V26_FRAMED to aiPicture(src, file, true),
+                Pic.V26_FRAMED_NO_UPSCALE to aiPicture(src, file, true, upscale = false),
+                Pic.COLOR to colorPicture(src, file, false), Pic.COLOR_FRAMED to colorPicture(src, file, true)
+            )
+            sb.append("- ").append(label).append(" pictures: ").append(pics.entries.joinToString(", ") { "${it.key} ${it.value.width}×${it.value.height}" }).append('\n')
+            val runs = kotlinx.coroutines.coroutineScope {
+                AI_VARIANTS.flatMap { v -> (1..AI_RUNS).map { n -> v to n } }.map { (v, n) ->
+                    async(Dispatchers.IO) {
+                        aiGate.acquire()
+                        try {
+                            val engine = if (label == "gemini") com.abdulrahman.hardsubocr.core.GeminiEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
+                            else com.abdulrahman.hardsubocr.core.OpenRouterEngine(http, key, model, v.thinking, usage = aiUsage, promptOverride = v.prompt)
+                            suspend fun once(img: com.abdulrahman.hardsubocr.core.PreparedImage): String {
+                                var r = runCatching { engine.recognize(img) }
+                                var tries = 0
+                                while (tries < 6 && r.exceptionOrNull() is com.abdulrahman.hardsubocr.core.OcrError.Retryable) {
+                                    kotlinx.coroutines.delay((r.exceptionOrNull() as com.abdulrahman.hardsubocr.core.OcrError.Retryable).retryAfterMs ?: (2000L shl tries).coerceAtMost(20_000))
+                                    tries++
+                                    r = runCatching { engine.recognize(img) }
+                                }
+                                return r.getOrThrow()
+                            }
+                            val r = runCatching {
+                                if (v.pic == Pic.CROSS) {
+                                    val o = com.abdulrahman.hardsubocr.core.AiConsensus.read(listOf(pics[Pic.COLOR]!!, pics[Pic.V26]!!, pics[Pic.COLOR_FRAMED]!!)) { img ->
+                                        Cleaner.clean(once(img), CleanMode.EXACT)
+                                    }
+                                    crossLog.add("$file ${o.readings} readings: " + o.texts.joinToString(" | ") { one(it) } + " → " + one(o.text))
+                                    o.text
+                                } else once(pics[v.pic]!!)
+                            }
+                            Triple(v, n, r)
+                        } finally { aiGate.release() }
+                    }
+                }.map { it.await() }
             }
-            val text = Cleaner.clean(raw, CleanMode.EXACT)
-            sb.append("- ").append(label).append(' ').append(score("$label exact", text, truth)).append(' ').append(shape("$label exact (with tashkeel)", text, truth))
-                .append(" «").append(one(text)).append("»\n")
+            for ((v, n, t) in runs) {
+                val raw = t.getOrNull()
+                val name = "$label ${v.name}"
+                if (raw == null) {
+                    sb.append("  - ").append(name).append(" #").append(n).append(": ")
+                        .append((t.exceptionOrNull()?.message ?: "").replace(geminiKey.ifEmpty { "\u0000" }, "***").replace(openRouterKey.ifEmpty { "\u0000" }, "***").take(200)).append('\n')
+                    aiFaults.getOrPut(name) { IntArray(5) }[4]++
+                    continue
+                }
+                val text = Cleaner.clean(raw, CleanMode.EXACT)
+                val f = aiFaults.getOrPut(name) { IntArray(5) }
+                val truthLines = truth.split('\n').size
+                if (text.split('\n').size < truthLines) f[0]++                                   // a line left out
+                if ("خوليا" in text && "خوليا" !in truth) f[1]++                                   // a name changed
+                if (text.lines().any { it.trimStart().firstOrNull() in setOf('.', '،', ',') }) f[2]++ // punctuation added at a line start
+                if (norm(text) != norm(truth)) f[3]++                                              // any letter wrong
+                sb.append("  - ").append(name).append(" #").append(n).append(' ').append(score(name, text, truth)).append(' ')
+                    .append(shape("$name (with tashkeel)", text, truth)).append(" «").append(one(text)).append("»\n")
+            }
         }
 
         // ---------------------------------------------------------------- Google Cloud Vision: the app
-        if (visionKey.isNotBlank()) {
+        if (visionKey.isNotBlank() && !aiOnly) {
             var trace: com.abdulrahman.hardsubocr.core.VisionEngine.Trace? = null
             val engine = VisionEngine(http, visionKey, "ar", document = true, cropper = JvmCropper, trace = { trace = it })
             // as the app since 2.8.0: a JPEG that fits goes to Lens as it is
@@ -335,7 +460,7 @@ fun main(args: Array<String>) = runBlocking {
         }
 
         // ---------------------------------------------------------------- Google Cloud Vision
-        if (visionKey.isNotBlank()) {
+        if (visionKey.isNotBlank() && !aiOnly) {
             for (feature in listOf("DOCUMENT_TEXT_DETECTION", "TEXT_DETECTION"))
                 for (model in listOf("", "builtin/latest", "builtin/weekly"))
                     for (hints in listOf(listOf("ar"), listOf("ar", "en"))) {
@@ -389,6 +514,17 @@ fun main(args: Array<String>) = runBlocking {
             val t = f.times.sorted()
             sb.append("| $k | ${f.bytes / maxOf(1, f.n) / 1024} KB | ${t.getOrElse(t.size / 2) { 0 }} | ${t.getOrElse((t.size * 9) / 10) { 0 }} | ${f.failed} |\n")
         }
+        sb.append('\n')
+    }
+    if (aiFaults.isNotEmpty()) {
+        aiUsage.summary()?.let { sb.append("AI usage of this run: ").append(it).append("\n\n") }
+        if (crossLog.isNotEmpty()) {
+            sb.append("Cross-check decisions:\n\n")
+            for (l in crossLog) sb.append("- ").append(l).append('\n')
+            sb.append('\n')
+        }
+        sb.append("## AI faults (runs)\n\n| variant | line left out | «خوليا» | dot at a line start | letters wrong | failed |\n|---|---|---|---|---|---|\n")
+        for ((k, f) in aiFaults) sb.append("| $k | ${f[0]} | ${f[1]} | ${f[2]} | ${f[3]} | ${f[4]} |\n")
         sb.append('\n')
     }
     sb.append("## Summary (after the app's classic cleaning; errors = edit distance to the truth)\n\n")

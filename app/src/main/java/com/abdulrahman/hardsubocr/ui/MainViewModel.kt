@@ -60,6 +60,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val job: StateFlow<JobState> = JobManager.state
 
+    /** The log of the last job, kept after it ends: the processing tab shows it under the result. */
+    /** Gemini/OpenRouter: «التحقق المزدوج». */
+    var aiCrossCheck by mutableStateOf(s.aiCrossCheck)
+        private set
+
+    fun chooseAiCrossCheck(on: Boolean) {
+        aiCrossCheck = on; s.aiCrossCheck = on
+    }
+
+    var lastLog by mutableStateOf<List<com.abdulrahman.hardsubocr.job.LogLine>>(emptyList())
+        private set
+
+    init {
+        viewModelScope.launch { job.collect { if (it is JobState.Running) lastLog = it.progress.log } }
+    }
+
     // ------------------------------------------------------------------ engine
     var engine by mutableStateOf(s.engine)
         private set
@@ -349,16 +365,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         EngineKind.OPENROUTER -> (OpenRouterEngine.SUGGESTED_MODELS + fetchedOpenRouter).distinct()
         EngineKind.LENS, EngineKind.VISION -> emptyList()
     }
-
-    /** The same text form for Gemini and OpenRouter. */
-    /** Gemini/OpenRouter: Google Lens reads the picture again when the AI repeats a word or is cut. */
-    var aiLensCheck by mutableStateOf(s.aiLensCheck)
-        private set
-
-    fun chooseAiLensCheck(on: Boolean) {
-        aiLensCheck = on; s.aiLensCheck = on
-    }
-
 
     fun dismissErrorReport() {
         lastErrorReport = null; s.lastErrorReport = null
@@ -668,7 +674,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             enhance = s.enhanceFor(e),
             mediaHigh = true,
             stabilize = s.stabilizeFor(e),
-            aiLensCheck = aiLensCheck
+            aiCrossCheck = aiCrossCheck
         )
         JobManager.start(ctx, req)
     }

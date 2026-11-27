@@ -29,7 +29,13 @@ object ImageV26 {
          * The band never cuts through the subtitle ([textSafeBand]). Off = v2.6's fixed band exactly
          * (what the Pillow comparison checks); the app turns it on.
          */
-        val keepText: Boolean = false
+        val keepText: Boolean = false,
+        /**
+         * Then keep only the subtitle itself with generous margins ([SubtitleFrame]). Measured live
+         * (bench, 2.9.0) it helps some frames and hurts others («بخير» written three times), so the app
+         * does not use it on v2.6's picture; the bench compares it.
+         */
+        val frame: Boolean = false
     )
 
     fun prepare(argb: IntArray, width: Int, height: Int, opt: Options = Options()): GrayImage {
@@ -49,6 +55,13 @@ object ImageV26 {
                 px = crop(px, w, left, top, right, bottom)
                 w = right - left
                 h = bottom - top
+            }
+        }
+        if (opt.frame) {
+            SubtitleFrame.find(px, w, h)?.let { b ->
+                px = crop(px, w, b.left, b.top, b.right, b.bottom)
+                w = b.width
+                h = b.height
             }
         }
         if (opt.upscale) {

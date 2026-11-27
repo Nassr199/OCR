@@ -33,6 +33,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -121,6 +122,15 @@ object Motion {
      * direction: the new page comes from the end side (from the left in Arabic) while the old one
      * fades out in the first 90 ms; back is the mirror image.
      */
+    /**
+     * Material fade-through between tabs and between the states of a card: the old content fades out
+     * in 90 ms, the new one fades in and grows from 94 %.
+     */
+    fun fadeThrough(): ContentTransform =
+        (fadeIn(tween(220, delayMillis = 90, easing = LinearOutSlowInEasing)) +
+            scaleIn(tween(280, delayMillis = 90, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
+            fadeOut(tween(90, easing = FastOutLinearInEasing))
+
     fun sharedAxisX(forward: Boolean, rtl: Boolean, distancePx: Int): ContentTransform {
         val sign = (if (forward) 1 else -1) * (if (rtl) -1 else 1)
         val enter = slideInHorizontally(tween(PAGE, easing = FastOutSlowInEasing)) { sign * distancePx } +
@@ -218,8 +228,8 @@ fun GroupTitle(text: String) {
 
 /** Rows of one settings group on one rounded surface; rows are separated by inset dividers. */
 @Composable
-fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
+fun SettingsGroup(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth()) {
         if (title != null) GroupTitle(title)
         Column(
             Modifier
@@ -233,8 +243,8 @@ fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -> Unit) {
 
 /** Controls of a settings page on one rounded surface with 16 dp padding. */
 @Composable
-fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
+fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth()) {
         if (title != null) GroupTitle(title)
         Column(
             Modifier
@@ -252,12 +262,14 @@ fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
  * points the way the page opens (left in Arabic).
  */
 @Composable
-fun SettingsRow(emoji: String, title: String, summary: String, divider: Boolean = true, onClick: () -> Unit) {
+fun SettingsRow(emoji: String, title: String, summary: String, divider: Boolean = true, selected: Boolean = false, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (selected) scheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent, Motion.quick(), label = "rowSel")
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
+            .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -340,19 +352,17 @@ fun AppHeader(statusText: String, statusColor: Color, onSettings: () -> Unit, bu
 @Composable
 fun StatusPill(text: String, color: Color, busy: Boolean = false) {
     val c by animateColorAsState(color, Motion.quick(), label = "pill")
-    // a slow pulse of the dot while a job runs
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val a by pulse.animateFloat(1f, 0.35f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse), label = "dot")
     Row(
         Modifier
             .background(c.copy(alpha = 0.16f), RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .border(1.dp, c.copy(alpha = 0.35f), RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
             .animateContentSize(Motion.soft()),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(7.dp).graphicsLayer { alpha = if (busy) a else 1f }.background(c, CircleShape))
+        Box(Modifier.size(7.dp).background(c, CircleShape))
         Spacer(Modifier.width(6.dp))
-        Text(text, color = c, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        Text(text, color = c, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

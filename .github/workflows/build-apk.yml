@@ -12,7 +12,8 @@ permissions:
 jobs:
   build:
     # the branch "ocr-bench" carries work in progress for the live OCR bench: never built or released
-    if: github.ref_name != 'ocr-bench'
+    # "ui-shots" carries screen work in progress for the screenshot workflow: never built or released either
+    if: github.ref_name != 'ocr-bench' && github.ref_name != 'ui-shots'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

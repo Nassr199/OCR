@@ -81,7 +81,7 @@ fun ResultScreen(vm: MainViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = {
                     Column {
-                        Text("${output?.name ?: ""}.srt", fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text("${output?.name ?: ""}\u2066.srt\u2069", fontWeight = FontWeight.Bold, maxLines = 1)
                         Text(
                             "${vm.editEntries.size} مقطع" + if (vm.editDirty) " • تعديلات غير محفوظة" else "",
                             style = MaterialTheme.typography.labelMedium,

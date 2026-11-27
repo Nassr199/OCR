@@ -58,9 +58,13 @@ fun main() = runBlocking {
     check("OpenRouter: the same picture bytes", oContent[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content ==
         "data:image/png;base64," + gParts[1].jsonObject["inlineData"]!!.jsonObject["data"]!!.jsonPrimitive.content)
     check("OpenRouter: high detail", oContent[1].jsonObject["image_url"]!!.jsonObject["detail"]?.jsonPrimitive?.content == "high")
-    check("OpenRouter: no temperature/top_p, max_tokens 8192, reasoning low (hidden) like Gemini's thinking",
-        !ob.containsKey("temperature") && !ob.containsKey("top_p") && ob["max_tokens"]!!.jsonPrimitive.int == 8192 &&
+    // 2.9.0: low thinking asks 2048 (OpenRouter holds the room's price against the balance while it runs)
+    check("OpenRouter: no temperature/top_p, max_tokens 2048, reasoning low (hidden) like Gemini's thinking",
+        !ob.containsKey("temperature") && !ob.containsKey("top_p") && ob["max_tokens"]!!.jsonPrimitive.int == 2048 &&
             ob["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content == "low" && ob["reasoning"]!!.jsonObject["exclude"]!!.jsonPrimitive.boolean, ob.toString().take(0))
+    check("max output: 2048 for minimal/low, 8192 for medium/high/the model's own",
+        AiRecipe.maxTokens("minimal") == 2048 && AiRecipe.maxTokens("low") == 2048 && AiRecipe.maxTokens("medium") == 8192 &&
+            AiRecipe.maxTokens("high") == 8192 && AiRecipe.maxTokens(null) == 8192)
     check("OpenRouter: attribution is the app's page, not openrouter.ai", oh.seen[0].headers["HTTP-Referer"] == "https://github.com/Nassr199/OCR" && oh.seen[0].headers["X-OpenRouter-Title"] != null)
     check("OpenRouter: usage and cost counted", o.usage.thinkingTokens.get() == 90L && o.usage.costMicros.get() == 2130L, o.usage.summary() ?: "")
     // thinking "auto": nothing sent, the model decides
@@ -85,8 +89,8 @@ fun main() = runBlocking {
     OpenRouterEngine(oe, "K", "google/gemini-4-hydrogen", lang = SubLang.ENGLISH).recognize(img)
     check("English: the English prompt through both", obj(ge.seen[0]).toString().contains("NO_TEXT") && obj(oe.seen[0]).toString().contains("NO_TEXT"))
     // resume-memory identity: style, thinking and detail in it, same shape for both
-    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:v26s:t=minimal:hi" &&
-        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:v26s:t=minimal:hi",
+    check("cache ids", GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId == "gemini:gemini-4-hydrogen:v26s:t=minimal:hi:r2" &&
+        OpenRouterEngine(Fake(mutableListOf()), "K", "google/gemini-4-hydrogen").cacheId == "openrouter:google/gemini-4-hydrogen:v26s:t=minimal:hi:r2",
         GeminiEngine(Fake(mutableListOf()), "K", "gemini-4-hydrogen").cacheId)
 
     // ------------------------------------------------------------------ OpenRouter errors, in plain words

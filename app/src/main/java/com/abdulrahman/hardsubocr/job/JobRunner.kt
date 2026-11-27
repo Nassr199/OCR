@@ -6,7 +6,6 @@ import com.abdulrahman.hardsubocr.core.AiUsage
 import com.abdulrahman.hardsubocr.core.EngineKind
 import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ItemOutcome
-import com.abdulrahman.hardsubocr.core.LensCheck
 import com.abdulrahman.hardsubocr.core.LensEngine
 import com.abdulrahman.hardsubocr.core.OcrEngine
 import com.abdulrahman.hardsubocr.core.OcrError
@@ -152,15 +151,9 @@ class JobRunner(
 
     /** Tokens (and OpenRouter's cost) of the AI engines, summed over the job. */
     private val aiUsage = AiUsage()
-
-    /** Gemini/OpenRouter: Google Lens reads the original picture when the AI repeats a word or is cut ([AiCheck]). */
-    private val lensCheck: LensCheck? =
-        if (!req.engine.isClassicOcr && req.aiLensCheck) LensCheck(
-            LensEngine(Net.transport, req.lang.code, req.lensRegion, views = if (req.lensMultiView) AndroidResampler else null),
-            req.stripDiacritics
-        ) else null
-    private val lensFixed = java.util.concurrent.atomic.AtomicInteger()
-    private val lensForCut = java.util.concurrent.atomic.AtomicInteger()
+    /** AI cross-check over the whole job: images whose two readings agreed / that a third reading decided. */
+    private val crossAgreed = java.util.concurrent.atomic.AtomicInteger()
+    private val crossDecided = java.util.concurrent.atomic.AtomicInteger()
 
     /**
      * Image enhancement is part of what an AI engine reads; it enters the resume-memory key only when
@@ -200,18 +193,27 @@ class JobRunner(
         retry = RetryPolicy(maxRetries = req.retries),
         cache = cache,
         keySuffix = keySuffix,
-        secondReader = lensCheck,
+        crossCheck = !req.engine.isClassicOcr && req.aiCrossCheck,
         listener = object : PipelineListener {
-            override fun onNote(item: OcrItem, note: String) {
-                if (note.startsWith("عدد التكرار")) lensFixed.incrementAndGet() else lensForCut.incrementAndGet()
-                addLog("🔍 " + item.name.take(28) + "  —  " + note.take(140))
-            }
             override fun onItem(item: OcrItem, outcome: ItemOutcome) {
                 when (outcome) {
                     is ItemOutcome.Text -> addLog((if (outcome.cached) "♻ " else "✓ ") + item.name.take(28) + "  ←  " + outcome.text.replace('\n', ' ').take(60))
                     is ItemOutcome.Empty -> addLog("○ " + item.name.take(28) + "  —  لا توجد ترجمة")
                     is ItemOutcome.Failed -> addLog("✖ " + item.name.take(28) + "  —  " + outcome.message.take(80))
                 }
+            }
+
+            override fun onCrossAgreed(item: OcrItem) {
+                crossAgreed.incrementAndGet()
+            }
+
+            override fun onCrossCheck(item: OcrItem, texts: List<String>, chosen: String) {
+                crossDecided.incrementAndGet()
+                addLog(
+                    "⚖ " + item.name.take(28) + "  —  اختلفت القراءتان، وحسمت الثالثة: «" + chosen.replace('\n', ' ').take(60) + "»" +
+                        texts.filter { it != chosen }.joinToString("") { "  ·  «" + it.replace('\n', ' ').take(40) + "»" }
+                )
+                DiagLog.i("ai", "cross-check ${item.name}: " + texts.joinToString(" | ") { it.replace('\n', '⏎') } + " → " + chosen.replace('\n', '⏎'))
             }
 
             override fun onRetry(item: OcrItem, attempt: Int, delayMs: Long, reason: String) {
@@ -374,8 +376,8 @@ class JobRunner(
 
     private fun endLog(how: String, outputs: List<JobOutput>) {
         aiUsage.summary()?.let { addLog("🧮 ${if (req.engine == EngineKind.OPENROUTER) "OpenRouter" else "Gemini"}: $it") }
-        if (lensFixed.get() + lensForCut.get() > 0) {
-            addLog("🔍 المراجعة بـ Google Lens: صُحّح عدد التكرار في ${lensFixed.get()} صورة، وأُخذت قراءته بدل إجابة ناقصة في ${lensForCut.get()} صورة")
+        if (crossAgreed.get() + crossDecided.get() > 0) {
+            addLog("⚖ التحقق المزدوج: اتفقت القراءتان في ${crossAgreed.get()} صورة، وحسمت قراءة ثالثة ${crossDecided.get()} صورة")
         }
         val st = pipeline?.stats
         DiagLog.i(

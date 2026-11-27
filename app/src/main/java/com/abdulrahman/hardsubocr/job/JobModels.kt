@@ -59,8 +59,8 @@ data class JobRequest(
     val enhance: Boolean,
     val mediaHigh: Boolean,
     val stabilize: Boolean,
-    /** Gemini/OpenRouter: Google Lens as second reader for repeats and cut answers. */
-    val aiLensCheck: Boolean = true
+    /** Gemini/OpenRouter: the cross-check (two readings, a third when they differ). */
+    val aiCrossCheck: Boolean = true
 )
 
 /** One line of the live log; [id] keeps the list smooth when new lines arrive. */
