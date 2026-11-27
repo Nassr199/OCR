@@ -20,51 +20,59 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * 3.0.3 — a one-word line («أخي») over a fast scene came out as many short pieces with holes between
  * them: in the player it blinked. The user's video is a 25 fps film inside a 60 fps file, and a car's
- * number plate and chrome (text-like, and bigger than the word) drive away behind the line.
+ * number plate and chrome (text-like, and bigger than the word) drive away behind the line; the
+ * detector takes each step of the car for a change.
  *
- * The scene here is drawn, not taken from any video: a car with a plate, chrome and a silver bar
- * drives away over grass and asphalt while the camera follows; the subtitle band is turned into the
- * app's luma grid; the three detectors, the reading arbiter (reading simulated: a piece reads the line
- * that covers its frames) and the merge run exactly as in the app.
+ * The fix is not a merge by time: the detector proves, per piece, that the text on screen never left
+ * since the piece before (ScanSegment.continuesId), and the reading confirms the same text
+ * (Arbiter.joinUnbroken). Without that proof nothing is joined, whatever the gap.
+ *
+ * The scene here is drawn, not taken from any video: a car with a plate, chrome and a grille drives
+ * away over grass and asphalt while the camera follows; the subtitle band becomes the app's luma grid;
+ * the three detectors, the reading arbiter (reading simulated: a piece reads the line that covers its
+ * frames) and «بدون دمج» (no merge at all) run as in the app.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
 class BlinkTest {
 
-    private fun entry(name: String, text: String): SubEntry {
+    private fun piece(name: String, text: String, continues: Boolean): Arbiter.Piece {
         val (a, b) = Timestamps.parseVsfName(name)!!
-        return SubEntry(a, b, text)
+        return Arbiter.Piece(a * 1000, (b + 1) * 1000, text, continues)
     }
 
-    /** The user's nine pictures of one line (holes of 17–50 ms) are one line again. */
+    private val names = listOf(
+        "0_04_06_850__0_04_06_915", "0_04_06_933__0_04_06_999", "0_04_07_050__0_04_07_115",
+        "0_04_07_133__0_04_07_199", "0_04_07_250__0_04_07_315", "0_04_07_333__0_04_07_399",
+        "0_04_07_450__0_04_07_515", "0_04_07_533__0_04_07_599", "0_04_07_650__0_04_07_715"
+    ).map { it + "_0000006701875041019201080.jpeg" }
+
+    /** The user's nine pieces of «أخي», each proven to continue the one before: one line, from the first to the last. */
     @Test
-    fun the_users_blinking_line_is_one_line() {
-        val names = listOf(
-            "0_04_06_850__0_04_06_915", "0_04_06_933__0_04_06_999", "0_04_07_050__0_04_07_115",
-            "0_04_07_133__0_04_07_199", "0_04_07_250__0_04_07_315", "0_04_07_333__0_04_07_399",
-            "0_04_07_450__0_04_07_515", "0_04_07_533__0_04_07_599", "0_04_07_650__0_04_07_715"
-        )
-        val pieces = names.map { entry(it + "_0000006701875041019201080.jpeg", "أخي") }
-        val out = Merge.mergeSplits(pieces)
-        assertEquals(1, out.size)
-        assertEquals(246_850L, out[0].startMs)
-        assertEquals(247_715L, out[0].endMs)
-        // before 3.0.3 (touching pieces only) the nine stayed apart: that is the blinking
-        assertEquals(9, Merge.mergeSplits(pieces, maxGapMs = 10).size)
+    fun the_users_nine_pieces_are_one_line_with_the_proof() {
+        val pieces = names.mapIndexed { i, n -> piece(n, "أخي", i > 0) }
+        val j = Arbiter.joinUnbroken(pieces)
+        assertEquals(1, j.size)
+        assertEquals(246_850_000L, j[0].startUs)
+        assertEquals(247_716_000L, j[0].endUs)
+        assertEquals(9, j[0].joined)
+        val lines = Arbiter.resolve(pieces, listOf(emptyList(), emptyList(), emptyList()), 16_683, 3)
+        assertEquals(1, lines.size)
+        assertEquals(246_850_000L, lines[0].startUs)
+        assertEquals(247_716_000L, lines[0].endUs)
     }
 
-    /** Only a blink is closed: the same text further apart, and different texts, stay apart. */
+    /** No proof, no join — whatever the gap; a proof never joins different texts, or a piece that read nothing. */
     @Test
-    fun separate_lines_stay_separate() {
-        val gapped = listOf(entry("0_00_30_000__0_00_31_000_x.jpeg", "نعم"), entry("0_00_31_200__0_00_32_000_x.jpeg", "نعم"))
-        assertEquals(2, Merge.mergeSplits(gapped).size)
-        val other = listOf(entry("0_00_10_000__0_00_11_599_x.jpeg", "سأذهب إلى البيت الآن"), entry("0_00_11_640__0_00_13_000_x.jpeg", "سأذهب إلى البيت غدًا"))
-        assertEquals(2, Merge.mergeSplits(other).size)
-        val marks = listOf(entry("0_00_20_000__0_00_20_239_x.jpeg", "الآنَ يا أحمد"), entry("0_00_20_300__0_00_22_000_x.jpeg", "الآن يا أحمدُ"))
-        val m = Merge.mergeSplits(marks)
-        assertEquals(1, m.size)
-        assertEquals("الآن يا أحمدُ", m[0].text) // the longer piece's reading is kept
+    fun nothing_is_joined_without_the_proof_and_the_same_text() {
+        assertEquals(9, Arbiter.joinUnbroken(names.map { piece(it, "أخي", false) }).size)
+        val other = listOf(piece(names[0], "أخي", false), piece(names[1], "أختي", true))
+        assertEquals(2, Arbiter.joinUnbroken(other).size)
+        val plate = listOf(piece("0_04_06_733__0_04_06_799_x.jpeg", "", false), piece(names[0], "أخي", true))
+        assertEquals(2, Arbiter.joinUnbroken(plate).size)
+        val marks = listOf(piece(names[0], "أخيَ", false), piece(names[1], "أخي", true))
+        assertEquals(1, Arbiter.joinUnbroken(marks).size) // the same line read with and without a mark
     }
 
     @Test
@@ -76,22 +84,27 @@ class BlinkTest {
             Scene.render(1.3, 59.94, 25.0, listOf(Scene.Line(18, 70, word)), cutAt = 18) to "a cut into the scene with the line"
         )
         for ((v, what) in cases) {
-            val r = Modes.run(v)
-            println("$what: ${r.basePieces} pieces; most accurate → ${r.before} line(s) in 3.0.2, now " + r.best.joinToString { "${it.from}-${it.to} ${it.text}" })
+            val before = Modes.run(v, proof = false)
+            val r = Modes.run(v, proof = true)
+            println("$what: 3.0.2 → ${before.best.size} line(s), now → " + r.best.joinToString { "${it.from}-${it.to} ${it.text}" } +
+                " (سريع: ${before.fast.size} → ${r.fast.size})")
             assertEquals("$what: one line", 1, r.best.size)
             val l = r.best[0]
             val t = v.lines[0]
             assertEquals(word, l.text)
             assertTrue("$what: start ${l.from} vs ${t.from}", kotlin.math.abs(l.from - t.from) <= 6)
             assertTrue("$what: end ${l.to} vs ${t.to}", kotlin.math.abs(l.to - t.to) <= 3)
+            assertTrue("$what: the fast mode never gets worse", r.fast.size <= before.fast.size || before.fast.isEmpty())
         }
+        // the test reproduces the fault: a 25 fps film in a 60 fps file blinked in 3.0.2
+        assertTrue(Modes.run(cases[0].first, proof = false).best.size > 1)
     }
 
     /** A new line that looks like the last one shifted («لا» → «لا لا») is still a new line. */
     @Test
     fun a_new_line_after_a_like_one_stays_a_new_line() {
         val v = Scene.render(2.0, 59.94, 25.0, listOf(Scene.Line(20, 60, "لا"), Scene.Line(60, 104, "لا لا")))
-        val r = Modes.run(v)
+        val r = Modes.run(v, proof = true)
         println("لا → لا لا: " + r.best.joinToString { "${it.from}-${it.to} ${it.text}" })
         assertEquals(listOf("لا", "لا لا"), r.best.map { it.text })
         assertTrue(kotlin.math.abs(r.best[1].from - 60) <= 3 && kotlin.math.abs(r.best[1].to - 104) <= 3)
@@ -222,48 +235,56 @@ class BlinkTest {
         }
     }
 
-    /** "The most accurate" mode as VideoScanner + JobRunner run it, frames in, SRT lines out. */
+    /** «الأدق» and «سريع» as VideoScanner + JobRunner run them, frames in, SRT lines out («بدون دمج»). */
     object Modes {
-        /** [before]: lines with the merge of 3.0.2 (touching pieces only) — the blinking. */
-        class Out(val basePieces: Int, val best: List<Scene.Line>, val before: Int)
+        class Out(val best: List<Scene.Line>, val fast: List<Scene.Line>)
 
-        fun run(v: Scene.Video): Out {
+        fun run(v: Scene.Video, proof: Boolean): Out {
             val fus = (1_000_000.0 / v.fps).toLong()
-            val p = ScanParams.preset(SubLang.ARABIC, SubStyle.LIGHT, 150, 60, true, false, 30)
+            val p = ScanParams.preset(SubLang.ARABIC, SubStyle.LIGHT, 150, 60, true, false, 10)
             fun frames(us: Long) = ((us + fus / 2) / fus).toInt()
+            /** (start frame, end frame, 1 = proven to continue the piece before) in the order the pieces come */
             fun track(pp: ScanParams): List<IntArray> {
                 val tr = SubtitleTracker(pp)
                 val out = ArrayList<IntArray>()
-                for ((i, b) in v.grids.withIndex()) for (c in tr.pushRaw(i * fus, ScanMask.compute(LumaGrid(v.gw, v.gh, b), pp)).closed) out.add(intArrayOf(frames(c.startUs), frames(c.endUs)))
-                for (c in tr.finish(v.grids.size * fus).closed) out.add(intArrayOf(frames(c.startUs), frames(c.endUs)))
-                return out.sortedBy { it[0] }
+                var last = -1
+                fun add(c: ScanSegment) {
+                    out.add(intArrayOf(frames(c.startUs), frames(c.endUs), if (c.continuesId >= 0 && c.continuesId == last) 1 else 0))
+                    last = c.id
+                }
+                for ((i, b) in v.grids.withIndex()) for (c in tr.pushRaw(i * fus, ScanMask.compute(LumaGrid(v.gw, v.gh, b), pp)).closed) add(c)
+                for (c in tr.finish(v.grids.size * fus).closed) add(c)
+                return out
             }
             val sg = SubtitleSegmenter(SegmenterParams())
             val c20 = ArrayList<IntArray>()
             for ((i, b) in v.grids.withIndex()) for (c in sg.push(i * fus, LumaGrid(v.gw, v.gh, b)).closed) c20.add(intArrayOf(frames(c.startUs), frames(c.endUs)))
             for (c in sg.finish(v.grids.size * fus).closed) c20.add(intArrayOf(frames(c.startUs), frames(c.endUs)))
-            val v22 = track(p)
-            val v21 = track(p.legacy21())
+            val v22 = track(p.copy(joinUnbroken = false))
+            val v21 = track(p.legacy21().copy(joinUnbroken = proof))
             fun read(s: Int, e: Int): String {
                 val g = v.lines.maxByOrNull { maxOf(0, minOf(e, it.to) - maxOf(s, it.from)) } ?: return ""
                 val o = maxOf(0, minOf(e, g.to) - maxOf(s, g.from))
                 return if (o > 0 && o >= minOf(3, (e - s + 1) / 2)) g.text else ""
             }
-            val minFrames = maxOf(3, (30_000 / fus).toInt())
+            val minFrames = maxOf(3, (10_000 / fus).toInt())
             fun piece(s: IntArray, t: String?) = Arbiter.Piece(s[0] * fus, s[1] * fus, t)
-            val base = v21.map { piece(it, read(it[0], it[1])) }
+            val base = v21.map { Arbiter.Piece(it[0] * fus, it[1] * fus, read(it[0], it[1]), it[2] == 1) }
             val raw = listOf(v22.map { piece(it, null) }, c20.map { piece(it, null) }, v21.map { piece(it, null) })
             val need = Arbiter.needed(base, raw, fus, minFrames)
             val alts = listOf(
                 v22.mapIndexed { i, s -> piece(s, if (i in need[0]) read(s[0], s[1]) else null) },
                 c20.mapIndexed { i, s -> piece(s, if (i in need[1]) read(s[0], s[1]) else null) },
                 v21.mapIndexed { i, s -> piece(s, if (i in need[2]) read(s[0], s[1]) else null) })
-            val lines = Arbiter.resolve(base, alts, fus, minFrames)
-            // as JobRunner: SubEntry(start ms, end ms - 1), then the merge of the "split frames" mode
-            val entries = lines.map { val s = it.startUs / 1000; SubEntry(s, maxOf(s, it.endUs / 1000 - 1), it.text) }
-            val ms = fus / 1000.0
-            val best = Merge.mergeSplits(entries).map { Scene.Line(Math.round(it.startMs / ms).toInt(), Math.round((it.endMs + 1) / ms).toInt(), it.text) }
-            return Out(v21.size, best, Merge.mergeSplits(entries, maxGapMs = 10).size)
+            fun srt(l: List<Triple<Long, Long, String>>): List<Scene.Line> {
+                // as JobRunner: SubEntry(start ms, end ms - 1), then «بدون دمج»
+                val e = l.map { val s = it.first / 1000; SubEntry(s, maxOf(s, it.second / 1000 - 1), it.third) }
+                val ms = fus / 1000.0
+                return Merge.noMerge(e).map { Scene.Line(Math.round(it.startMs / ms).toInt(), Math.round((it.endMs + 1) / ms).toInt(), it.text) }
+            }
+            val best = srt(Arbiter.resolve(base, alts, fus, minFrames).map { Triple(it.startUs, it.endUs, it.text) })
+            val fast = srt(Arbiter.joinUnbroken(base).map { Triple(it.startUs, it.endUs, it.text ?: "") })
+            return Out(best, fast)
         }
     }
 }

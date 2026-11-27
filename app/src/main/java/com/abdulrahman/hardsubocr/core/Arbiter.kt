@@ -16,8 +16,41 @@ package com.abdulrahman.hardsubocr.core
  */
 object Arbiter {
 
-    /** One subtitle candidate. [text]: cleaned OCR text ("" = read nothing), null = not read. */
-    class Piece(val startUs: Long, val endUs: Long, val text: String?)
+    /**
+     * One subtitle candidate. [text]: cleaned OCR text ("" = read nothing), null = not read.
+     * [continues]: the detector proved that the text on screen never left between the previous piece
+     * and this one ([ScanSegment.continuesId]); [joined] = pieces of the detector it stands for.
+     */
+    class Piece(val startUs: Long, val endUs: Long, val text: String?, val continues: Boolean = false, val joined: Int = 1)
+
+    /**
+     * Pieces of ONE line that the detector cut (text-like scenery moving behind a short line: a number
+     * plate, chrome) are one line again — only where both proofs hold: the detector saw the line's
+     * pixels stay on screen without a break between them ([Piece.continues]), and both pieces read the
+     * same text. The line then runs from the first piece's start to the last one's end; the hole was
+     * the line on screen. Anything else stays as it is.
+     */
+    fun joinUnbroken(base: List<Piece>): List<Piece> {
+        if (base.none { it.continues }) return base
+        val out = ArrayList<Piece>(base.size)
+        for (p in base) {
+            val last = out.lastOrNull()
+            val a = last?.text
+            val b = p.text
+            if (last != null && p.continues && !a.isNullOrBlank() && !b.isNullOrBlank() && sameLine(a, b)) {
+                val keep = if (p.endUs - p.startUs > last.endUs - last.startUs) b else a
+                out[out.size - 1] = Piece(last.startUs, maxOf(last.endUs, p.endUs), keep, last.continues, last.joined + p.joined)
+            } else out.add(p)
+        }
+        return out
+    }
+
+    /** The same line read twice: letters equal after removing marks and punctuation (the merge's own test). */
+    private fun sameLine(a: String, b: String): Boolean {
+        val ka = Merge.matchKey(a)
+        val kb = Merge.matchKey(b)
+        return ka.isNotEmpty() && (ka == kb || SequenceMatcher.ratio(ka, kb) >= 0.92)
+    }
 
     /** A final line. [engine] = -1 for the base, else the evidence engine's index. */
     class Line(
@@ -131,7 +164,38 @@ object Arbiter {
      * [needed] said so, null elsewhere). [minFrames]: shortest line that may be created or kept
      * as a separate piece by the evidence.
      */
-    fun resolve(base: List<Piece>, alts: List<List<Piece>>, frameUs: Long, minFrames: Int): List<Line> {
+    fun resolve(base: List<Piece>, alts: List<List<Piece>>, frameUs: Long, minFrames: Int): List<Line> =
+        joinUnbrokenLines(resolvePieces(base, alts, frameUs, minFrames), base)
+
+    /**
+     * After [resolve]: consecutive lines that come from 2.1 pieces chained by the detector's proof
+     * ([Piece.continues] on every piece from the first to the last) and read the same text are one line.
+     * Everything the reading decided stays as it was; only the holes of one unbroken line are closed.
+     */
+    private fun joinUnbrokenLines(lines: List<Line>, base: List<Piece>): List<Line> {
+        if (base.none { it.continues }) return lines
+        val out = ArrayList<Line>(lines.size)
+        var lastRef = -1
+        var count = 1
+        for (l in lines) {
+            val last = out.lastOrNull()
+            if (last != null && last.engine == -1 && l.engine == -1 && l.ref > lastRef && l.startUs >= last.endUs &&
+                (lastRef + 1..l.ref).all { base[it].continues } && sameLine(last.text, l.text)
+            ) {
+                count += base[l.ref].joined
+                val keep = if (l.endUs - l.startUs > last.endUs - last.startUs) l.text else last.text
+                out[out.size - 1] = Line(last.startUs, maxOf(last.endUs, l.endUs), keep, -1, last.ref, "2.1 ($count قطع لسطر لم يغادر الشاشة)")
+                lastRef = l.ref
+                continue
+            }
+            out.add(l)
+            lastRef = l.ref
+            count = if (l.engine == -1) base[l.ref].joined else 1
+        }
+        return out
+    }
+
+    private fun resolvePieces(base: List<Piece>, alts: List<List<Piece>>, frameUs: Long, minFrames: Int): List<Line> {
         if (base.isEmpty() && alts.all { it.isEmpty() }) return emptyList()
         val g = Grid(base, alts, frameUs)
         val n = g.n

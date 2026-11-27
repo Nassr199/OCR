@@ -646,7 +646,8 @@ class JobRunner(
             val sc = scan
             if (!imagesOnly && sc != null && req.videoEngine == VideoEngine.ENSEMBLE) {
                 phase = "مطابقة المحركات بالقراءة"
-                val basePieces = sc.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"]) }
+                // with the detector's proof that a line never left the screen between two of its pieces
+                val basePieces = sc.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"], b.getOrNull(2) == 1L) }
                 val altPieces = sc.alts.mapIndexed { e, l -> l.mapIndexed { i, a -> Arbiter.Piece(a[0], a[1], p.tagged["a:$e:$i"]) } }
                 val lines = Arbiter.resolve(basePieces, altPieces, sc.frameUs, sc.minFrames)
                 for (l in lines) {
@@ -671,6 +672,25 @@ class JobRunner(
                         val nm = FrameComposite.vsfFileName(l.startUs / 1000, l.endUs / 1000, a.roiX, a.roiY, a.roiW, a.roiH, a.frameW, a.frameH, "jpeg")
                         if (runCatching { Saf.createFile(context, rgbFolder, nm, "image/jpeg", a.file.readBytes()) }.isSuccess) saved++
                     }
+                }
+            }
+            // 2.1 alone: pieces of one line that the detector cut, proven unbroken and read the same, are one line
+            if (!imagesOnly && sc != null && req.videoEngine == VideoEngine.V21 && sc.base.any { it.getOrNull(2) == 1L }) {
+                val read = HashMap<Long, SubEntry>()
+                for (e in p.results) read[e.startMs] = e
+                val pieces = sc.base.map { b -> Arbiter.Piece(b[0], b[1], read[b[0] / 1000]?.text, b.getOrNull(2) == 1L) }
+                val joined = Arbiter.joinUnbroken(pieces)
+                if (joined.size < pieces.size) {
+                    val used = sc.base.map { it[0] / 1000 }.toHashSet()
+                    val rest = p.results.filter { it.startMs !in used }
+                    p.results.clear()
+                    p.results.addAll(rest)
+                    for (j in joined) {
+                        val t = j.text ?: continue
+                        val sMs = j.startUs / 1000
+                        p.results.add(SubEntry(sMs, maxOf(sMs, j.endUs / 1000 - 1), t))
+                    }
+                    addLog("🔗 ${pieces.size - joined.size} قطعة وُصلت بسطرها: النص لم يغادر الشاشة بينها وقُرئ نفسه")
                 }
             }
             // per-engine report next to the SRT: what each detector found and what the reading changed

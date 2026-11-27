@@ -93,7 +93,17 @@ data class ScanParams(
      * into "background" and leaving a hole in the subtitle's time. Everything else is decided
      * exactly as without it.
      */
-    val carryText: Boolean = true
+    val carryText: Boolean = true,
+    /**
+     * Proof that a line never left the screen between two pieces of the detector (a short line over a
+     * fast scene: a number plate or chrome moving behind it is cut into many pieces): text pixels on
+     * screen without a break since the earlier piece began still form a line, and nothing that stood
+     * still has gone. Moving scenery cannot give this proof — it does not stay on a pixel. Each piece
+     * only CARRIES the proof ([ScanSegment.continuesId]); whether the two pieces are one line is
+     * decided by what is read on them ([Arbiter.joinUnbroken]). Only with [repairSplits]; no decision
+     * of the detector changes.
+     */
+    val joinUnbroken: Boolean = true
 ) {
     /** The 2.1 engine (one-frame persistence, no motion filter) — used by the ensemble. */
     fun legacy21(): ScanParams = copy(stableWindow = 1, stableNeed = 1, motionLimit = 1.0)
@@ -517,7 +527,14 @@ object MaskCompare {
  * A finished subtitle: [endUs] is exclusive (first frame without it). [mask] = its stable text mask on
  * the grid; [x0]..[y1] = bounding box of that mask in grid pixels (inclusive).
  */
-class ScanSegment(val id: Int, val startUs: Long, val endUs: Long, val mask: TextMask) {
+class ScanSegment(
+    val id: Int,
+    val startUs: Long,
+    val endUs: Long,
+    val mask: TextMask,
+    /** Id of the piece just before this one whose text never left the screen up to this one ([ScanParams.joinUnbroken]); -1 = no proof. */
+    val continuesId: Int = -1
+) {
     val x0: Int
     val y0: Int
     val x1: Int
@@ -553,6 +570,11 @@ class ScanDecision(val captures: List<Capture>, val closed: List<ScanSegment>, v
 
 class SubtitleTracker(private val p: ScanParams) {
 
+    /** Proof of an unbroken line (see [ScanParams.joinUnbroken]). */
+    private val proof = p.repairSplits && p.joinUnbroken
+    /** Per pixel of the frame's text mask: since when it has been there without a break (-1 = not now). */
+    private var since = LongArray(0)
+
     private inner class Seg(val id: Int, var startUs: Long, val isText: Boolean, w: Int, h: Int, val startFrame: Int) {
         /** frame index at which this state was created (startFrame may be an inherited age baseline) */
         val createdFrame = frameIdx
@@ -577,6 +599,10 @@ class SubtitleTracker(private val p: ScanParams) {
         var pool = 0
         var lastPoolUs = Long.MIN_VALUE / 2
         var growFrames = 0
+        /** What stood still on screen when this piece ended (pixels without a break for [STILL_US]). */
+        var stillAtEnd: BooleanArray? = null
+        /** The piece this one continues: its text never left the screen in between (proven at this one's start). */
+        var continues: Seg? = null
 
         fun reseed(m: TextMask) {
             java.util.Arrays.fill(counts, 0.toShort())
@@ -809,6 +835,11 @@ class SubtitleTracker(private val p: ScanParams) {
      */
     fun pushRaw(ptsUs: Long, raw: TextMask): ScanDecision {
         framesSeen++
+        if (proof) {
+            if (since.size != raw.bits.size) since = LongArray(raw.bits.size) { -1L }
+            val b = raw.bits
+            for (i in since.indices) since[i] = if (!b[i]) -1L else if (since[i] < 0) ptsUs else since[i]
+        }
         gw = raw.width; gh = raw.height
         val before = prevPtsUs
         prevPtsUs = ptsUs
@@ -867,6 +898,7 @@ class SubtitleTracker(private val p: ScanParams) {
                     hold(cur, closed, discarded)
                     val seg = Seg(nextId++, at, true, gw, gh, cur.startFrame)
                     seg.dormant = cur.dormant
+                    seg.continues = held?.takeIf { unbroken(it, seg) }
                     seg.lastUs = ptsUs
                     seg.add(m)
                     seg.bestScore = m.count.toDouble()
@@ -998,6 +1030,7 @@ class SubtitleTracker(private val p: ScanParams) {
                 return ScanDecision(captures, closed, discarded)
             }
             val seg = Seg(nextId++, start, true, gw, gh, cc.startFrame)
+            seg.continues = held?.takeIf { unbroken(it, seg) }
             seg.carry = cc.carry
             if (cc.carry == null && cur != null) seg.dormant = cur.carry ?: cur.dormant
             seg.lastUs = ptsUs
@@ -1079,6 +1112,7 @@ class SubtitleTracker(private val p: ScanParams) {
     }
 
     private fun hold(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
+        if (proof) s.stillAtEnd = stillNow(prevPtsUs)
         val h = held
         if (h != null) emit(h, closed, discarded)
         if (p.repairSplits) held = s else {
@@ -1096,7 +1130,7 @@ class SubtitleTracker(private val p: ScanParams) {
 
     private fun emit(s: Seg, closed: MutableList<ScanSegment>, discarded: MutableList<Int>) {
         if (s.endUs - s.startUs >= p.minDurationMs * 1000 && s.stableCount > 0) {
-            closed.add(ScanSegment(s.id, s.startUs, s.endUs, s.mask(gw, gh)))
+            closed.add(ScanSegment(s.id, s.startUs, s.endUs, s.mask(gw, gh), s.continues?.id ?: -1))
         } else discarded.add(s.id)
     }
 
@@ -1122,8 +1156,49 @@ class SubtitleTracker(private val p: ScanParams) {
         return ScanDecision(emptyList(), closed, discarded)
     }
 
+    /** Pixels on screen without a break for [STILL_US] or more (what moves does not stay on a pixel). */
+    private fun stillNow(nowUs: Long): BooleanArray {
+        val out = BooleanArray(since.size)
+        for (i in since.indices) if (since[i] >= 0 && nowUs - since[i] >= STILL_US) out[i] = true
+        return out
+    }
+
+    /**
+     * Does [b], starting now, continue [a] (held, ended a moment ago)? Proof, on the frame masks:
+     *  1. what has been on screen without a break since [a] began is a text line: a line never left,
+     *     not even in the hole between the two pieces;
+     *  2. everything that stood still when [a] ended belongs to that line: nothing gone (a subtitle
+     *     replaced, another line) and nothing come and settled since [a] began (any doubt: no proof).
+     * What the two pieces SAY is not known here: the reading decides ([Arbiter.joinUnbroken]).
+     */
+    private fun unbroken(a: Seg, b: Seg): Boolean {
+        if (!proof || !a.isText) return false
+        if (b.startUs - a.endUs > p.bridgeMs * 1000 || since.size != gw * gh) return false
+        val n = since.size
+        val from = a.startUs + SLACK_US
+        val kept = BooleanArray(n)
+        var keptCount = 0
+        for (i in 0 until n) {
+            val t = since[i]
+            if (t in 0..from) {
+                kept[i] = true; keptCount++
+            }
+        }
+        if (keptCount < p.minTextPixels) return false
+        // 1. a text line has stayed, unbroken
+        if (!ScanMask.isText(ScanMask.lineFilter(TextMask(gw, gh, kept, keptCount), p), p)) return false
+        // 2. what stood still is that line
+        val still = a.stillAtEnd ?: return false
+        val minFar = maxOf(p.minTextPixels * 2, (0.05 * keptCount).toInt())
+        return farCount(still, kept, maxOf(2, gh / 40), minFar) < minFar
+    }
+
     private companion object {
         /** Burned-in text does not move: pixel-exact comparison separates different sentences best. */
         const val DIL = 0
+        /** A pixel of a subtitle appears with it (its first frames): this much after the piece's start still counts. */
+        const val SLACK_US = 100_000L
+        /** On screen without a break this long, it stands still (a moving thing does not stay on a pixel). */
+        const val STILL_US = 200_000L
     }
 }

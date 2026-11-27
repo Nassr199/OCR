@@ -74,7 +74,10 @@ class VideoScanner(
         val analysed: Int,
         val segments: Int,
         val report: String,
-        /** ENSEMBLE: 2.1's subtitles (start, end µs), index = n of tag "b:n". */
+        /**
+         * 2.1's subtitles (start, end µs, 1 = its text never left the screen since the piece before),
+         * index = n of tag "b:n" in ENSEMBLE; in 2.1 alone the same, in the order of the pieces.
+         */
         val base: List<LongArray> = emptyList(),
         /** ENSEMBLE: evidence per engine (0 = 2.2, 1 = 2.0, 2 = 2.1 best single frame), index = i of tag "a:e:i". */
         val alts: List<List<LongArray>> = emptyList(),
@@ -102,7 +105,8 @@ class VideoScanner(
         val useClassic = engine == VideoEngine.CLASSIC || engine == VideoEngine.ENSEMBLE
         val use21 = engine == VideoEngine.V21 || engine == VideoEngine.ENSEMBLE
         val use22 = engine == VideoEngine.V22 || engine == VideoEngine.ENSEMBLE
-        val t22 = if (use22) SubtitleTracker(params) else null
+        // 2.2 is evidence only: the proof that a line never left the screen is needed on 2.1's pieces
+        val t22 = if (use22) SubtitleTracker(params.copy(joinUnbroken = false)) else null
         val t21 = if (use21) SubtitleTracker(params.legacy21()) else null
         val classic = if (useClassic) SubtitleSegmenter(
             SegmenterParams(mask = MaskParams(175, 60, 1, params.style == SubStyle.DARK))
@@ -182,15 +186,21 @@ class VideoScanner(
             return SubImage(argb, capW, capH, clean, r.left, r.top, r.width(), r.height(), frameW, frameH, 1)
         }
 
-        /** [e]: 0 = 2.2, 1 = 2.1, 2 = 2.0 */
-        fun finished(e: Int, startUs: Long, endUs: Long, img: SubImage?) {
+        var lastBaseId = -1
+
+        /** [e]: 0 = 2.2, 1 = 2.1, 2 = 2.0. [id]/[continuesId]: 2.1's piece and the piece it continues (see ScanSegment). */
+        fun finished(e: Int, startUs: Long, endUs: Long, img: SubImage?, id: Int = -1, continuesId: Int = -1) {
             if (img == null) return
+            // 2.1's pieces, in order, with the detector's proof that the text never left since the piece before
+            val unbroken = e == 1 && continuesId >= 0 && continuesId == lastBaseId
+            if (e == 1) lastBaseId = id
             if (engine != VideoEngine.ENSEMBLE) {
+                if (e == 1) baseList.add(longArrayOf(startUs, endUs, if (unbroken) 1L else 0L))
                 segments++; onSegment(startUs, endUs, img, null); return
             }
             if (e == 1) {
                 val n = baseList.size
-                baseList.add(longArrayOf(startUs, endUs))
+                baseList.add(longArrayOf(startUs, endUs, if (unbroken) 1L else 0L))
                 segments++
                 onSegment(startUs, endUs, img, "b:$n")
                 return
@@ -208,7 +218,7 @@ class VideoScanner(
             for (c in list) {
                 val st = stores[e].remove(c.id) ?: continue
                 val img = image(st, c.mask)
-                finished(e, c.startUs, c.endUs, img)
+                finished(e, c.startUs, c.endUs, img, c.id, c.continuesId)
             }
         }
 
