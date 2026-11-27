@@ -281,7 +281,7 @@ fun GlassTabs(
                                     onSelect(i)
                                 }
                             }
-                            .semantics { selected = on; contentDescription = item.label },
+                            .semantics { this.selected = on; this.contentDescription = item.label },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
