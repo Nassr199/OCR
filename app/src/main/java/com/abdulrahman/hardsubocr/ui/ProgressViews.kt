@@ -63,14 +63,14 @@ fun ProgressCard(p: Progress, modifier: Modifier = Modifier) {
         p.decodeFraction?.let { d ->
             Spacer(Modifier.height(10.dp))
             ProgressLine(
-                if (p.stage > 0) "المرحلة 1 · استخراج الصور" else "تحليل الفيديو",
+                if (p.stage > 0) "1 · استخراج الصور" else "تحليل الفيديو",
                 String.format(Locale.US, "%.1f%%", d.coerceIn(0f, 1f) * 100) +
                     (if (p.frames > 0) " • ${n(p.frames)} إطار" else "") +
                     (if (p.framesPerSec > 0) String.format(Locale.US, " • %.0f/ث", p.framesPerSec) else ""),
                 d, Amber
             )
             ProgressLine(
-                if (p.stage > 0) "المرحلة 2 · قراءة النصوص" else "قراءة النصوص",
+                if (p.stage > 0) "2 · قراءة النصوص" else "قراءة النصوص",
                 if (p.stage == 1) "تبدأ بعد اكتمال الصور"
                 else "${n(p.done)} / ${n(maxOf(p.total, p.subtitlesFound))}" + (if (p.subtitlesFound > 0) " • ${n(p.subtitlesFound)} ترجمة" else ""),
                 if (p.stage == 1 || p.total <= 0) 0f else p.done.toFloat() / p.total,
