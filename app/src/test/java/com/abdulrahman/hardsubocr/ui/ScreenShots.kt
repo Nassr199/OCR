@@ -12,10 +12,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasScrollToNodeAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.printToString
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.geometry.Offset
@@ -218,11 +217,8 @@ class ScreenShots {
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() {
         (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode = com.abdulrahman.hardsubocr.data.SourceMode.VIDEO
         shot("phone_12_video_stages", Tab.EXTRACT) {
-            // the extract tab is a lazy list: scroll it until the option is composed
-            val r = runCatching { rule.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText("الصور ثم النص")) }
-            println("VIDEO-STAGES scroll: " + (r.exceptionOrNull()?.message?.take(200) ?: "ok") +
-                " • mode=" + (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode)
-            println("VIDEO-STAGES tree: " + rule.onRoot(useUnmergedTree = true).printToString().lines().filter { "Text" in it }.joinToString(" | ").take(3000))
+            // the option is at the end of the extract tab (a lazy list): scroll it to its end
+            rule.onAllNodes(hasScrollToNodeAction()).onFirst().performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
             rule.mainClock.advanceTimeBy(1_000)
         }
     }
