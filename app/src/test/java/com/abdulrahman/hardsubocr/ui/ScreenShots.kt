@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -218,7 +219,10 @@ class ScreenShots {
         (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode = com.abdulrahman.hardsubocr.data.SourceMode.VIDEO
         shot("phone_12_video_stages", Tab.EXTRACT) {
             // the extract tab is a lazy list: scroll it until the option is composed
-            rule.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText("الصور ثم النص"))
+            val r = runCatching { rule.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText("الصور ثم النص")) }
+            println("VIDEO-STAGES scroll: " + (r.exceptionOrNull()?.message?.take(200) ?: "ok") +
+                " • mode=" + (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode)
+            println("VIDEO-STAGES tree: " + rule.onRoot(useUnmergedTree = true).printToString().lines().filter { "Text" in it }.joinToString(" | ").take(3000))
             rule.mainClock.advanceTimeBy(1_000)
         }
     }
