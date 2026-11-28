@@ -43,7 +43,10 @@ class ExtractionService : Service() {
                             val pct = (p.fraction * 100).toInt()
                             val text = buildString {
                                 if (p.phase.isNotEmpty()) append(p.phase).append('\n')
-                                append("${p.done}/${p.total}  •  ✓${p.ok}  ○${p.empty}  ✖${p.failed}")
+                                append(
+                                    if (p.stage == 1) "${p.subtitlesFound} صورة ترجمة حتى الآن"
+                                    else "${p.done}/${p.total}  •  ✓${p.ok}  ○${p.empty}  ✖${p.failed}"
+                                )
                                 if (!p.etaSec.isNaN()) append("  •  المتبقي ").append(Timestamps.human(p.etaSec))
                             }
                             Notifications.notify(

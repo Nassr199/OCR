@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.geometry.Offset
@@ -54,12 +55,29 @@ class ScreenShots {
         "✓ 0_12_19_500__0_12_21_200  ←  هوليا. استيقظي"
     ).mapIndexed { i, t -> LogLine(100L - i, t) }
 
+    /** Video «الصور ثم النص», stage 2: every image is out, the engine reads them. */
     private val running = JobState.Running(
         Progress(
-            title = "الحلقة 12", phase = "قراءة النصوص بـ Gemini 3.5 Flash-Lite", fraction = 0.42f,
+            title = "الحلقة 12", phase = "المرحلة 2 من 2 · قراءة النصوص بـ Gemini (gemini-3.5-flash-lite)", fraction = 0.77f,
             done = 418, total = 996, ok = 402, empty = 11, failed = 5, cached = 0, retries = 7,
-            speed = 3.4, etaSec = 172.0, unitIndex = 0, unitCount = 1, decodeFraction = 0.64f, log = log,
-            elapsedSec = 131.0, frames = 41230, framesPerSec = 238.0, subtitlesFound = 612
+            speed = 3.4, etaSec = 172.0, unitIndex = 0, unitCount = 1, decodeFraction = 1f, log = log,
+            elapsedSec = 431.0, frames = 64410, framesPerSec = 238.0, subtitlesFound = 996, stage = 2
+        )
+    )
+
+    /** Stage 1: the images are being extracted; reading starts when they are all out. */
+    private val runningImages = JobState.Running(
+        Progress(
+            title = "الحلقة 12", phase = "المرحلة 1 من 2 · استخراج الصور 64% • 41230 إطار • 612 ترجمة", fraction = 0.38f,
+            done = 0, total = 612, ok = 0, empty = 0, failed = 0, cached = 0, retries = 0,
+            speed = 0.0, etaSec = 98.0, unitIndex = 0, unitCount = 1, decodeFraction = 0.64f,
+            log = listOf(
+                "🖼 00:12:11,000 → 00:12:12,900  (41 إطار)",
+                "🖼 00:12:13,200 → 00:12:15,000  (38 إطار)",
+                "🖼 00:12:15,400 → 00:12:17,100  (35 إطار)",
+                "✓ Google Lens جاهز — المرحلة 1: استخراج صور الترجمة كلها، ثم المرحلة 2: قراءتها تلقائيًا"
+            ).mapIndexed { i, t -> LogLine(10L - i, t) },
+            elapsedSec = 175.0, frames = 41230, framesPerSec = 238.0, subtitlesFound = 612, stage = 1
         )
     )
 
@@ -191,12 +209,19 @@ class ScreenShots {
 
     // phone held upright (1080 × 2340, dark)
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_1_extract() = shot("phone_1_extract", Tab.EXTRACT)
+
+    /** Video source: «الصور ثم النص» (two stages, the engine named) next to «حفظ الصور فقط». */
+    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() = shot("phone_12_video_stages", Tab.EXTRACT) {
+        rule.onNodeWithText("اكتشاف تلقائي للترجمة").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("الصور ثم النص").performScrollTo()
+    }
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_2_running() = shot("phone_2_running", Tab.PROCESS, running)
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_3_done() = shot("phone_3_done", Tab.PROCESS, done)
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_4_idle() = shot("phone_4_idle", Tab.PROCESS)
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_5_settings() = shot("phone_5_settings", Tab.SETTINGS)
     @Test @Config(qualifiers = "w411dp-h891dp-port-notnight-xxhdpi") fun phone_6_extract_light() = shot("phone_6_extract_light", Tab.EXTRACT)
-    @Test @Config(qualifiers = "w360dp-h780dp-port-night-xxhdpi") fun phone_7_small_running() = shot("phone_7_small_running", Tab.PROCESS, running)
+    @Test @Config(qualifiers = "w360dp-h780dp-port-night-xxhdpi") fun phone_7_small_running() = shot("phone_7_small_running", Tab.PROCESS, runningImages)
 
     /** The tab bar's lens held and dragged halfway from the first tab toward the second. */
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_8_lens_held() = shot("phone_8_lens_held", Tab.EXTRACT) {

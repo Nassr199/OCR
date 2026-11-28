@@ -530,7 +530,7 @@ private fun SourceCard(
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("بعد تحليل الفيديو")
                 Segmented(
-                    listOf(VideoMode.FRAMES_AND_TEXT to "الصور + استخراج النص", VideoMode.FRAMES_ONLY to "حفظ الصور فقط"),
+                    listOf(VideoMode.FRAMES_AND_TEXT to "الصور ثم النص", VideoMode.FRAMES_ONLY to "حفظ الصور فقط"),
                     vm.videoMode,
                     enabled
                 ) { vm.chooseVideoMode(it) }
@@ -538,7 +538,9 @@ private fun SourceCard(
                     if (vm.videoMode == VideoMode.FRAMES_ONLY)
                         "تُحفظ صورة لكل ترجمة في مجلد «اسم الفيديو_RGBImages» بأسماء تحمل التوقيت (كما يحفظها VideoSubFinder) ثم ينتهي. لاستخراج النص لاحقًا اختر «مجلد صور» وحدد ذلك المجلد. لا يحتاج مفتاح API الآن."
                     else
-                        "تُحفظ صور الترجمات في مجلد «اسم الفيديو_RGBImages»، وتُقرأ أثناء التحليل، ثم يُكتب ملف SRT.",
+                        "على مرحلتين: الأولى تستخرج صور الترجمات كلها في مجلد «اسم الفيديو_RGBImages» تمامًا كما في «حفظ الصور فقط»، " +
+                            "والثانية تقرؤها تلقائيًا بـ ${engineName(vm.engine)} ثم تكتب ملف SRT. " +
+                            "وقبل البدء يُختبر ${engineName(vm.engine)} بقراءة واحدة، فلا يبدأ استخراج الصور إن كان المحرك لا يعمل.",
                     Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)
                 )
             }

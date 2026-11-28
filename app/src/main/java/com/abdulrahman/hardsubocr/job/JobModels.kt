@@ -88,7 +88,9 @@ data class Progress(
     /** Video: frames analysed so far and analysis speed (frames per second), subtitles found. */
     val frames: Int = 0,
     val framesPerSec: Double = 0.0,
-    val subtitlesFound: Int = 0
+    val subtitlesFound: Int = 0,
+    /** Video «الصور ثم النص»: 1 = extracting the images, 2 = reading them; 0 = not staged. */
+    val stage: Int = 0
 ) {
     companion object {
         fun starting() = Progress(

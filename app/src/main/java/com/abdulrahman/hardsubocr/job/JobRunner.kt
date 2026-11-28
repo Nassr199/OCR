@@ -41,12 +41,15 @@ import android.graphics.Bitmap
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import com.abdulrahman.hardsubocr.core.PreparedImage
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
@@ -74,6 +77,7 @@ class JobRunner(
     @Volatile private var decodeFraction: Float? = null
     @Volatile private var videoFrames = 0
     @Volatile private var videoStartedAt = 0L
+    @Volatile private var videoEndedAt = 0L
     @Volatile private var lastPhaseKind = ""
     @Volatile private var phase = ""
         set(v) {
@@ -86,6 +90,8 @@ class JobRunner(
             }
         }
     private val discoveredSegments = AtomicInteger(0)
+    /** Video «الصور ثم النص»: 1 = extracting the images, 2 = reading them; 0 = not a staged job. */
+    @Volatile private var stage = 0
 
     private fun addLog(line: String) {
         log.addFirst(LogLine(logIds.incrementAndGet(), line))
@@ -246,7 +252,7 @@ class JobRunner(
             val vEl = (System.currentTimeMillis() - videoStartedAt) / 1000.0
             if (dec > 0.02f && vEl > 3) vEl * (1 - dec) / dec else Double.NaN
         } else if (speed > 0) remaining / speed else Double.NaN
-        val vSec = (System.currentTimeMillis() - videoStartedAt) / 1000.0
+        val vSec = ((if (videoEndedAt > 0) videoEndedAt else System.currentTimeMillis()) - videoStartedAt) / 1000.0
         return Progress(
             title = unitTitle, phase = phase, fraction = overall, done = done, total = total,
             ok = st?.ok?.get() ?: 0, empty = st?.empty?.get() ?: 0, failed = st?.failed?.get() ?: 0,
@@ -256,7 +262,8 @@ class JobRunner(
             elapsedSec = (System.currentTimeMillis() - startedAt) / 1000.0,
             frames = videoFrames,
             framesPerSec = if (dec != null && videoStartedAt > 0 && vSec > 0.5) videoFrames / vSec else 0.0,
-            subtitlesFound = discoveredSegments.get()
+            subtitlesFound = discoveredSegments.get(),
+            stage = stage
         )
     }
 
@@ -315,6 +322,7 @@ class JobRunner(
                     unitIndex = i
                     pipeline = null
                     decodeFraction = null
+                    stage = 0
                     try {
                         outputs.add(runUnit(unit, engine))
                     } catch (e: CancellationException) {
@@ -509,11 +517,80 @@ class JobRunner(
         }
     }
 
+    /** The engine as the user chose it, for the stage lines and the log. */
+    private fun engineLabel(): String = when (req.engine) {
+        EngineKind.LENS -> "Google Lens"
+        EngineKind.VISION -> "Google Vision"
+        EngineKind.GEMINI -> "Gemini (${req.geminiModel})"
+        EngineKind.OPENROUTER -> "OpenRouter (${req.openRouterModel.ifBlank { OpenRouterEngine.DEFAULT_MODEL }})"
+    }
+
+    /**
+     * Video «الصور ثم النص»: one real reading before the long image stage, the same way stage 2 reads,
+     * so a wrong key or model, no credit or no network stops the job now and not after every image is
+     * out. A line of Arabic text is drawn and read. Only what stops every reading stops the job (a
+     * fatal error, or no answer 3 times); an empty or odd reading of the sample is fine.
+     */
+    private suspend fun checkEngine(engine: OcrEngine) {
+        val name = engineLabel()
+        phase = "التحقق من $name قبل البدء"
+        addLog("🔌 التحقق من $name قبل استخراج الصور…")
+        val img = withContext(Dispatchers.Default) { sampleLine() }
+        var why: String? = null
+        for (attempt in 1..3) {
+            why = try {
+                if (withTimeoutOrNull(60_000) { engine.recognize(img) } != null) null else "لا رد خلال 60 ثانية"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OcrError.Fatal) {
+                throw OcrError.Fatal(cannotRead(name, e.message ?: "خطأ"))
+            } catch (e: OcrError.Retryable) {
+                e.message ?: "خطأ مؤقت"
+            } catch (e: java.io.IOException) {
+                e.message ?: describeError(e)
+            } catch (e: Exception) {
+                // the engine answered, only this sample image was not read: it reads
+                DiagLog.w("Job", "فحص المحرك: ${e.message ?: describeError(e)}")
+                null
+            }
+            if (why == null) break
+            if (attempt < 3) delay(2000L * attempt)
+        }
+        why?.let { throw OcrError.Fatal(cannotRead(name, it)) }
+        addLog("✓ $name جاهز — المرحلة 1: استخراج صور الترجمة كلها، ثم المرحلة 2: قراءتها تلقائيًا")
+    }
+
+    private fun cannotRead(name: String, why: String) =
+        "تعذر بدء القراءة بـ $name: $why\nلم يبدأ استخراج الصور، حتى لا تُستخرج كلها ثم تتوقف القراءة. " +
+            "أصلح السبب (الاتصال، المفتاح، الرصيد، النموذج) ثم أعد المحاولة، أو اختر «حفظ الصور فقط» لحفظ الصور الآن وقراءتها لاحقًا."
+
+    /** A subtitle-like line (white Arabic text on black) for [checkEngine]. */
+    private fun sampleLine(): PreparedImage {
+        val w = 640
+        val h = 120
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        try {
+            b.eraseColor(android.graphics.Color.BLACK)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textSize = 64f
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+            android.graphics.Canvas(b).drawText("مرحبًا بكم", w / 2f, h / 2f - (paint.descent() + paint.ascent()) / 2f, paint)
+            val jpeg = ByteArrayOutputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 92, it); it.toByteArray() }
+            return PreparedImage(jpeg, "image/jpeg", w, h, "فحص المحرك")
+        } finally {
+            b.recycle()
+        }
+    }
+
     private suspend fun runVideo(u: Source.Video, engine: OcrEngine): JobOutput {
-        phase = "تحليل الفيديو"
         unitTitle = u.name
-        val base = unitName(u)
         val imagesOnly = req.videoMode == VideoMode.FRAMES_ONLY
+        // «الصور ثم النص»: the engine reads once before the long image stage starts
+        if (!imagesOnly) checkEngine(engine)
+        phase = "تحليل الفيديو"
+        val base = unitName(u)
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, u.uri) }
         val frameDir = File(context.cacheDir, "video-frames/${System.currentTimeMillis()}").apply { mkdirs() }
         // Images are saved first, VideoSubFinder style: <name>_RGBImages (+ <name>_TXTImages).
@@ -544,10 +621,17 @@ class JobRunner(
             decodeFraction = 0f
             videoFrames = 0
             videoStartedAt = System.currentTimeMillis()
+            videoEndedAt = 0L
             DiagLog.i("Video", "${info.label} • ${info.mime} • ${info.width}x${info.height} • ${info.frameRate} fps • دوران ${info.rotation}")
             val ch = Channel<OcrItem>(Channel.UNLIMITED)
+            if (!imagesOnly) {
+                stage = 1
+                phase = "المرحلة 1 من 2 · استخراج الصور"
+            }
             coroutineScope {
-                val ocr = if (imagesOnly) null else launch { p.run(ch) }
+                // stage 2 (reading) starts only when stage 1 has put out every image
+                val jobScope = this
+                var ocr: Job? = null
                 try {
                     withContext(Dispatchers.Default) {
                         val sc = VideoScanner(
@@ -557,7 +641,8 @@ class JobRunner(
                             onProgress = { f, frames, subs ->
                                 decodeFraction = f
                                 videoFrames = frames
-                                phase = "تحليل الفيديو ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
+                                phase = (if (imagesOnly) "تحليل الفيديو" else "المرحلة 1 من 2 · استخراج الصور") +
+                                    " ${(f * 100).toInt()}% • $frames إطار • $subs ترجمة"
                             },
                             onSegment = { segStartUs, segEndUs, img, tag ->
                                 val startMs = segStartUs / 1000
@@ -610,24 +695,34 @@ class JobRunner(
                                     val key = if (isAlt) "$tag|$startMs-$endMs" else "$startMs-$endMs"
                                     sent.incrementAndGet()
                                     ch.trySend(OcrItem(key, fileName, startMs, maxOf(startMs, endMs - 1), tag) { file.readBytes() })
-                                } else {
-                                    addLog("🖼 ${Timestamps.srt(startMs)} → ${Timestamps.srt(endMs)}  (${img.framesUsed} إطار)")
                                 }
+                                if (!isAlt) addLog("🖼 ${Timestamps.srt(startMs)} → ${Timestamps.srt(endMs)}  (${img.framesUsed} إطار)")
                             }
                         )
                         scanner = sc
                         val r = sc.run(isActive = { isActive })
                         scan = r
+                        videoEndedAt = System.currentTimeMillis()
                         addLog("🎬 تم تحليل ${r.analysed} إطار — ${r.segments} ترجمة")
-                        if (ocr != null && req.videoEngine == VideoEngine.ENSEMBLE && isActive) {
+                        if (!imagesOnly && isActive) {
+                            // stage 2: every image is out; now the chosen engine reads them
+                            decodeFraction = 1f
+                            stage = 2
+                            unitStartedAt = System.currentTimeMillis() // reading speed and time left count from here
+                            phase = "المرحلة 2 من 2 · قراءة النصوص بـ ${engineLabel()}"
+                            addLog("📖 اكتملت الصور (${sent.get()} صورة) — تبدأ قراءة النصوص بـ ${engineLabel()}")
+                            ocr = jobScope.launch { p.run(ch) }
+                        }
+                        val reader = ocr
+                        if (reader != null && req.videoEngine == VideoEngine.ENSEMBLE && isActive) {
                             // 2.1's images are read first; then the other engines' images are read only
                             // where they disagree with 2.1 or where 2.1's image read nothing
-                            phase = "قراءة صور الترجمة"
-                            while (isActive && ocr.isActive && p.stats.processed.get() < sent.get()) delay(150)
+                            phase = "المرحلة 2 من 2 · قراءة صور الترجمة"
+                            while (isActive && reader.isActive && p.stats.processed.get() < sent.get()) delay(150)
                             val basePieces = r.base.mapIndexed { n, b -> Arbiter.Piece(b[0], b[1], p.tagged["b:$n"]) }
                             val altRaw = r.alts.map { l -> l.map { a -> Arbiter.Piece(a[0], a[1], null) } }
                             val need = Arbiter.needed(basePieces, altRaw, r.frameUs, r.minFrames)
-                            phase = "قراءة الشهود (${need.sumOf { it.size }})"
+                            phase = "المرحلة 2 من 2 · قراءة الشهود (${need.sumOf { it.size }})"
                             evidenceReport = sc.emitEvidence(need) { isActive }
                             addLog("🔎 ${need.sumOf { it.size }} صورة إضافية من طريقتي الكشف الأخريين للتحقق من الأسطر المختلف عليها")
                         }
@@ -636,9 +731,9 @@ class JobRunner(
                     ch.close()
                 }
                 decodeFraction = 1f
-                if (ocr != null) {
-                    phase = "قراءة النصوص"
-                    ocr.join()
+                ocr?.let {
+                    phase = "المرحلة 2 من 2 · قراءة النصوص بـ ${engineLabel()}"
+                    it.join()
                 }
             }
             // ENSEMBLE: the text read decides (2.1 kept unless what the other engines read proves it wrong)
@@ -718,6 +813,16 @@ class JobRunner(
                 base, uri, entries, savedIn, req.output, p.failures.toList(),
                 info = where?.let { "صور الترجمة محفوظة في: $it ($saved صورة)" }
             )
+        } catch (e: OcrError.Fatal) {
+            // stage 2 stopped (key, credit, model): every image of stage 1 is saved — say where
+            val where = rgbFolder?.let { "${req.output?.name}/${it.name}" }
+            if (stage == 2 && where != null && saved > 0) {
+                throw OcrError.Fatal(
+                    (e.message ?: "توقفت القراءة") + "\nصور الترجمة كلها محفوظة ($saved صورة) في: $where" +
+                        "\nلإكمال القراءة لاحقًا: اختر «مجلد صور» وحدد هذا المجلد."
+                )
+            }
+            throw e
         } finally {
             cache?.close()
             scanner?.close()
