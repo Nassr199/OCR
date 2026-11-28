@@ -1,0 +1,66 @@
+HardSub OCR 2.7.4 — checks
+==========================
+
+Google Vision, two-stage reading (VisionEngine.recognize, VisionLayout.focusArea / secondIsBetter).
+Word boxes of your real frames were measured on the crops (1230x201); the frames themselves are not
+in the repository. Areas found: «حبيبي» frame 378,89–851,180 (the whole box, no crew names);
+«أبي» frame 575,93–657,186 (inside the box only, between «Dan» and «ineş», under «Koordinatörü»).
+
+1) verification/vision/FocusTest.kt
+✓ «حبيبي» frame: second look asked (crew names on the subtitle's row)  [378, 89, 851, 180]
+✓ …area holds the whole subtitle (393–836) and no crew name (≤352, ≥907)  [378, 89, 851, 180]
+✓ «أبي» frame: second look asked  [575, 93, 657, 186]
+✓ …area = the box only: right of «Dan» (573), left of «ineş» (659), under «Koordinatörü» (91)  [575, 93, 657, 186]
+✓ subtitle alone, read sure → no second request
+✓ …also when Vision gives no confidence
+✓ subtitle alone but unsure → second look
+✓ crew names on other rows only (title line above, far) → no second request
+✓ focused «حبيبي، …» (more letters, surer) is kept
+✓ focused «بيبي، …» again (same) → first stays
+✓ «انا» made of a crew name's letters is noise: focused «أبي» kept
+✓ focused look that lost part of the subtitle is refused
+✓ focused look with nothing Arabic is refused
+✓ engine: two requests, second one with the cropped picture  [2]
+✓ engine: «حبيبي، هل أنت بخير؟» returned  [حبيبي، هل أنت بخير؟]
+✓ engine: subtitle alone → one request, same text as before  [حبيبي، هل أنت بخير؟]
+✓ engine: second look refused (429) → first reading, no error  [Saç Tasarım ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu بيبي، هل أنت بخير؟ Mustafa Gümüş]
+✓ engine: key refused on the second look → stops like any refused key
+✓ engine without a cropper (key test) → one request
+✓ cache id new (old results came from one look)
+ALL PASSED
+
+2) verification/vision/VisionTest.kt
+✓ endpoint  [https://vision.googleapis.com/v1/images:annotate]
+✓ key in header, not URL
+✓ base64 image
+✓ TEXT_DETECTION
+✓ language hints ar + en (as Subtitle Edit)
+✓ word confidence requested
+✓ English subtitles: hint en only
+✓ full text, trailing newline trimmed  [مرحبا يا صديقي
+كيف حالك؟]
+✓ cacheId per language
+✓ textAnnotations fallback
+✓ no text → empty
+✓ Lens/Vision cleaning drops credits  [أبي]
+✓ classic OCR group
+✓ bad key → stop job  [مفتاح Google Cloud Vision غير صالح]
+✓ billing → stop job with reason  [Cloud Vision يتطلب تفعيل الفوترة (Billing) في مشروع Google Cloud: This API method requires billing to be enabled.]
+✓ API disabled → stop job  [فعّل Cloud Vision API في مشروع Google Cloud الخاص بالمفتاح: Cloud Vision API has not been used in project 123 before or it is disabled.]
+✓ 429 per minute → retry
+✓ 5xx → retry
+✓ per-image bad data → only this image fails  [Google Vision رفض هذه الصورة: Bad image data.]
+✓ per-image quota → retry
+✓ blank key refused
+✓ Gemini list current
+✓ fetched list filter
+✓ OpenRouter ids
+ALL PASSED
+
+3) Vision layout (LayoutTest.kt, LayoutFuzz.kt)
+ALL PASSED
+misread copy: 3000/3000 exact · joined copy: 3000/3000 exact
+contradicting laid-out reading: 2690/3000 exact
+clean readings: 4000/4000 exact · with an outline copy: 4000/4000 exact
+
+4) Unchanged: Lens (LensOrderTest ALL PASSED, LensTest), Gemini/OpenRouter (ApiTest as before), PipeTest as before.

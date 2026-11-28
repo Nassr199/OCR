@@ -1,0 +1,74 @@
+name: OCR bench (live Google Lens / Vision)
+
+# Reads the synthetic subtitle crops in bench/images with the app's own Lens/Vision code, live.
+# Vision runs only if the repository has a VISION_API_KEY secret (never printed); Gemini / OpenRouter only
+# with GEMINI_API_KEY / OPENROUTER_API_KEY secrets and "[bench-ai]" in the commit message (they cost money).
+# The report is committed to the orphan branch "ocr-bench-results" (no APK is built or released).
+on:
+  push:
+    branches: [ "android-app", "ocr-bench" ]
+    paths: [ "bench/**", ".github/workflows/ocr-bench.yml", "app/src/main/java/com/abdulrahman/hardsubocr/core/**" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Kotlin compiler and libraries
+        run: |
+          curl -sSfL -o kc.zip https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
+          unzip -q kc.zip
+          mkdir libs
+          M=https://repo1.maven.org/maven2/org/jetbrains/kotlinx
+          curl -sSfL -o libs/coroutines.jar $M/kotlinx-coroutines-core-jvm/1.9.0/kotlinx-coroutines-core-jvm-1.9.0.jar
+          curl -sSfL -o libs/ser-core.jar $M/kotlinx-serialization-core-jvm/1.7.3/kotlinx-serialization-core-jvm-1.7.3.jar
+          curl -sSfL -o libs/ser-json.jar $M/kotlinx-serialization-json-jvm/1.7.3/kotlinx-serialization-json-jvm-1.7.3.jar
+
+      - name: Compile the app's core + bench
+        run: |
+          kotlinc/bin/kotlinc -jvm-target 17 -nowarn -cp libs/coroutines.jar:libs/ser-core.jar:libs/ser-json.jar \
+            app/src/main/java/com/abdulrahman/hardsubocr/core/*.kt bench/Bench.kt -d out
+
+      - name: Run (live)
+        env:
+          VISION_API_KEY: ${{ secrets.VISION_API_KEY }}
+          # the AI engines cost per image: read only when the push says so
+          GEMINI_API_KEY: ${{ contains(github.event.head_commit.message, '[bench-ai]') && secrets.GEMINI_API_KEY || '' }}
+          OPENROUTER_API_KEY: ${{ contains(github.event.head_commit.message, '[bench-ai]') && secrets.OPENROUTER_API_KEY || '' }}
+          # "[ai-only]": skip Lens/Vision, read only the AI engines' frames
+          BENCH_AI_ONLY: ${{ contains(github.event.head_commit.message, '[ai-only]') && '1' || '' }}
+          # the model of the user's reports (Gemini 3.5 Flash-Lite, as in the app's list)
+          BENCH_GEMINI_MODEL: gemini-3.5-flash-lite
+          BENCH_OPENROUTER_MODEL: google/gemini-3.5-flash-lite
+        run: |
+          java -Dstdout.encoding=UTF-8 -cp out:libs/coroutines.jar:libs/ser-core.jar:libs/ser-json.jar:kotlinc/lib/kotlin-stdlib.jar \
+            com.abdulrahman.hardsubocr.bench.BenchKt bench/images bench-out/report.md
+
+      - name: Publish the report (branch ocr-bench-results)
+        if: always()
+        run: |
+          test -f bench-out/report.md || exit 0
+          git config user.name "ocr-bench"
+          git config user.email "ocr-bench@users.noreply.github.com"
+          if git ls-remote --exit-code origin ocr-bench-results >/dev/null; then
+            git fetch --depth 1 origin ocr-bench-results
+            git worktree add /tmp/r FETCH_HEAD
+            cd /tmp/r && git checkout -b ocr-bench-results
+          else
+            git worktree add --detach /tmp/r
+            cd /tmp/r && git checkout --orphan ocr-bench-results && git rm -rfq .
+          fi
+          cp "$GITHUB_WORKSPACE/bench-out/report.md" "/tmp/r/${GITHUB_SHA}.md"
+          cp "$GITHUB_WORKSPACE/bench-out/report.md" /tmp/r/latest.md
+          git add -A && git commit -qm "bench ${GITHUB_SHA}" && git push -q origin HEAD:ocr-bench-results

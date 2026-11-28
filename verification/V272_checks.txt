@@ -1,0 +1,103 @@
+HardSub OCR 2.7.2 — checks
+==========================
+
+Your real crops (1230x201, white text in a black box, crew names around it) were turned into the
+new Lens/Vision image: FrameComposite.clean (letters only, black on white) → OcrImage.fromClean
+(cropped to the letters, white margin, small text enlarged). «حبيبي، هل أنت بخير؟» → 557x224 PNG (2.2 KB),
+«أبي» → 187x185. The frames themselves are not in the repository; the harness is ocrimage/RealCropToOcrImage.kt.
+(In the app the subtitle's own mask is used, so crew names that were on screen before it are not in the image.)
+
+1) OcrImage (verification/ocrimage/OcrImageTest.kt)
+✓ no letters → null (original picture is read)
+✓ big text: not scaled  [[24, 24, 624, 91]]
+✓ big text: cropped with margin ≥ 12 px on every side  [649x116]
+✓ small text ×2  [[12, 12, 813, 51]]
+✓ tiny text ×3
+✓ two 30 px lines → ×2 (line height, not block height)  [[15, 15, 1216, 194]]
+✓ wide line fits Lens 1500 px  [1492x44]
+✓ small but very wide: enlarged only as far as 1500 px allows  [1498x31]
+✓ dots kept, line height includes them
+✓ PNG encodes
+ALL PASSED
+
+2) Vision text from word boxes (verification/vision/LayoutTest.kt, LayoutFuzz.kt)
+✓ user case: [w2..w5] + [w1] + [w2..w5] (outline copy)  «بخير بخير أجل أنا بخير»
+✓ user case: partial copy + full line  «بخير بخير أجل أنا بخير»
+✓ user case: all 9 words in one paragraph  «بخير بخير أجل أنا بخير»
+✓ user case after PRO cleaning  «بخير بخير أجل أنا بخير»
+✓ clean single reading unchanged  «بخير بخير أجل أنا بخير»
+✓ real repeats kept: لا لا لا  «لا لا لا»
+✓ block order RTL  «حبيبي، هل أنت بخير؟»
+✓ block order RTL, wide gap → 2 lines → PRO one line  «حبيبي، هل أنت بخير؟»
+✓ misread copy loses to better copy  «حبيبي، هل أنت بخير؟»
+✓ punctuation as own word  «ماذا حدث؟»
+✓ punctuation copy over a word that has it  «ماذا حدث؟»
+✓ joined copy → separate words stay  «بخير بخير»
+✓ fragments of one word → whole word stays  «بخير»
+✓ two lines top → bottom  «أين كنت؟ ⏎ كنت أبحث عنك»
+✓ credits far left on the same row → own line, removed by PRO  «بخير بخير أجل أنا بخير»
+✓ x = 0 left out of vertices  «أبي»
+✓ Latin run inside Arabic line read LTR  «شاهد Big Ben»
+✓ English line LTR  «Hello World»
+✓ digits keep Arabic order  «الساعة 10»
+✓ line split across paragraphs (box of one covers the other)  «أين كنت؟ ⏎ كنت أبحث عنك»
+✓ short paragraph beside a long one  «لا أعرف الآن»
+✓ same text on two lines stays twice  «لا ⏎ لا»
+✓ tashkeel word kept  «مَرْحَبًا»
+✓ comma box low on the row  «نعم، أنا»
+✓ big shadow offset (6 px) copy dropped  «بخير بخير أجل أنا بخير»
+✓ opening quote glued  «قال «مرحبا»»
+✓ partial reading with higher confidence loses to the full word  «حبيبي، هل أنت بخير؟»
+✓ full word kept when the partial comes second  «حبيبي، هل أنت بخير؟»
+✓ much weaker longer reading does not replace  «بخير»
+✓ wrongly laid-out second reading is dropped, the consistent pair stays  «بخير بخير أجل أنا بخير»
+✓ …in any block order  «بخير بخير أجل أنا بخير»
+✓ genuine words in neighbouring paragraphs with touching boxes stay  «في البيت»
+✓ stray alef from a crew name beside the box dropped  «أبي»
+✓ confident lone و kept  «و أنا»
+✓ a line of one letter is kept  «ا»
+✓ no geometry → own text  «أبي»
+✓ only textAnnotations words  «حبيبي، هل»
+✓ empty answer  «»
+ALL PASSED
+
+misread copy: 3000/3000 exact · joined copy: 3000/3000 exact
+contradicting laid-out reading: 2690/3000 exact
+clean readings: 4000/4000 exact · with an outline copy: 4000/4000 exact
+   (the last fuzz case is an invented worst case: a second reading with the SAME words placed
+    half a word off; it is not seen in real answers yet — the diagnostic file now records the word boxes)
+
+3) Second read, letters-only first / original picture second, Lens reading order (verification/rescue/RescueTest.kt)
+✓ good read untouched  [[مرحبا, ماذا حدث؟, شكرا]]
+✓ empty read rescued  [[مرحبا, ماذا حدث؟, شكرا]]
+✓ cleaned-to-empty rescued  [[مرحبا, ماذا حدث؟, شكرا]]
+✓ no second read of a good image  [[1:b, 1:a, 2:b, 1:c, 2:c]]
+✓ stats
+✓ Vision rescue
+✓ AI engines never  [[1:b]]
+✓ off → one read
+✓ failed second read keeps 'no subtitle'
+✓ …and no marker
+✓ old cached empty → second read only  [[2:b]]
+✓ rescued result from cache, no reads
+✓ truly empty: read twice once, then cached
+✓ cached text never re-read
+✓ empty letters-only read → original picture (even with the option off)  [[ماذا حدث؟, بخير بخير]]
+✓ original picture read with the normal preparer, good read untouched  [[1:txt, 1:orig, 1:txt2]]
+✓ AI engines: no second read
+✓ Lens partial copy dropped  [بخير بخير أجل أنا بخير]
+✓ Lens two lines unchanged
+✓ Lens same text on two rows kept  [لا
+لا]
+✓ Lens without boxes unchanged
+✓ Lens far chunks on one row stay separate lines (right one first)  [حبيبي، هل أنت بخير؟
+Netflix]
+✓ …and the crew name is removed by cleaning
+✓ Lens interleaved chunks → rows, right to left  [أين كنت
+كنت أبحث عنك]
+✓ Lens blocks of one line left to right → one line right to left  [حبيبي، هل أنت بخير؟]
+✓ Lens English row left to right  [Hello World]
+ALL PASSED
+
+4) Unchanged parts
+   CoreTest: 11432 vectors, FAILS=0 · Core26Test: 9898, FAILS=0 · MergeTest: PASSED · PipeTest, LensTest, ApiTest: as before · VisionTest: ALL PASSED

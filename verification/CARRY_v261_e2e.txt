@@ -1,0 +1,61 @@
+HardSub OCR 2.6.1 — «أبي» hole fix (carried line), verification — 2026-11-22
+
+1) The user's three real frames (verification/gap/GapTest.kt), min duration 30 ms, 2.1(+cut) engine:
+v26: 32 frames (A 0-7, A→fade 8-12, fade 13-14, fade→B 15-21, B 22-31) → frames 0-11  frames 11-14  frames 17-32
+new: 32 frames (A 0-7, A→fade 8-12, fade 13-14, fade→B 15-21, B 22-31) → frames 0-11  frames 11-17  frames 17-32
+   2.6: hole between frames 14 and 17 (= 06.482 → 06.716). 2.6.1: 11-17 joins 17-32, no hole; the third piece starts where it did.
+
+2) End-to-end SRT benchmark (verification/arbiter/ArbBench.kt, simulated OCR, PERLINE=1):
+   «2.6» = carryText off (identical to the 2.6.0 record in CUT_v26_e2e.txt); «2.6.1» = the new engine; «max» = الأدق (ensemble).
+   Lines listed under a set are every subtitle whose boundary error changed by >= 2 frames (only improvements).
+=== ar  (56 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5)  98.2%  missing  0  wrong  0  dup  1  mean err 0.22 f  OCR 69
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5)  98.2%  missing  0  wrong  0  dup  1  mean err 0.22 f  OCR 70
+      subtitles with a hole between two of their pieces: 2.6 1, 2.6.1 1
+  max 2.6                    lines found 100.0%  correct(IoU>=.5)  98.2%  missing  0  wrong  0  dup  1  mean err 0.22 f  OCR 102
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5)  98.2%  missing  0  wrong  0  dup  1  mean err 0.22 f  OCR 104
+=== ar2  (56 subtitles)
+  2.6 (cut, no carry)        lines found  98.2%  correct(IoU>=.5)  96.4%  missing  1  wrong  0  dup  1  mean err 0.36 f  OCR 105
+  2.6.1 (carried line)       lines found  98.2%  correct(IoU>=.5)  96.4%  missing  1  wrong  0  dup  1  mean err 0.36 f  OCR 105
+      subtitles with a hole between two of their pieces: 2.6 1, 2.6.1 1
+  max 2.6                    lines found  98.2%  correct(IoU>=.5)  98.2%  missing  1  wrong  0  dup  0  mean err 0.44 f  OCR 141
+  max 2.6.1 (الأدق)         lines found  98.2%  correct(IoU>=.5)  98.2%  missing  1  wrong  0  dup  0  mean err 0.44 f  OCR 141
+=== ar3  (39 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.81 f  OCR 73
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.26 f  OCR 75
+      subtitles with a hole between two of their pieces: 2.6 0, 2.6.1 0
+  max 2.6                    lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.63 f  OCR 131
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.65 f  OCR 130
+      [2.6.1 (carried line)   vs 2.6 (cut, no carry)] GT 1660-1720: 1660-1690 -> 1660-1719  (err 30 -> 1)
+      [2.6.1 (carried line)   vs 2.6 (cut, no carry)] GT 2839-2959: 2839-2944 -> 2839-2958  (err 15 -> 1)
+=== ar4  (39 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5)  74.4%  missing  0  wrong  0  dup 23  mean err 4.14 f  OCR 146
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5)  74.4%  missing  0  wrong  0  dup 23  mean err 4.14 f  OCR 146
+      subtitles with a hole between two of their pieces: 2.6 11, 2.6.1 11
+  max 2.6                    lines found 100.0%  correct(IoU>=.5)  89.7%  missing  0  wrong  0  dup 10  mean err 1.97 f  OCR 300
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5)  89.7%  missing  0  wrong  0  dup 10  mean err 1.97 f  OCR 299
+      [max 2.6.1 (الأدق)       vs max 2.6] GT 3255-3375: 3258-3310 -> 3255-3310  (err 68 -> 65)
+=== ar5  (39 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5)  87.2%  missing  0  wrong  0  dup 14  mean err 1.19 f  OCR 151
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5)  87.2%  missing  0  wrong  0  dup 14  mean err 1.19 f  OCR 151
+      subtitles with a hole between two of their pieces: 2.6 6, 2.6.1 6
+  max 2.6                    lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  2  mean err 1.05 f  OCR 289
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  2  mean err 1.03 f  OCR 290
+      [max 2.6.1 (الأدق)       vs max 2.6] GT 855-893: 852-893 -> 856-893  (err 3 -> 1)
+=== ar6  (39 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.37 f  OCR 113
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.37 f  OCR 113
+      subtitles with a hole between two of their pieces: 2.6 0, 2.6.1 0
+  max 2.6                    lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.42 f  OCR 226
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.37 f  OCR 227
+      [max 2.6.1 (الأدق)       vs max 2.6] GT 1822-1942: 1819-1945 -> 1822-1945  (err 6 -> 3)
+=== en  (48 subtitles)
+  2.6 (cut, no carry)        lines found 100.0%  correct(IoU>=.5)  97.9%  missing  0  wrong  0  dup  0  mean err 0.19 f  OCR 58
+  2.6.1 (carried line)       lines found 100.0%  correct(IoU>=.5)  97.9%  missing  0  wrong  0  dup  0  mean err 0.20 f  OCR 58
+      subtitles with a hole between two of their pieces: 2.6 0, 2.6.1 0
+  max 2.6                    lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.48 f  OCR 74
+  max 2.6.1 (الأدق)         lines found 100.0%  correct(IoU>=.5) 100.0%  missing  0  wrong  0  dup  0  mean err 0.49 f  OCR 74
+
+3) Suites: CoreTest 11432 vectors FAILS=0 · Core26Test 9898 FAILS=0 · SegTest identical to 2.6 · MergeTest passed ·
+   SubScanTest: same or better on every set (boxed credits 24/39 vs 23/39, splits 6 vs 7) · ArbiterTest ALL PASSED ·
+   ImgTest 0 differing pixels · LensTest ok · ApiTest ok · full app type-check 0 errors.

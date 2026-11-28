@@ -1,0 +1,17 @@
+2.7.7 — checks
+
+1) Live Google Lens (GitHub Actions, ocr-bench.yml; report in branch ocr-bench-results): 24 synthetic
+   crops, 5 of them outlined white text without a box (dialogue dashes, two lines, «...!», «؟»).
+   Shape (lines, dashes, punctuation exactly, after the app's Lens/Vision cleaning): 5/5 on those.
+   Text: one look 19/24 exact, the app 22/24; shape (all 24): one look 18/24, the app 21/24 — the 3 left
+   are reading errors, not shape (shadda of «عليّ» not read, «امي» for «أمي», a faint «حسنًا» missed).
+2) classic/ClassicTest.kt: ClassicText (lines, dashes, punctuation, quotes, numbers, tashkeel kept;
+   Latin, tatweel, space before closing punctuation removed; presentation forms → letters; a subtitle
+   saying «لا يوجد نص» kept); Lens dialogue dash beside its line kept in front, a dash over the text or
+   left of an Arabic line (live case 07_short_4_a170) dropped, «!» at the end; an Arabic piece on a row of
+   long crew names right to left.                                                    ALL PASSED
+3) vision/VisionShapeTest.kt: Vision words → «- هوليا ⏎ - ابتعدي يا جوليزار», two lines with «.» «؟»,
+   «انتظر... لا تذهب!», crew names on the row removed with the dash kept in front.    ALL PASSED
+4) Unchanged and passing: CoreTest (11,432 vectors), Core26Test (9,898), MergeTest, PipeTest,
+   ApiTest (Gemini/OpenRouter untouched), LensTest, lens/LensOrderTest, vision/VisionTest,
+   vision/FocusTest, vision/LayoutTest + fuzz (same numbers), cache/CacheTest.
