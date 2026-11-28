@@ -1,0 +1,26 @@
+HardSub OCR 2.7.0 — checks (2026-11-23)
+
+1) Google Cloud Vision engine (verification/vision/VisionTest.kt): ALL PASSED (22 checks)
+   - POST https://vision.googleapis.com/v1/images:annotate, key in the x-goog-api-key header (never in the URL)
+   - TEXT_DETECTION + imageContext.languageHints [ar|en]; fullTextAnnotation.text, fallback textAnnotations[0]
+   - same cleaning as Lens (classic OCR group): credits lines without Arabic dropped → «أبي»
+   - errors: invalid key / billing disabled / API disabled / restricted key → job stops with the reason;
+     429 per minute → retried; 5xx → retried; per-image INVALID_ARGUMENT → only that image fails
+   - Gemini list = gemini-4-hydrogen, gemini-4-neon, gemini-4-carbon, gemini-4-argon, gemini-3.8-flash,
+     gemini-3.5-flash-lite (checked 23 Nov 2026: Google blog / Google Cloud docs / OpenRouter live list);
+     fetched lists keep only Gemini text models that read images (no TTS/image/live/embedding/2.0)
+   Lens logic applied to Vision everywhere: AUTO cleaning (PRO), AUTO merge (PRO), AUTO enhance (off),
+   PNG ≤ 1500 px (images and video crops), Lens/Vision parallel workers setting, no AI profile.
+
+2) Diagnostic log (verification/diag/DiagTest.kt): ALL PASSED (13 checks)
+   - 20,000 lines queued in 28 ms (background writer, the job never waits)
+   - API keys masked before writing (AIza…, sk-or-…, key=/Authorization)
+   - stack traces, crash written synchronously, 2 rotating files (≈ 2 MB total in the test, ≤ 3 MB)
+   - export = title + device block + both files; clear; off → nothing written
+
+3) Unchanged behaviour (same as 2.6.1):
+   CoreTest 11432 vectors FAILS=0 · Core26Test 9898 FAILS=0 · MergeTest passed · ImgTest 0 differing pixels ·
+   LensTest ok · ApiTest ok · SegTest 0 differing lines vs 2.6.1 · SubScanTest 0 differing lines vs 2.6.1 ·
+   ArbiterTest ALL PASSED · «أبي» real frames: 0-11 | 11-17 | 17-32 (no hole)
+
+4) Full app type-check against Android/Compose API stubs: 0 errors. Real build: GitHub Actions.

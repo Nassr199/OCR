@@ -1,0 +1,733 @@
+[
+ {
+  "file": "01_habibi_credits_bg0.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 0",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ],
+  "text": [
+   406,
+   108,
+   824,
+   158
+  ]
+ },
+ {
+  "file": "01_habibi_credits_bg1.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 1",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ],
+  "text": [
+   406,
+   108,
+   824,
+   158
+  ]
+ },
+ {
+  "file": "01_habibi_credits_bg2.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "credits both sides, background variant 2",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ],
+  "text": [
+   406,
+   108,
+   824,
+   158
+  ]
+ },
+ {
+  "file": "02_habibi_alone.jpg",
+  "truth": "حبيبي، هل أنت بخير؟",
+  "note": "no credits",
+  "box": [
+   390,
+   92,
+   840,
+   176
+  ],
+  "text": [
+   406,
+   108,
+   824,
+   158
+  ]
+ },
+ {
+  "file": "03_abi_over_credit_a255.jpg",
+  "truth": "أبي",
+  "note": "box covers the middle of a credit name, credit alpha 255",
+  "box": [
+   562,
+   92,
+   662,
+   176
+  ],
+  "text": [
+   577,
+   108,
+   646,
+   158
+  ]
+ },
+ {
+  "file": "03_abi_over_credit_a150.jpg",
+  "truth": "أبي",
+  "note": "box covers the middle of a credit name, credit alpha 150",
+  "box": [
+   562,
+   92,
+   662,
+   176
+  ],
+  "text": [
+   577,
+   108,
+   646,
+   158
+  ]
+ },
+ {
+  "file": "04_two_lines.jpg",
+  "truth": "أجل، أنا بخير.\nلا تقلق عليّ.",
+  "note": "two lines",
+  "box": [
+   486,
+   51,
+   744,
+   187
+  ],
+  "text": [
+   502,
+   67,
+   728,
+   169
+  ]
+ },
+ {
+  "file": "05_long_line_credits.jpg",
+  "truth": "لا أعرف ماذا سأفعل الآن، كل شيء تغيّر",
+  "note": "long line, short credits at the edges",
+  "box": [
+   265,
+   92,
+   965,
+   170
+  ],
+  "text": [
+   280,
+   108,
+   948,
+   152
+  ]
+ },
+ {
+  "file": "06_short_words.jpg",
+  "truth": "لا، لم يحدث شيء",
+  "note": "short words, one credit",
+  "box": [
+   429,
+   92,
+   801,
+   167
+  ],
+  "text": [
+   445,
+   112,
+   786,
+   153
+  ]
+ },
+ {
+  "file": "07_short_0_a255.jpg",
+  "truth": "نعم",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   568,
+   92,
+   668,
+   155
+  ],
+  "text": [
+   584,
+   118,
+   653,
+   147
+  ]
+ },
+ {
+  "file": "07_short_0_a170.jpg",
+  "truth": "نعم",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   568,
+   92,
+   668,
+   155
+  ],
+  "text": [
+   584,
+   118,
+   653,
+   147
+  ]
+ },
+ {
+  "file": "07_short_1_a255.jpg",
+  "truth": "أمي",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   563,
+   92,
+   673,
+   176
+  ],
+  "text": [
+   579,
+   108,
+   658,
+   158
+  ]
+ },
+ {
+  "file": "07_short_1_a170.jpg",
+  "truth": "أمي",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   563,
+   92,
+   673,
+   176
+  ],
+  "text": [
+   579,
+   108,
+   658,
+   158
+  ]
+ },
+ {
+  "file": "07_short_2_a255.jpg",
+  "truth": "ماذا؟",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   554,
+   92,
+   682,
+   159
+  ],
+  "text": [
+   569,
+   108,
+   666,
+   141
+  ]
+ },
+ {
+  "file": "07_short_2_a170.jpg",
+  "truth": "ماذا؟",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   554,
+   92,
+   682,
+   159
+  ],
+  "text": [
+   569,
+   108,
+   666,
+   141
+  ]
+ },
+ {
+  "file": "07_short_3_a255.jpg",
+  "truth": "حسنًا",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   552,
+   92,
+   684,
+   159
+  ],
+  "text": [
+   568,
+   107,
+   669,
+   140
+  ]
+ },
+ {
+  "file": "07_short_3_a170.jpg",
+  "truth": "حسنًا",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   552,
+   92,
+   684,
+   159
+  ],
+  "text": [
+   568,
+   107,
+   669,
+   140
+  ]
+ },
+ {
+  "file": "07_short_4_a255.jpg",
+  "truth": "لماذا؟",
+  "note": "short word in a small box over a credit name, alpha 255",
+  "box": [
+   545,
+   92,
+   691,
+   159
+  ],
+  "text": [
+   561,
+   108,
+   675,
+   141
+  ]
+ },
+ {
+  "file": "07_short_4_a170.jpg",
+  "truth": "لماذا؟",
+  "note": "short word in a small box over a credit name, alpha 170",
+  "box": [
+   545,
+   92,
+   691,
+   159
+  ],
+  "text": [
+   561,
+   108,
+   675,
+   141
+  ]
+ },
+ {
+  "file": "08_dialogue_dashes.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   411,
+   71,
+   818,
+   186
+  ]
+ },
+ {
+  "file": "09_two_lines_period.jpg",
+  "truth": "هوليا. ساعدوني\nماذا حدث؟",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   440,
+   71,
+   791,
+   177
+  ]
+ },
+ {
+  "file": "10_dash_one_line.jpg",
+  "truth": "- لا أعرف",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   509,
+   93,
+   720,
+   154
+  ]
+ },
+ {
+  "file": "11_ellipsis.jpg",
+  "truth": "انتظر... لا تذهب!",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   426,
+   103,
+   804,
+   154
+  ]
+ },
+ {
+  "file": "12_dialogue_question.jpg",
+  "truth": "- هل أنت بخير؟\n- نعم، أنا بخير",
+  "note": "outlined white text, the shape (lines, dashes, punctuation) must be kept",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   446,
+   61,
+   783,
+   186
+  ]
+ },
+ {
+  "file": "13_dialogue_box.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider",
+  "box": [
+   444,
+   69,
+   786,
+   187
+  ],
+  "text": [
+   459,
+   89,
+   769,
+   173
+  ]
+ },
+ {
+  "file": "14_dialogue_box_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   444,
+   69,
+   786,
+   187
+  ],
+  "text": [
+   459,
+   89,
+   769,
+   173
+  ]
+ },
+ {
+  "file": "15_dialogue_box_thin_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   480,
+   75,
+   750,
+   187
+  ],
+  "text": [
+   495,
+   95,
+   733,
+   173
+  ]
+ },
+ {
+  "file": "16_dialogue_box_long2_credits.jpg",
+  "truth": "- ماذا؟\n- لا شيء، عودي إلى البيت الآن",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   342,
+   61,
+   888,
+   187
+  ],
+  "text": [
+   358,
+   83,
+   873,
+   171
+  ]
+ },
+ {
+  "file": "17_dialogue_box_nospace_credits.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   450,
+   69,
+   780,
+   187
+  ],
+  "text": [
+   465,
+   89,
+   763,
+   173
+  ]
+ },
+ {
+  "file": "18_one_speaker_wrap_credits.jpg",
+  "truth": "- لا أعرف ماذا سأفعل\nبعد كل ما حدث",
+  "note": "two-line subtitle in the box, second line wider, credits on its rows",
+  "box": [
+   418,
+   51,
+   812,
+   187
+  ],
+  "text": [
+   433,
+   67,
+   796,
+   167
+  ]
+ },
+ {
+  "file": "19_shadow_hear_me.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   156,
+   94,
+   1074,
+   143
+  ]
+ },
+ {
+  "file": "20_shadow_hear_me_serif.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   223,
+   92,
+   1006,
+   151
+  ]
+ },
+ {
+  "file": "21_shadow_wound.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   257,
+   94,
+   973,
+   143
+  ]
+ },
+ {
+  "file": "22_shadow_wound_serif.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "white text, thin outline, soft drop shadow, no box (bright scene, dark suit)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   311,
+   92,
+   919,
+   147
+  ]
+ },
+ {
+  "file": "23_frame_hear_me.jpg",
+  "truth": "هل تسمعينني؟ هل تسمعينني؟ انظري إلي",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   358,
+   723,
+   1141,
+   782
+  ]
+ },
+ {
+  "file": "24_frame_wound.jpg",
+  "truth": "قمت بالضغط المباشر على الجرح",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   446,
+   723,
+   1054,
+   778
+  ]
+ },
+ {
+  "file": "25_frame_dialogue.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "whole frame 1500×844, shadowed subtitle at the bottom",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   576,
+   653,
+   925,
+   780
+  ]
+ },
+ {
+  "file": "26_roi_wake_tiles.jpg",
+  "truth": "هوليا. استيقظي",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (tiles)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   739,
+   329,
+   1180,
+   391
+  ]
+ },
+ {
+  "file": "27_roi_last_worry_lace.jpg",
+  "truth": "هوليا هي آخر همي الآن",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (lace)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   644,
+   319,
+   1275,
+   391
+  ]
+ },
+ {
+  "file": "28_roi_dialogue_red.jpg",
+  "truth": "- هوليا\n- ابتعدي يا جوليزار",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (red_skin)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   709,
+   255,
+   1208,
+   391
+  ]
+ },
+ {
+  "file": "29_roi_help_garden.jpg",
+  "truth": "هوليا. ساعدوني\nماذا حدث؟",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (garden)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   745,
+   255,
+   1174,
+   379
+  ]
+ },
+ {
+  "file": "30_roi_fine_tiles.jpg",
+  "truth": "بخير بخير أجل أنا بخير",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (tiles)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   662,
+   317,
+   1255,
+   391
+  ]
+ },
+ {
+  "file": "31_roi_mom_lace.jpg",
+  "truth": "أريد أمي",
+  "note": "video mode area 1920×432, outlined white subtitle on a bright scene (lace)",
+  "box": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "text": [
+   844,
+   317,
+   1076,
+   391
+  ]
+ }
+]

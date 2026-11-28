@@ -1,0 +1,106 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ "**" ]
+    paths-ignore: [ "**.md", "verification/**", "bench/**", ".github/workflows/ocr-bench.yml" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish the APK as a GitHub Release
+
+jobs:
+  build:
+    # the branch "ocr-bench" carries work in progress for the live OCR bench: never built or released
+    # "ui-shots" carries screen work in progress for the screenshot workflow: never built or released either
+    if: github.ref_name != 'ocr-bench' && github.ref_name != 'ui-shots'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Works even if the zip was uploaded through the GitHub website
+      # (the web upload does not keep the executable bit of gradlew).
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Thmanyah's license forbids hosting its font files: the repository holds an encrypted copy,
+      # decrypted here with the repository secret THMANYAH_FONT_KEY and packed scrambled into the APK.
+      # Without the secret the app is built with the system font.
+      - name: Title font (Thmanyah)
+        env:
+          THMANYAH_FONT_KEY: ${{ secrets.THMANYAH_FONT_KEY }}
+        run: bash tools/fonts.sh
+
+      - name: Build Vulkan library (NDK clang + glslc, all ABIs)
+        run: bash native/build_android.sh
+
+      - name: Test the Vulkan shader against the CPU (Mesa lavapipe)
+        continue-on-error: true
+        run: bash native/test_lavapipe.sh
+
+      - name: Build debug APK
+        env:
+          HSOCR_STORE_PASSWORD: ${{ secrets.HSOCR_STORE_PASSWORD }}
+          HSOCR_KEY_ALIAS: ${{ secrets.HSOCR_KEY_ALIAS }}
+          HSOCR_KEY_PASSWORD: ${{ secrets.HSOCR_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardSubOCR-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Build release APK (R8 optimized, smaller & faster)
+        id: release
+        continue-on-error: true
+        env:
+          HSOCR_STORE_PASSWORD: ${{ secrets.HSOCR_STORE_PASSWORD }}
+          HSOCR_KEY_ALIAS: ${{ secrets.HSOCR_KEY_ALIAS }}
+          HSOCR_KEY_PASSWORD: ${{ secrets.HSOCR_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Upload release APK
+        if: steps.release.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardSubOCR-release-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      # Direct phone-friendly download: https://github.com/<you>/<repo>/releases/latest
+      - name: Inspect APKs (proves the new code is inside)
+        if: always()
+        run: |
+          for f in app/build/outputs/apk/*/*.apk; do
+            echo "== $f  ($(stat -c%s "$f") bytes)"
+            unzip -lv "$f" | grep -E "classes[0-9]*\.dex"
+            echo "SubScan marker (subscan worker) found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'subscan')"
+            echo "English prompt marker found: $(unzip -p "$f" 'classes*.dex' | strings | grep -c 'precise OCR engine for subtitles')"
+            echo "Vulkan libraries: $(unzip -l "$f" | grep -c 'libhsocrvk.so')"
+            echo "Title font (scrambled weights): $(unzip -l "$f" | grep -c 'assets/type/t')  — plain font files: $(unzip -l "$f" | grep -ci '\.otf')"
+            unzip -l "$f" | grep 'libhsocrvk.so' || true
+          done
+
+      - name: Publish APK as a GitHub Release
+        if: steps.release.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/*.apk HardSubOCR.apk
+          cp app/build/outputs/apk/debug/*.apk HardSubOCR-debug.apk
+          gh release create "build-${{ github.run_number }}" HardSubOCR.apk HardSubOCR-debug.apk \
+            --title "HardSub OCR — build ${{ github.run_number }}" \
+            --notes "نسخة أندرويد تلقائية من الفرع ${{ github.ref_name }} (commit ${{ github.sha }}). حمّل HardSubOCR.apk وثبّته (HardSubOCR-debug.apk نسخة احتياطية)." \
+            --target "${{ github.sha }}" --latest

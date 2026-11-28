@@ -1,0 +1,70 @@
+HardSub OCR 2.7.5 — checks
+==========================
+
+The user's own Vision tool (google-vision-ocr-srt, PyInstaller / Python 3.11) was read from its bytecode:
+each .jpeg sent whole, features [TEXT_DETECTION (default) | DOCUMENT_TEXT_DETECTION], languageHints ["ar"],
+fullTextAnnotation.text taken as it is, "-" when empty, optional joining of identical neighbours.
+It reached Vision through another Android app's Firebase function, not with the user's key: not ported.
+
+1) Request (verification/vision/VisionTest.kt)
+✓ endpoint  [https://vision.googleapis.com/v1/images:annotate]
+✓ key in header, not URL
+✓ base64 image
+✓ DOCUMENT_TEXT_DETECTION by default
+✓ language hint ar only (as the user's Vision tool)
+✓ DOCUMENT: no textDetectionParams (confidence comes anyway)
+✓ TEXT choice: TEXT_DETECTION
+✓ TEXT choice: word confidence requested
+✓ English subtitles: hint en only
+✓ full text, trailing newline trimmed  [مرحبا يا صديقي
+كيف حالك؟]
+✓ cacheId per language and reading type
+✓ textAnnotations fallback
+✓ no text → empty
+✓ Lens/Vision cleaning drops credits  [أبي]
+✓ classic OCR group
+✓ bad key → stop job  [مفتاح Google Cloud Vision غير صالح]
+✓ billing → stop job with reason  [Cloud Vision يتطلب تفعيل الفوترة (Billing) في مشروع Google Cloud: This API method requires billing to be enabled.]
+✓ API disabled → stop job  [فعّل Cloud Vision API في مشروع Google Cloud الخاص بالمفتاح: Cloud Vision API has not been used in project 123 before or it is disabled.]
+✓ 429 per minute → retry
+✓ 5xx → retry
+✓ per-image bad data → only this image fails  [Google Vision رفض هذه الصورة: Bad image data.]
+✓ per-image quota → retry
+✓ blank key refused
+✓ Gemini list current
+✓ fetched list filter
+✓ OpenRouter ids
+ALL PASSED
+
+2) Two-stage reading + Vision report (verification/vision/FocusTest.kt; sample report: vision/report_sample.txt)
+✓ «حبيبي» frame: second look asked (crew names on the subtitle's row)  [378, 89, 851, 180]
+✓ …area holds the whole subtitle (393–836) and no crew name (≤352, ≥907)  [378, 89, 851, 180]
+✓ «أبي» frame: second look asked  [575, 93, 657, 186]
+✓ …area = the box only: right of «Dan» (573), left of «ineş» (659), under «Koordinatörü» (91)  [575, 93, 657, 186]
+✓ subtitle alone, read sure → no second request
+✓ …also when Vision gives no confidence
+✓ subtitle alone but unsure → second look
+✓ crew names on other rows only (title line above, far) → no second request
+✓ focused «حبيبي، …» (more letters, surer) is kept
+✓ focused «بيبي، …» again (same) → first stays
+✓ «انا» made of a crew name's letters is noise: focused «أبي» kept
+✓ focused look that lost part of the subtitle is refused
+✓ focused look with nothing Arabic is refused
+✓ engine: two requests, second one with the cropped picture  [2]
+✓ engine: «حبيبي، هل أنت بخير؟» returned  [حبيبي، هل أنت بخير؟]
+✓ engine: subtitle alone → one request, same text as before  [حبيبي، هل أنت بخير؟]
+✓ engine: second look refused (429) → first reading, no error  [Saç Tasarım ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu ⏎ بيبي، هل أنت بخير؟ ⏎ Mustafa Gümüş]
+✓ engine: key refused on the second look → stops like any refused key
+✓ engine without a cropper (key test) → one request
+✓ cache id new
+✓ trace for every image read  [[0_00_52_300__0_00_54_016.jpeg, 0_00_55_000__0_00_56_000.jpeg]]
+✓ report: Vision's own text, the text, the second look, times  [تقرير Google Vision — ep1 / نوع القراءة: مستند (DOCUMENT_TEXT_DETECTION) • لغة القراءة: ar / صور قرأها Vision في هذه المرة: 2 • من ذاكرة الاستئناف (لم تُرسل): 3 • قراءة ثانية للترجمة وحدها: 1 (اختيرت في 1) / «Vision» = نصه كما أرسلته Google حرفيًا. «النص» = بعد ترتيب الكلمات، قبل التنظيف والدمج. /  / 00:00:52,300 → 00:00:54,016  [0_00_52_300__0_00_54_016.jpeg] /   Vision: «Saç Tasarım ⏎ Mustafa Gümüş ⏎ بيبي، هل أنت بخير؟ ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu» /   النص:   «Saç Tasarım ⏎ Makyaj Tasarım ⏎ Beste Bayoğlu ⏎ بيبي، هل أنت بخير؟ ⏎ Mustafa Gümüş»  ثقة 84%]
+ALL PASSED
+
+3) Layout (LayoutTest.kt, LayoutFuzz.kt)
+ALL PASSED
+misread copy: 3000/3000 exact · joined copy: 3000/3000 exact
+contradicting laid-out reading: 2690/3000 exact
+clean readings: 4000/4000 exact · with an outline copy: 4000/4000 exact
+
+4) Unchanged: Lens (LensOrderTest, LensTest), Gemini/OpenRouter (ApiTest), PipeTest.

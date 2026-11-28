@@ -1,0 +1,37 @@
+2.7.8 — checks
+
+1) Live Google Lens (GitHub Actions, ocr-bench.yml; report in branch ocr-bench-results): 30 synthetic crops,
+   6 new ones like the real dialogue frame — two lines in the black box, the second line wider, crew
+   credits on the rows (13–18), one of them a single speaker's sentence wrapped on two lines (18).
+   Before (2.7.7 code): Lens's one look dropped the dash of «- هوليا» on 13, 14, 15 and the app kept it so;
+   shape 24/30. After: the dialogue with a dash on some lines only gets the extra looks, the enlarged
+   look reads the dash, it is put back on the same line; shape 27/30 (the 3 left are letter errors:
+   shadda of «عليّ», «امي», a faint «حسنًا»). Text exact 28/30 unchanged. 18 (wrapped sentence) unchanged.
+2) classic/DashTest.kt: ClassicShape (dash on some lines only, the dash restored only on a line another
+   look read with the same letters, never two dashes, the wrapped sentence untouched); Vision's focus
+   area on the measured geometry of frame 14 — before x1 ≤ 755 cut the dash (755–769), now 781 and still
+   before «Ali» (982); a «-» against a Latin name is not a dialogue dash; the engine puts back a dash
+   the focused look lost; Lens with a fake server: 4 looks, dash back, both dashes → one look,
+   extra looks off → unchanged.                                                       ALL PASSED
+3) ai/AiTest.kt: Gemini and OpenRouter send the same request (one user message: picture then the same
+   prompt; temperature 0, top-p 1, high detail, thinking low → thinkingLevel / reasoning.effort; no
+   systemInstruction, no candidateCount); every style the same prompt through both; English prompt;
+   cache ids. OpenRouter errors: provider 429 (rate limited, provider named, «not your credit»),
+   Retry-After, free daily (stops) and per-minute (X-RateLimit-Reset), 402 credit / in-flight budget,
+   401, 502 with provider and raw, error inside a 200 answer, 400 with the provider's reason; key check
+   (GET /api/v1/key); refused temperature / reasoning → retried without. Adaptive requests in flight:
+   halves on 429, never 0, grows back; a crowded fake service (429 above 2 in flight, 6 workers):
+   60/60 read, none lost. Exact reading's cleaning: lines, dashes, «…» «», visible tashkeel kept; v2.6
+   guard, fragments, replies, Latin lines, tatweel as v2.6.                            ALL PASSED
+4) img/BandTest.kt: the text-safe subtitle band on the 30 bench crops — v2.6's band unchanged on every
+   boxed crop where it cut nothing (23), widened only where v2.6's 35 % cut went through the subtitle
+   (04, 18: text from row 68, cut at 70; outlined 08/09/12); whole frame with a sign high in the scene
+   unchanged; a line crossing 35 % kept whole.                                         ALL PASSED
+   ImgTest (v2.6 preparation vs Pillow, pixel by pixel, default options): 8/8 cases, 0 pixels differ.
+5) Unchanged and passing: CoreTest (11,432 vectors), Core26Test (9,898), MergeTest, PipeTest, ApiTest
+   (updated to the one-message request), LensTest, lens/LensOrderTest, classic/ClassicTest,
+   vision/VisionTest, vision/FocusTest, vision/VisionShapeTest, vision/LayoutTest + fuzz (same numbers
+   as 2.7.7), cache/CacheTest. Whole app type-checked with the Android stubs.
+6) Not measurable from the build machine: Gemini / OpenRouter live (no network to them). The bench reads
+   the 30 crops with both when the repository has GEMINI_API_KEY / OPENROUTER_API_KEY secrets and the
+   commit message says [bench-ai]; Vision with a VISION_API_KEY secret (including the app's focused look).
