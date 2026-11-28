@@ -217,7 +217,8 @@ class ScreenShots {
     /** Video source: «الصور ثم النص» (two stages, the engine named) next to «حفظ الصور فقط». */
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() {
         shot("phone_12_video_stages", Tab.EXTRACT) {
-            rule.onNodeWithText("اكتشاف تلقائي للترجمة").performScrollTo().performClick()
+            // its own click action: a touch there may land on the floating start button
+            rule.onNodeWithText("اكتشاف تلقائي للترجمة").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             rule.mainClock.advanceTimeBy(1_000)
             // the option is at the end of the extract tab (a lazy list): scroll it to its end
             rule.onAllNodes(hasScrollToNodeAction()).onFirst().performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
