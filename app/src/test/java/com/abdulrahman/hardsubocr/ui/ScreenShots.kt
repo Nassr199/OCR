@@ -11,7 +11,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.geometry.Offset
@@ -214,7 +217,8 @@ class ScreenShots {
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() {
         (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode = com.abdulrahman.hardsubocr.data.SourceMode.VIDEO
         shot("phone_12_video_stages", Tab.EXTRACT) {
-            rule.onNodeWithText("الصور ثم النص").performScrollTo()
+            // the extract tab is a lazy list: scroll it until the option is composed
+            rule.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText("الصور ثم النص"))
             rule.mainClock.advanceTimeBy(1_000)
         }
     }
