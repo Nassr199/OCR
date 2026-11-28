@@ -111,6 +111,7 @@ import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Bad
 import com.abdulrahman.hardsubocr.ui.theme.Good
 import java.util.Locale
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 fun shareSrt(context: Context, uri: Uri) {
     val i = Intent(Intent.ACTION_SEND).apply {
@@ -258,7 +259,7 @@ fun TabHeader(
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 27.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(swashTitle(title), style = MaterialTheme.typography.headlineMedium.copy(fontSize = 27.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2)
         }
         if (status != null) {

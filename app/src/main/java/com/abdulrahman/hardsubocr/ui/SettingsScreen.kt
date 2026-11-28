@@ -61,6 +61,7 @@ import com.abdulrahman.hardsubocr.data.EnhanceChoice
 import com.abdulrahman.hardsubocr.data.Settings
 import com.abdulrahman.hardsubocr.video.VideoEngine
 import kotlin.math.roundToInt
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 /** Settings pages, in the order of the list. */
 enum class SettingsPage(val title: String, val emoji: String) {
@@ -212,7 +213,7 @@ internal fun SettingsPageScreen(title: String, onBack: (() -> Unit)?, content: @
         // the tab's own surface (the app background) shows through, under the frosted bar
         containerColor = Color.Transparent,
         topBar = {
-            val titleText: @Composable () -> Unit = { Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            val titleText: @Composable () -> Unit = { Text(swashTitle(title), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             val back: @Composable () -> Unit = {
                 if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
             }

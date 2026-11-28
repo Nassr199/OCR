@@ -115,6 +115,7 @@ import androidx.compose.ui.unit.sp
 import com.abdulrahman.hardsubocr.R
 import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Good
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 // ============================================================================ motion
 
@@ -220,7 +221,7 @@ fun SectionCard(
             ) { Text(emoji, fontSize = 17.sp) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(swashTitle(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (subtitle != null) Hint(subtitle, maxLines = 1)
             }
             trailing?.invoke()

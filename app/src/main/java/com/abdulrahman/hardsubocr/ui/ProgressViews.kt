@@ -31,6 +31,7 @@ import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Bad
 import com.abdulrahman.hardsubocr.ui.theme.Good
 import java.util.Locale
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 private fun n(v: Int) = String.format(Locale.US, "%,d", v)
 
@@ -133,7 +134,7 @@ private fun LogHeader(lines: List<LogLine>, shown: Int, filter: LogFilter, onFil
     val clipboard = LocalClipboardManager.current
     Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(swashTitle("سجل العمليات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Hint("$shown سطر")
             TextButton(onClick = { clipboard.setText(AnnotatedString(lines.reversed().joinToString("\n") { it.text })) }) { Text("📋 نسخ") }
         }
