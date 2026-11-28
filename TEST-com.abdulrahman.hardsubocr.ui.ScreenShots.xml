@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.abdulrahman.hardsubocr.ui.ScreenShots" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-11-28T10:42:49" hostname="runnervm3lb7s" time="16.66">
+  <properties/>
+  <testcase name="tablet_4_settings" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="1.181"/>
+  <testcase name="tablet_5_upright_running" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.864"/>
+  <testcase name="tablet_3_done" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.857"/>
+  <testcase name="phone_12_video_stages" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.765"/>
+  <testcase name="land_5_settings_scrolled" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.882"/>
+  <testcase name="land_2_running" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.671"/>
+  <testcase name="phone_1_extract" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.742"/>
+  <testcase name="phone_5_settings" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.652"/>
+  <testcase name="phone_11_region" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.514"/>
+  <testcase name="phone_2_running" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.546"/>
+  <testcase name="tablet_1_extract" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.836"/>
+  <testcase name="phone_8_lens_held" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.7"/>
+  <testcase name="tablet_6_upright_extract" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.758"/>
+  <testcase name="land_3_settings" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.695"/>
+  <testcase name="phone_7_small_running" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.436"/>
+  <testcase name="land_6_region" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.376"/>
+  <testcase name="tablet_2_running" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.788"/>
+  <testcase name="land_1_extract" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.715"/>
+  <testcase name="phone_3_done" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.578"/>
+  <testcase name="land_4_running_light" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.584"/>
+  <testcase name="phone_10_settings_video_light" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.69"/>
+  <testcase name="phone_4_idle" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.571"/>
+  <testcase name="phone_9_settings_video" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.608"/>
+  <testcase name="phone_6_extract_light" classname="com.abdulrahman.hardsubocr.ui.ScreenShots" time="0.646"/>
+  <system-out><![CDATA[hardware capture failed for tablet_4_settings: java.lang.NullPointerException — software drawing
+hardware capture failed for tablet_5_upright_running: java.lang.NullPointerException — software drawing
+hardware capture failed for tablet_3_done: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_12_video_stages: java.lang.NullPointerException — software drawing
+hardware capture failed for land_5_settings_scrolled: java.lang.NullPointerException — software drawing
+hardware capture failed for land_2_running: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_1_extract: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_5_settings: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_2_running: java.lang.NullPointerException — software drawing
+hardware capture failed for tablet_1_extract: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_8_lens_held: java.lang.NullPointerException — software drawing
+hardware capture failed for tablet_6_upright_extract: java.lang.NullPointerException — software drawing
+hardware capture failed for land_3_settings: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_7_small_running: java.lang.NullPointerException — software drawing
+hardware capture failed for tablet_2_running: java.lang.NullPointerException — software drawing
+hardware capture failed for land_1_extract: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_3_done: java.lang.NullPointerException — software drawing
+hardware capture failed for land_4_running_light: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_10_settings_video_light: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_4_idle: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_9_settings_video: java.lang.NullPointerException — software drawing
+hardware capture failed for phone_6_extract_light: java.lang.NullPointerException — software drawing
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

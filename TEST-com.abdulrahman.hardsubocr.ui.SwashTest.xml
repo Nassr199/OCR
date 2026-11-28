@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.abdulrahman.hardsubocr.ui.SwashTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-28T10:43:05" hostname="runnervm3lb7s" time="0.137">
+  <properties/>
+  <testcase name="one_word_per_title" classname="com.abdulrahman.hardsubocr.ui.SwashTest" time="0.04"/>
+  <testcase name="no_swash_where_the_font_has_none" classname="com.abdulrahman.hardsubocr.ui.SwashTest" time="0.041"/>
+  <testcase name="the_font_draws_the_swash" classname="com.abdulrahman.hardsubocr.ui.SwashTest" time="0.055"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

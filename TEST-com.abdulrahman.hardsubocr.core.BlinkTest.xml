@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.abdulrahman.hardsubocr.core.BlinkTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-28T10:42:24" hostname="runnervm3lb7s" time="20.526">
+  <properties/>
+  <testcase name="one_word_over_a_car_driving_away_is_one_line" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="13.222"/>
+  <testcase name="the_users_nine_pieces_are_one_line_with_the_proof" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="0.053"/>
+  <testcase name="nothing_is_joined_without_the_proof_and_the_same_text" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="0.048"/>
+  <testcase name="a_new_line_after_a_like_one_stays_a_new_line" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="1.386"/>
+  <testcase name="the_detector_never_joins_two_lines" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="3.302"/>
+  <testcase name="the_detector_itself_keeps_the_line_as_one_piece" classname="com.abdulrahman.hardsubocr.core.BlinkTest" time="2.515"/>
+  <system-out><![CDATA[film 25 fps in a 60 fps file: 3.0.2 → 9 line(s), now → 23-75 أخي (سريع: 9 → 1)
+true 60 fps: 3.0.2 → 1 line(s), now → 25-76 أخي (سريع: 0 → 0)
+a cut into the scene with the line: 3.0.2 → 7 line(s), now → 23-68 أخي (سريع: 7 → 1)
+لا → لا لا: 20-59 لا, 59-104 لا لا
+replaced in place: detector 23-75 أخي, 86-90 أبي | الأدق 23-75 أخي, 76-128 أبي
+the same words after a gap: detector 23-68 أخي, 82-130 أخي | الأدق 23-72 أخي, 82-130 أخي
+a word added: detector 23-56 لا, 59-75 لا لا | الأدق 20-59 لا, 59-104 لا لا
+film 25 fps in a 60 fps file: detector pieces 3.0.2 9 → now 23-75
+a cut into the scene with the line: detector pieces 3.0.2 7 → now 23-68
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.abdulrahman.hardsubocr.ui.LiquidTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-28T10:42:45" hostname="runnervm3lb7s" time="3.751">
+  <properties/>
+  <testcase name="switch_follows_a_drag_and_a_tap" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="1.774"/>
+  <testcase name="glass_recording_inside_a_draw_may_convert_dp" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.135"/>
+  <testcase name="rail_drag_reaches_every_tab" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.841"/>
+  <testcase name="landscape_settings_page_scrolls" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.353"/>
+  <testcase name="every_tap_moves_the_lens_as_liquid_glass" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.161"/>
+  <testcase name="shader_compiles_and_takes_its_uniforms" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.067"/>
+  <testcase name="bar_drag_reaches_every_tab" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.352"/>
+  <testcase name="title_font_loads_from_memory" classname="com.abdulrahman.hardsubocr.ui.LiquidTest" time="0.065"/>
+  <system-out><![CDATA[a layer recorded through the node's scope, converting dp: java.lang.StackOverflowError
+the glass recording, converting dp: fine
+glass at its peak on each tap: [0.81210256, 0.81210256, 0.81210256]
+device form here: error: 38: cannot swizzle value of type 'shader'
+RenderEffect from a shader here: no (UnsatisfiedLinkError)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
