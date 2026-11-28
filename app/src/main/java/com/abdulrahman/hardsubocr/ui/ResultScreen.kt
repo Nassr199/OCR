@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abdulrahman.hardsubocr.core.Timestamps
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 @Composable
 fun ResultScreen(vm: MainViewModel, onBack: () -> Unit) {
@@ -154,7 +155,7 @@ fun ResultScreen(vm: MainViewModel, onBack: () -> Unit) {
     if (confirmLeave) {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("تعديلات غير محفوظة") },
+            title = { Text(swashTitle("تعديلات غير محفوظة")) },
             text = { Text("هل تريد حفظ التعديلات قبل الخروج؟") },
             confirmButton = {
                 TextButton(onClick = { confirmLeave = false; save(); onBack() }) { Text("حفظ") }

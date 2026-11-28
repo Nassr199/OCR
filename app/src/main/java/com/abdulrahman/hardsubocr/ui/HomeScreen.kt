@@ -333,7 +333,7 @@ private fun ReadyCard(vm: MainViewModel, modifier: Modifier = Modifier) {
             Box(Modifier.size(10.dp).background(accent, CircleShape))
             Spacer(Modifier.width(10.dp))
             Text(
-                if (problem == null) "جاهز للاستخراج" else problem.removeSuffix("."),
+                swashTitle(if (problem == null) "جاهز للاستخراج" else problem.removeSuffix(".")),
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp), modifier = Modifier.weight(1f)
             )
         }
@@ -354,7 +354,7 @@ private fun ReadyLine(label: String, value: String, ok: Boolean) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(if (ok) Icons.Filled.CheckCircle else Icons.Filled.Warning, null, Modifier.size(18.dp), tint = c)
         Spacer(Modifier.width(10.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(92.dp))
+        Text(swashTitle(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(92.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     }
 }
@@ -416,7 +416,7 @@ private fun CrashBanner(report: String, diag: DiagActions, onDismiss: () -> Unit
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Warning, null, tint = Bad)
             Spacer(Modifier.width(8.dp))
-            Text("أُغلق التطبيق بشكل غير متوقع في المرة السابقة", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(swashTitle("أُغلق التطبيق بشكل غير متوقع في المرة السابقة"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "إخفاء") }
         }
         Hint("أرسل ملف التشخيص أو انسخ التقرير للمطوّر ليُصلح السبب بدقة.")
@@ -585,7 +585,7 @@ internal fun ResultCard(
         modifier = modifier,
         trailing = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "إغلاق") } }
     ) {
-        Text(title, fontWeight = FontWeight.Bold, color = if (good) Good else MaterialTheme.colorScheme.error)
+        Text(swashTitle(title), fontWeight = FontWeight.Bold, color = if (good) Good else MaterialTheme.colorScheme.error)
         elapsed?.let { Hint("المدة: " + Timestamps.human(it)) }
         if (details != null) {
             Spacer(Modifier.height(4.dp))
@@ -665,7 +665,7 @@ private fun FolderPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("اختيار مجلدات الحلقات") },
+        title = { Text(swashTitle("اختيار مجلدات الحلقات")) },
         text = {
             Column {
                 if (loading) {

@@ -88,6 +88,7 @@ import com.abdulrahman.hardsubocr.core.Timestamps
 import com.abdulrahman.hardsubocr.data.RoiRect
 import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Good
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -110,7 +111,7 @@ fun RoiScreen(vm: MainViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("منطقة الترجمة في الفيديو") },
+                title = { Text(swashTitle("منطقة الترجمة في الفيديو")) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
                 actions = { IconButton(onClick = onBack) { Icon(Icons.Filled.Check, "تم") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent)
@@ -394,7 +395,7 @@ private fun RegionReadout(vm: MainViewModel) {
 private fun EdgeControl(label: String, at: Float, videoH: Int, modifier: Modifier, up: () -> Unit, down: () -> Unit) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(swashTitle(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("⁦" + pct(at) + "⁩", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1)
             if (videoH > 0) {
                 Text(
@@ -463,7 +464,7 @@ private fun TimelineCard(vm: MainViewModel) {
 @Composable
 private fun StepGroup(title: String, steps: List<Pair<String, Long>>, modifier: Modifier, onStep: (Long) -> Unit) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(swashTitle(title), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for ((label, delta) in steps) {

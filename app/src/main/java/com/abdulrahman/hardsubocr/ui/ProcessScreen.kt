@@ -48,6 +48,7 @@ import com.abdulrahman.hardsubocr.job.JobState
 import com.abdulrahman.hardsubocr.ui.theme.Amber
 import com.abdulrahman.hardsubocr.ui.theme.Bad
 import com.abdulrahman.hardsubocr.ui.theme.Good
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 import java.util.Locale
 
 /**
@@ -161,7 +162,7 @@ private fun EmptyJob(onGoExtract: () -> Unit, modifier: Modifier = Modifier) {
             contentAlignment = Alignment.Center
         ) { Icon(AppIcons.Activity, null, Modifier.size(38.dp), tint = scheme.onPrimaryContainer) }
         Spacer(Modifier.height(4.dp))
-        Text("لا توجد مهمة الآن", fontWeight = FontWeight.Bold, fontSize = 19.sp)
+        Text(swashTitle("لا توجد مهمة الآن"), fontWeight = FontWeight.Bold, fontSize = 19.sp)
         Text(
             "اختر المحرك والمصدر من «الاستخراج» ثم اضغط زر البدء. يظهر هنا تقدّم المهمة وسجلها، ثم ملفات الترجمة الناتجة.",
             style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = TextAlign.Center

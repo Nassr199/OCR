@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -272,7 +273,7 @@ fun GlassTabs(
                     }
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        item.label, fontSize = 11.sp, color = tint, maxLines = 1,
+                        swashTitle(item.label), fontSize = 11.sp, color = tint, maxLines = 1,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium
                     )
                 }

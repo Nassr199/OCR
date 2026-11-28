@@ -66,6 +66,7 @@ import com.abdulrahman.hardsubocr.core.GeminiEngine
 import com.abdulrahman.hardsubocr.core.ModelInfo
 import com.abdulrahman.hardsubocr.core.OpenRouterEngine
 import com.abdulrahman.hardsubocr.core.ThinkingLevel
+import com.abdulrahman.hardsubocr.ui.theme.swashTitle
 
 fun engineName(e: EngineKind) = when (e) {
     EngineKind.LENS -> "Google Lens"
@@ -391,7 +392,7 @@ private fun KeyPanel(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("حذف المفتاح؟") },
+            title = { Text(swashTitle("حذف المفتاح؟")) },
             text = { Text("سيُحذف مفتاح ${engineName(e)} من هذا الجهاز. يمكنك لصقه مرة أخرى في أي وقت.") },
             confirmButton = { TextButton(onClick = { confirmDelete = false; vm.deleteKey(e) }) { Text("حذف") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("إلغاء") } }
@@ -422,7 +423,7 @@ private fun ModelPicker(vm: MainViewModel, enabled: Boolean, models: List<ModelI
             if (vm.loadingModels) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
             TextButton(onClick = { vm.fetchModels() }, enabled = enabled && !vm.loadingModels) {
                 Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
-                Text("تحديث من حسابك", style = MaterialTheme.typography.labelLarge)
+                Text(swashTitle("تحديث من حسابك"), style = MaterialTheme.typography.labelLarge)
             }
         }
     }

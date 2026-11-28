@@ -251,7 +251,7 @@ fun SectionCard(
 @Composable
 fun GroupTitle(text: String) {
     Text(
-        text,
+        swashTitle(text),
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
@@ -316,7 +316,7 @@ fun SettingsRow(emoji: String, title: String, summary: String, divider: Boolean 
         ) { Text(emoji, fontSize = 18.sp) }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(swashTitle(title), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Text(summary, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -331,7 +331,7 @@ fun SettingsRow(emoji: String, title: String, summary: String, divider: Boolean 
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text,
+        swashTitle(text),
         modifier = modifier.padding(start = 6.dp, top = 4.dp, bottom = 2.dp),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -436,7 +436,7 @@ fun SelectTile(
         Text(emoji, fontSize = 26.sp, modifier = Modifier.padding(4.dp))
         Spacer(Modifier.height(4.dp))
         Text(
-            title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            swashTitle(title), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (selected) scheme.onPrimaryContainer else scheme.onSurface
         )
         Text(
@@ -515,7 +515,7 @@ fun ProgressLine(title: String, detail: String, fraction: Float, color: Color) {
     val f by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(320, easing = LinearEasing), label = "bar")
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(swashTitle(title), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(4.dp))
@@ -575,7 +575,7 @@ fun SwitchRow(title: String, subtitle: String?, checked: Boolean, enabled: Boole
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(swashTitle(title), style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Hint(subtitle)
         }
         Spacer(Modifier.width(10.dp))
@@ -597,7 +597,7 @@ fun SliderRow(
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(swashTitle(title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(valueLabel, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         }
         Slider(
@@ -735,7 +735,7 @@ fun <T> Segmented(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        label,
+                        swashTitle(label),
                         color = fg,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 12.5.sp,
@@ -790,7 +790,7 @@ fun <T> ChoiceList(items: List<ChoiceItem<T>>, selected: T, enabled: Boolean = t
                 ) {
                     RadioButton(selected = on, onClick = null, enabled = enabled, modifier = Modifier.padding(12.dp))
                     Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                        Text(it.title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                        Text(swashTitle(it.title), style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                         it.subtitle?.let { sub -> Hint(sub) }
                     }
                 }

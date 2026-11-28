@@ -48,6 +48,12 @@ class SwashTest {
         assertEquals("الشك؟", pick("إعادة القراءة عند الشك؟"))
         assertEquals("رسوم", pick("رسوم")) // a lone م has a swash form
         assertEquals("الخدماتُ", pick("الخدماتُ"))
+        assertEquals("مجلدات", pick("مجلدات متعددة"))
+        assertEquals("في", pick("لغة الترجمة في الفيديو/الصور"))
+        assertEquals("المحرك", pick("المحرك"))
+        assertEquals("حذف", pick("حذف المفتاح؟"))
+        assertEquals("الآن", pick("لا توجد مهمة الآن"))
+        assertEquals("الإعدادات", pick("الإعدادات"))
     }
 
     @Test
@@ -61,6 +67,8 @@ class SwashTest {
         assertEquals(null, pick("بـ Gemini")) // a tatweel after the letter: not final
         assertEquals(null, pick("كتب")) // a ك inside would take a second swash
         assertEquals(null, pick(""))
+        assertEquals(null, pick("المصدر")) // ر has no swash form in Thmanyah Sans
+        assertEquals(null, pick("جاهز للاستخراج"))
     }
 
     @Test
