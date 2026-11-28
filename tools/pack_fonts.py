@@ -6,7 +6,7 @@ product, and forbids making the font files extractable. So the APK never carries
 each weight is stored scrambled (app/src/main/assets/type/tNNN.bin) and the app unscrambles it in
 memory (ui/theme/AppFonts.kt). The scramble below must match AppFonts.unscramble exactly.
 
-usage: pack_fonts.py <dir with the four .otf files> <output dir>
+usage: pack_fonts.py <dir with the five Thmanyah Sans .otf files> <output dir>
 """
 import pathlib
 import sys
@@ -14,7 +14,7 @@ import sys
 MASK = (1 << 64) - 1
 BASE = 0x9E3779B97F4A7C15
 MAGIC = b"HSF1"
-WEIGHTS = {"light": 300, "regular": 400, "bold": 700, "black": 900}
+WEIGHTS = {"light": 300, "regular": 400, "medium": 500, "bold": 700, "black": 900}
 
 
 def seed(weight: int) -> int:

@@ -78,16 +78,21 @@ private val LightScheme = lightColorScheme(
 )
 
 /**
- * Titles in Thmanyah Serif Display (display, headline and title styles: tab titles, page titles,
- * card titles, the big numbers); everything read at length (body, labels, hints, logs) stays in the
- * system's Arabic face. Without the font in this build, Material's defaults.
+ * Every text of the app in Thmanyah Sans: titles and big numbers (display, headline, title) in Bold
+ * and Black, what is read at length (body: hints, logs, the subtitles) in Regular, labels (buttons,
+ * tabs, chips) in Medium. Its lines are 1.25 em tall (ascender 1000, descender 250 per 1000), so every
+ * line height below leaves the marks above and below Arabic letters room. No letter spacing: Arabic
+ * letters join. Without the font in this build, Material's defaults.
  */
-fun appTypography(display: FontFamily?): Typography {
+fun appTypography(family: FontFamily?): Typography {
     val t = Typography()
-    if (display == null) return t
+    if (family == null) return t
     val trim = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
+    // titles: line height as a share of the size (as before); text and labels: Material's own (≥ 1.33 em)
     fun TextStyle.d(w: FontWeight, lh: Float = 1.32f) =
-        copy(fontFamily = display, fontWeight = w, lineHeight = (fontSize.value * lh).sp, lineHeightStyle = trim, letterSpacing = 0.sp)
+        copy(fontFamily = family, fontWeight = w, lineHeight = (fontSize.value * lh).sp, lineHeightStyle = trim, letterSpacing = 0.sp)
+    fun TextStyle.f(w: FontWeight) =
+        copy(fontFamily = family, fontWeight = w, lineHeightStyle = trim, letterSpacing = 0.sp)
     return t.copy(
         displayLarge = t.displayLarge.d(FontWeight.Black),
         displayMedium = t.displayMedium.d(FontWeight.Black),
@@ -96,7 +101,14 @@ fun appTypography(display: FontFamily?): Typography {
         headlineMedium = t.headlineMedium.d(FontWeight.Bold),
         headlineSmall = t.headlineSmall.d(FontWeight.Bold),
         titleLarge = t.titleLarge.d(FontWeight.Bold),
-        titleMedium = t.titleMedium.d(FontWeight.Bold, 1.36f)
+        titleMedium = t.titleMedium.d(FontWeight.Bold, 1.36f),
+        titleSmall = t.titleSmall.f(FontWeight.Medium),
+        bodyLarge = t.bodyLarge.f(FontWeight.Normal),
+        bodyMedium = t.bodyMedium.f(FontWeight.Normal),
+        bodySmall = t.bodySmall.f(FontWeight.Normal),
+        labelLarge = t.labelLarge.f(FontWeight.Medium),
+        labelMedium = t.labelMedium.f(FontWeight.Medium),
+        labelSmall = t.labelSmall.f(FontWeight.Medium)
     )
 }
 
@@ -104,7 +116,7 @@ fun appTypography(display: FontFamily?): Typography {
 fun AppTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val context = LocalContext.current
-    val typography = remember { appTypography(AppFonts.display(context)) }
+    val typography = remember { appTypography(AppFonts.family(context)) }
     MaterialTheme(colorScheme = if (dark) DarkScheme else LightScheme, typography = typography) {
         // The whole interface is Arabic: force right-to-left even on an English phone.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {

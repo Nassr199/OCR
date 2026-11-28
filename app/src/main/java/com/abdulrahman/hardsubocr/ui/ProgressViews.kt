@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,7 +119,6 @@ fun LazyListScope.logSection(lines: List<LogLine>, filter: LogFilter, onFilter: 
                 )
                 .padding(horizontal = 12.dp, vertical = 3.dp)
                 .padding(top = if (first) 8.dp else 0.dp, bottom = if (last) 8.dp else 0.dp),
-            fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             color = logColor(line.text)
         )

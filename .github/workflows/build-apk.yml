@@ -37,7 +37,7 @@ jobs:
       # Thmanyah's license forbids hosting its font files: the repository holds an encrypted copy,
       # decrypted here with the repository secret THMANYAH_FONT_KEY and packed scrambled into the APK.
       # Without the secret the app is built with the system font.
-      - name: Title font (Thmanyah)
+      - name: App font (Thmanyah Sans)
         env:
           THMANYAH_FONT_KEY: ${{ secrets.THMANYAH_FONT_KEY }}
         run: bash tools/fonts.sh

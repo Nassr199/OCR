@@ -419,8 +419,8 @@ private fun PageContent(p: SettingsPage, vm: MainViewModel, u: SettingsUi) {
             )
             Spacer(Modifier.height(8.dp))
             val context = LocalContext.current
-            if (remember { com.abdulrahman.hardsubocr.ui.theme.AppFonts.display(context) } != null) {
-                Hint("خط العناوين: خط ثمانية، © ثمانية للنشر والتوزيع، مستخدم وفق ترخيصه.")
+            if (remember { com.abdulrahman.hardsubocr.ui.theme.AppFonts.family(context) } != null) {
+                Hint("خط التطبيق: ثمانية سانس (thmanyah sans)، © ثمانية للنشر والتوزيع، مستخدم وفق ترخيصه.")
             }
             Hint("الزجاج السائل: تظليل خاص بالتطبيق على معالج الجوال الرسومي، مستوحى من مشروع liquidglass مفتوح المصدر (Apache 2.0).")
         }

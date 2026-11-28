@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -299,7 +298,7 @@ private fun KeyPanel(
                 Column(Modifier.weight(1f)) {
                     Text("مفتاح محفوظ ومشفّر", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Text(masked(saved), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(masked(saved), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 TextButton(onClick = { editing = true }, enabled = enabled) { Text("تغيير") }
@@ -444,7 +443,7 @@ private fun ModelPicker(vm: MainViewModel, enabled: Boolean, models: List<ModelI
                 Hint(note, maxLines = 2)
                 if (chosen == null || chosen.id != chosen.name) {
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Text(selected, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = scheme.onSurfaceVariant, maxLines = 1)
+                        Text(selected, fontSize = 11.sp, color = scheme.onSurfaceVariant, maxLines = 1)
                     }
                 }
             }
@@ -535,7 +534,7 @@ private fun ModelRow(name: String, id: String, note: String?, selected: Boolean,
             if (note != null) Hint(note, maxLines = 2)
             if (id != name) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    Text(id, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = scheme.onSurfaceVariant, maxLines = 1)
+                    Text(id, fontSize = 11.sp, color = scheme.onSurfaceVariant, maxLines = 1)
                 }
             }
         }

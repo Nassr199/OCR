@@ -46,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,7 +119,7 @@ fun ResultScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(
                             "${i + 1}   ${Timestamps.srt(e.startMs)} → ${Timestamps.srt(e.endMs)}",
-                            fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                            fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.height(4.dp))

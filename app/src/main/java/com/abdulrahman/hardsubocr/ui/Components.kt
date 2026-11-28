@@ -107,7 +107,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -875,7 +874,7 @@ fun ErrorDetails(details: String, startExpanded: Boolean = false) {
             // Stack traces are English: lay them out left-to-right inside the RTL app.
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 SelectionContainer {
-                    Text(details, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = Color(0xFFFFB4AB))
+                    Text(details, fontSize = 10.5.sp, color = Color(0xFFFFB4AB))
                 }
             }
         }

@@ -24,7 +24,7 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Title font (Thmanyah, decrypted only with the repository secret)
+      - name: App font (Thmanyah Sans, decrypted only with the repository secret)
         env:
           THMANYAH_FONT_KEY: ${{ secrets.THMANYAH_FONT_KEY }}
         run: bash tools/fonts.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Thmanyah fonts for the build (Build APK and UI screenshots workflows).
+# The Thmanyah Sans font (five weights) for the build (Build APK and UI screenshots workflows).
 #
 # Thmanyah's license forbids uploading or hosting its font files, so the repository holds only an
 # encrypted copy (fonts/thmanyah.enc, AES-256) whose key is the repository secret THMANYAH_FONT_KEY.
@@ -13,6 +13,9 @@ if [ -z "${THMANYAH_FONT_KEY:-}" ] || [ ! -f fonts/thmanyah.enc ]; then
 fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in fonts/thmanyah.enc -pass env:THMANYAH_FONT_KEY | tar -xz -C "$work"
+# the key is base64 (no spaces): drop any space or line break pasted with it into the secret
+FONT_KEY="$(printf '%s' "$THMANYAH_FONT_KEY" | tr -d '[:space:]')"
+export FONT_KEY
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in fonts/thmanyah.enc -pass env:FONT_KEY | tar -xz -C "$work"
 python3 tools/pack_fonts.py "$work" app/src/main/assets/type
 echo "Thmanyah font packed: $(ls app/src/main/assets/type | tr '\n' ' ')"

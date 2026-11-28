@@ -17,24 +17,25 @@ import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * Thmanyah Serif Display (خط ثمانية, © Thmanyah Publishing & Distribution), used under the Thmanyah
- * font license for the app's titles. The license allows the font inside an app only as part of a
- * packaged or obfuscated product and forbids making the font files extractable, so the APK carries
- * each weight scrambled (assets/type/tNNN.bin, made by tools/pack_fonts.py) and it is unscrambled in
- * memory here: on Android 10+ it never exists as a file at all; on Android 8–9 it exists for the
- * instant the system takes to map it, in the app's private storage. A build without the font (no key
- * in CI) has no assets, and the titles use the system font.
+ * Thmanyah Sans (ثمانية سانس, © Thmanyah Publishing & Distribution), the app's typeface for every
+ * text, used under the Thmanyah font license. The license allows the font inside an app only as part
+ * of a packaged or obfuscated product and forbids making the font files extractable, so the APK
+ * carries each of the five weights scrambled (assets/type/tNNN.bin, made by tools/pack_fonts.py) and
+ * it is unscrambled in memory here: on Android 10+ it never exists as a file at all; on Android 8–9 it
+ * exists for the instant the system takes to map it, in the app's private storage. A build without
+ * the font (no key in CI) has no assets, and the app uses the system font.
  */
 object AppFonts {
     private const val BASE = -0x61c8864680b583ebL // 0x9E3779B97F4A7C15
     private val MAGIC = byteArrayOf('H'.code.toByte(), 'S'.code.toByte(), 'F'.code.toByte(), '1'.code.toByte())
-    private val WEIGHTS = intArrayOf(300, 400, 700, 900)
+    /** Light, Regular, Medium, Bold, Black. */
+    private val WEIGHTS = intArrayOf(300, 400, 500, 700, 900)
 
     @Volatile private var loaded = false
     @Volatile private var family: FontFamily? = null
 
-    /** The display family, or null when this build carries no font (or it could not be read). */
-    fun display(context: Context): FontFamily? {
+    /** The app's family (all five weights), or null when this build carries no font (or it could not be read). */
+    fun family(context: Context): FontFamily? {
         if (loaded) return family
         synchronized(this) {
             if (!loaded) {
@@ -101,7 +102,7 @@ object AppFonts {
         }
     }
 
-    /** One weight, already loaded: Compose matches weights across the four and never fakes bold. */
+    /** One weight, already loaded: Compose matches weights across the five and never fakes bold. */
     private class ScrambledFont(override val weight: FontWeight, val typeface: Typeface) :
         AndroidFont(FontLoadingStrategy.Blocking, Loader, FontVariation.Settings()) {
         override val style: FontStyle = FontStyle.Normal

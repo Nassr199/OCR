@@ -73,7 +73,6 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -184,7 +183,7 @@ private fun RegionPicture(vm: MainViewModel, maxPictureHeight: Dp) {
     val overlay = vm.maskOverlay
     val overlayImg = remember(overlay) { overlay?.asImageBitmap() }
     val img = remember(bmp) { bmp?.asImageBitmap() }
-    val labelStyle = TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    val labelStyle = MaterialTheme.typography.labelMedium.copy(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
 
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val w = min(maxWidth, maxPictureHeight * aspect)
