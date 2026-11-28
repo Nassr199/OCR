@@ -211,11 +211,12 @@ class ScreenShots {
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_1_extract() = shot("phone_1_extract", Tab.EXTRACT)
 
     /** Video source: «الصور ثم النص» (two stages, the engine named) next to «حفظ الصور فقط». */
-    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() = shot("phone_12_video_stages", Tab.EXTRACT) {
-        rule.onNodeWithText("اكتشاف تلقائي للترجمة").performScrollTo().performClick()
-        rule.mainClock.advanceTimeBy(1_000)
-        rule.onNodeWithText("الصور ثم النص").performScrollTo()
-        rule.mainClock.advanceTimeBy(1_000)
+    @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_12_video_stages() {
+        (rule.activity.application as com.abdulrahman.hardsubocr.App).settings.sourceMode = com.abdulrahman.hardsubocr.data.SourceMode.VIDEO
+        shot("phone_12_video_stages", Tab.EXTRACT) {
+            rule.onNodeWithText("الصور ثم النص").performScrollTo()
+            rule.mainClock.advanceTimeBy(1_000)
+        }
     }
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_2_running() = shot("phone_2_running", Tab.PROCESS, running)
     @Test @Config(qualifiers = "w411dp-h891dp-port-night-xxhdpi") fun phone_3_done() = shot("phone_3_done", Tab.PROCESS, done)
